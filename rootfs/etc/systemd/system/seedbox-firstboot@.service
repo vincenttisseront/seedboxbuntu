@@ -1,0 +1,22 @@
+[Unit]
+Description=SeedBoxBuntu - assistant de configuration initiale (%I)
+After=systemd-user-sessions.service systemd-vconsole-setup.service keyboard-setup.service console-setup.service plymouth-quit-wait.service
+Before=getty@%i.service serial-getty@%i.service
+ConditionPathExists=!/var/lib/seedboxbuntu/configured
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedbox-setup --firstboot %I
+StandardInput=tty-force
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/%I
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+Environment=TERM=linux
+TimeoutStartSec=infinity
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,2 @@
+# SeedBoxBuntu : menu console accessible aux administrateurs (groupe sudo)
+%sudo ALL=(root) NOPASSWD: /usr/local/sbin/seedbox-setup menu, /usr/local/sbin/seedbox-setup status --short

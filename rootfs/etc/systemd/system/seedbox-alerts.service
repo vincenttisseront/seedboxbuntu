@@ -1,0 +1,9 @@
+[Unit]
+Description=SeedBoxBuntu - surveillance et alertes
+After=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl alerts check
+Nice=10

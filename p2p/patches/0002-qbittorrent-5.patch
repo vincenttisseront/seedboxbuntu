@@ -1,0 +1,25 @@
+diff --git a/server/services/downloadClients/qbittorrent-adapter.ts b/server/services/downloadClients/qbittorrent-adapter.ts
+index 4bc30a0..91eb913 100644
+--- a/server/services/downloadClients/qbittorrent-adapter.ts
++++ b/server/services/downloadClients/qbittorrent-adapter.ts
+@@ -44,8 +44,9 @@ function parseSid(headers: Headers): string | null {
+   const combined = headers.get?.('set-cookie')
+   if (combined) chunks.push(combined)
+   for (const chunk of chunks) {
+-    const m = chunk.match(/(?:^|[,;\s])SID=([^;\s]+)/i)
+-    if (m?.[1]) return `SID=${m[1]}`
++    // qBittorrent 5.2 et suivants nomment leur cookie QBT_SID_<port>
++    const m = chunk.match(/(?:^|[,;\s])((?:QBT_)?SID(?:_\d+)?)=([^;\s]+)/i)
++    if (m?.[1] && m[2]) return `${m[1]}=${m[2]}`
+   }
+   return null
+ }
+@@ -111,7 +112,7 @@ async function fetchVersion(endpoints: Endpoints, session: Session, mode: 'offic
+   })
+   if (!response.ok) return null
+   const text = (await response.text()).trim()
+-  return /^\d+\.\d+/.test(text) ? text : null
++  return /^v?\d+\.\d+/i.test(text) ? text : null
+ }
+ 
+ export class QBittorrentAdapter {

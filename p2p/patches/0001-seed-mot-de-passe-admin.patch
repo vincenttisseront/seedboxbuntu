@@ -1,0 +1,29 @@
+diff --git a/docker/seed.mjs b/docker/seed.mjs
+index 3b46706..6ad9692 100644
+--- a/docker/seed.mjs
++++ b/docker/seed.mjs
+@@ -29,11 +29,13 @@ async function removeMockAccounts() {
+ }
+ 
+ async function main() {
+-  const passwordHash = await argon2.hash('admin123')
++  // Le mot de passe initial ne sert qu'à la création du compte : le seed tourne à chaque
++  // démarrage et ne doit jamais écraser celui choisi ensuite par l'administrateur.
++  const passwordHash = await argon2.hash(process.env.SEED_ADMIN_PASSWORD || crypto.randomUUID())
+ 
+   await prisma.user.upsert({
+     where: { username: 'admin' },
+-    update: { passwordHash, active: true },
++    update: { active: true },
+     create: {
+       username: 'admin',
+       passwordHash,
+@@ -75,7 +77,7 @@ async function main() {
+     create: { id: 'default', selections: [] },
+   })
+ 
+-  console.log('[seed] admin/admin123 — trackers définis dans le code applicatif')
++  console.log('[seed] trackers définis dans le code applicatif')
+ }
+ 
+ function printSeedFailureHints(error) {

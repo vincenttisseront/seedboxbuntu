@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SeedBoxBuntu : écrit une seule fois avant le premier démarrage, puis géré par Jellyfin.
+     BaseUrl : Jellyfin est servi sous https://<adresse>/jellyfin/ (toutes ses routes, API
+     comprise, portent ce préfixe). KnownProxies : Traefik, pour l'adresse réelle des clients. -->
+<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <BaseUrl>/jellyfin</BaseUrl>
+  <KnownProxies>
+    <string>172.30.0.2</string>
+  </KnownProxies>
+  <EnableUPnP>false</EnableUPnP>
+</NetworkConfiguration>

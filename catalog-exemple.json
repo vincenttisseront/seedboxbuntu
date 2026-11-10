@@ -1,0 +1,22 @@
+{
+  "apps": [
+    {
+      "id": "monapp",
+      "name": "Mon application",
+      "category": "Exemple",
+      "description": "Modèle à copier : remplacez l'image, le port et le chemin par ceux de votre application.",
+      "image": "ghcr.io/votre-compte/monapp:latest",
+      "port": 8080,
+      "path": "/monapp",
+      "auth": "sso",
+      "access": "admin",
+      "lsio": false,
+      "strip": false,
+      "env": {"TZ": "${TZ}", "BASE_URL": "/monapp"},
+      "volumes": ["${CONFIG_DIR}/monapp:/config", "${DATA_DIR}/media:/media:ro"],
+      "health": {"tool": "wget", "path": "/monapp/"},
+      "dirs": ["media"],
+      "icon": "mdi-application"
+    }
+  ]
+}

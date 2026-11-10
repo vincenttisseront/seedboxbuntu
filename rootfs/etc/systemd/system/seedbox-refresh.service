@@ -1,0 +1,9 @@
+[Unit]
+Description=SeedBoxBuntu - domaine automatique et synchronisation des trackers
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl refresh

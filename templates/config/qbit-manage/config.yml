@@ -1,0 +1,64 @@
+# =============================================================================
+#  SeedBoxBuntu - qbit_manage
+#  Les sections tracker et share_limits sont régénérées par « seedboxctl trackers
+#  sync » depuis les règles de la console (trackers.json).
+# =============================================================================
+commands:
+  dry_run: false
+  recheck: false
+  cat_update: false
+  tag_update: true
+  rem_unregistered: false
+  tag_tracker_error: true
+  rem_orphaned: false
+  tag_nohardlinks: true
+  share_limits: true
+  skip_qb_version_check: true
+  skip_cleanup: true
+
+qbt:
+  host: "@@QBIT_HOST@@:8080"
+  user: "@@QBIT_USERNAME@@"
+  pass: "@@QBIT_PASSWORD@@"
+
+settings:
+  force_auto_tmm: false
+  tracker_error_tag: issue
+  nohardlinks_tag: noHL
+  share_limits_tag: ~share_limit
+  share_limits_min_seeding_time_tag: MinSeedTimeNotReached
+  share_limits_min_num_seeds_tag: MinSeedsNotMet
+  share_limits_last_active_tag: LastActiveLimitNotReached
+  cat_filter_completed: true
+  share_limits_filter_completed: true
+  tag_nohardlinks_filter_completed: true
+  cat_update_all: true
+  disable_qbt_default_share_limits: true
+
+directory:
+  root_dir: @@DOWNLOADS@@/
+  torrents_dir: /torrents
+  orphaned_dir: @@DOWNLOADS@@/orphaned_data
+  recycle_bin: @@DOWNLOADS@@/.RecycleBin
+
+cat:
+  radarr: @@DOWNLOADS@@/radarr
+  sonarr: @@DOWNLOADS@@/sonarr
+  autobrr: @@DOWNLOADS@@/autobrr
+  p2p-aggregator: @@DOWNLOADS@@/p2p-aggregator
+  cross-seed-link: @@DOWNLOADS@@/cross-seed
+
+nohardlinks:
+  - radarr
+  - sonarr
+
+recyclebin:
+  enabled: false
+
+orphaned:
+  empty_after_x_days: 60
+  exclude_patterns:
+    - "**/.DS_Store"
+  max_orphaned_files_to_delete: 50
+
+@@QBM_RULES@@

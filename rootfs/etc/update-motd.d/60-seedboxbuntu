@@ -1,0 +1,4 @@
+#!/bin/sh
+echo
+sudo -n /usr/local/sbin/seedbox-setup status --short 2>/dev/null || true
+echo "  Menu de l'appliance : seedbox-menu"

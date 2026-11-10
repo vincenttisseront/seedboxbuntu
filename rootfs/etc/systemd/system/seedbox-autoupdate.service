@@ -1,0 +1,9 @@
+[Unit]
+Description=SeedBoxBuntu - mise à jour automatique de p2p-aggregator
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl autoupdate

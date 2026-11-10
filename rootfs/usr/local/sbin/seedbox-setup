@@ -1,0 +1,1029 @@
+#!/bin/bash
+# =============================================================================
+#  seedbox-setup - assistant et menu console de l'appliance SeedBoxBuntu
+#    --firstboot [tty]    assistant initial : réseau, nom, mot de passe (premier démarrage)
+#    menu                 menu (affiché après connexion sur la console locale)
+#    network | hostname   reconfiguration ponctuelle
+#    status [--short]     état de l'appliance
+# =============================================================================
+set -uo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export HOME=${HOME:-/root}
+
+SB_ETC=${SB_ETC:-/etc/seedboxbuntu}
+SB_STATE=${SB_STATE:-/var/lib/seedboxbuntu}
+NETPLAN_DIR=${NETPLAN_DIR:-/etc/netplan}
+NETPLAN_FILE="$NETPLAN_DIR/01-seedboxbuntu.yaml"
+LOG=${SB_LOG:-/var/log/seedboxbuntu-setup.log}
+SB_DRYRUN=${SB_DRYRUN:-0}
+BT="SeedBoxBuntu - Ubuntu Server + stack Docker"
+
+CONFIGURED_FLAG="$SB_STATE/configured"
+PASSWORD_FILE="$SB_ETC/initial-password"
+ENV_FILE=${SB_ENV:-/opt/seedbox/.env}
+DEPLOY_LOG=/var/log/seedboxbuntu-deploy.log
+SYSTEM_USER=seedbox
+SB_TTY=""
+
+NET_IF="" NET_MODE="dhcp" NET_ADDR="" NET_GW="" NET_DNS=""
+HOST_NAME="" NET_RESULT_IP="" ADMIN_PASS=""
+
+export NEWT_COLORS='
+root=white,black
+roottext=brightcyan,black
+border=cyan,lightgray
+window=black,lightgray
+shadow=black,black
+title=cyan,lightgray
+button=white,cyan
+actbutton=white,brightcyan
+compactbutton=black,lightgray
+checkbox=black,lightgray
+actcheckbox=white,cyan
+entry=black,white
+disentry=gray,lightgray
+label=black,lightgray
+listbox=black,lightgray
+actlistbox=white,cyan
+sellistbox=white,cyan
+actsellistbox=white,brightcyan
+textbox=black,lightgray
+acttextbox=black,white
+helpline=white,black
+'
+
+log() { printf '%s %s\n' "$(date -Is)" "$*" >>"$LOG" 2>/dev/null || true; }
+
+# --- boîtes de dialogue (whiptail) --------------------------------------------
+W() { whiptail --backtitle "$BT" "$@" 3>&1 1>&2 2>&3; }
+msg()   { W --title "$1" --msgbox "$2" "${3:-14}" "${4:-76}"; }
+ask()   { W --title "$1" --yes-button "${3:-Oui}" --no-button "${4:-Non}" --yesno "$2" 12 76; }
+input() { W --title "$1" --ok-button "Valider" --cancel-button "Retour" --inputbox "$2" 11 76 "$3"; }
+pass()  { W --title "$1" --ok-button "Valider" --cancel-button "Retour" --passwordbox "$2" 11 76; }
+
+setup_term() {
+  local t rows cols
+  t=$(tty 2>/dev/null || true)
+  case $t in
+    /dev/ttyS*|/dev/ttyAMA*|/dev/ttyUSB*) export TERM=vt220 ;;
+    *) [[ -z ${TERM:-} || $TERM == dumb ]] && export TERM=linux ;;
+  esac
+  read -r rows cols < <(stty size 2>/dev/null || echo "0 0")
+  if [[ ${rows:-0} -lt 20 || ${cols:-0} -lt 78 ]]; then stty rows 24 cols 80 2>/dev/null || true; fi
+}
+
+quiet_console() {
+  dmesg -n 1 2>/dev/null || true
+  setterm --blank 0 --powerdown 0 2>/dev/null || true
+}
+
+wait_boot_settled() {   # laisse systemd finir le démarrage (ses messages n'écraseront pas l'écran)
+  local i
+  for ((i = 0; i < 45; i++)); do
+    systemctl list-jobs --no-legend 2>/dev/null \
+      | grep -vqE 'seedbox-firstboot|getty|multi-user\.target|graphical\.target' || break
+    sleep 1
+  done
+}
+
+
+# --- validations ----------------------------------------------------------------
+py() { python3 -c "$@" >/dev/null 2>&1; }
+is_ipv4_cidr() { py 'import ipaddress,sys
+s=sys.argv[1]; assert "/" in s
+i=ipaddress.IPv4Interface(s); n=i.network
+if n.prefixlen < 31: assert i.ip not in (n.network_address, n.broadcast_address)
+assert not (i.ip.is_loopback or i.ip.is_multicast or i.ip.is_unspecified)' "$1"; }
+is_ipv4()     { py 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$1"; }
+same_subnet() { py 'import ipaddress,sys
+i=ipaddress.IPv4Interface(sys.argv[1]); g=ipaddress.IPv4Address(sys.argv[2]); assert g in i.network and g != i.ip' "$1" "$2"; }
+all_ips()     { (($#)) && py 'import ipaddress,sys; [ipaddress.ip_address(a) for a in sys.argv[1:]]' "$@"; }
+net_of()      { python3 -c 'import ipaddress,sys; print(ipaddress.IPv4Interface(sys.argv[1]).network)' "$1" 2>/dev/null; }
+gw_guess()    { python3 -c 'import ipaddress,sys; print(next(ipaddress.IPv4Interface(sys.argv[1]).network.hosts()))' "$1" 2>/dev/null; }
+words()       { printf '%s' "$1" | tr ',;' '  ' | xargs; }
+valid_hostname() { [[ ${#1} -le 253 && $1 =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$ ]]; }
+valid_username() {
+  local u=$1 uid
+  [[ $u =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || return 1
+  if uid=$(getent passwd "$u" | cut -d: -f3) && [[ -n $uid ]]; then (( uid >= 1000 && uid < 60000 )); return; fi
+  ! getent group "$u" >/dev/null
+}
+kb_layout() { sed -n 's/^XKBLAYOUT="\{0,1\}\([^"]*\)"\{0,1\}/\1/p' /etc/default/keyboard 2>/dev/null | head -n1; }
+admin_user() { cat "$SB_ETC/admin-user" 2>/dev/null || echo "?"; }
+primary_ip() {
+  local ip
+  ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<NF;i++) if ($i=="src") {print $(i+1); exit}}')
+  [[ -z $ip ]] && ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{sub(/\/.*/,"",$4); print $4; exit}')
+  printf '%s' "$ip"
+}
+
+
+# --- réseau -----------------------------------------------------------------------
+iface_list() {
+  local d n found=0
+  for d in /sys/class/net/*; do
+    n=${d##*/}
+    case $n in lo|docker*|veth*|br-*|virbr*|lxc*|tun*|tap*|wg*|bond*|vlan*) continue ;; esac
+    [[ -e $d/device ]] || continue
+    printf '%s\n' "$n"; found=1
+  done
+  if ((found == 0)); then
+    for d in /sys/class/net/*; do n=${d##*/}; [[ $n == lo ]] || printf '%s\n' "$n"; done
+  fi
+}
+iface_desc() {
+  local n=$1 mac state ip
+  mac=$(cat "/sys/class/net/$n/address" 2>/dev/null || echo "?")
+  if [[ $(cat "/sys/class/net/$n/carrier" 2>/dev/null) == 1 ]]; then state="lien OK"; else state="pas de lien"; fi
+  ip=$(ip -4 -o addr show dev "$n" scope global 2>/dev/null | awk '{print $4; exit}')
+  printf '%s  %-11s %s' "$mac" "$state" "$ip"
+}
+
+load_network_conf() { [[ -f $SB_ETC/network.conf ]] && . "$SB_ETC/network.conf"; return 0; }
+save_network_conf() {
+  mkdir -p "$SB_ETC"
+  printf 'NET_IF=%q\nNET_MODE=%q\nNET_ADDR=%q\nNET_GW=%q\nNET_DNS=%q\n' \
+    "$NET_IF" "$NET_MODE" "$NET_ADDR" "$NET_GW" "$NET_DNS" > "$SB_ETC/network.conf"
+}
+
+ask_network() {
+  local ifs=() items=() n def="" choice
+  mapfile -t ifs < <(iface_list)
+  if ((${#ifs[@]} == 0)); then
+    msg "Réseau" "Aucune carte réseau n'a été détectée.\n\nVérifiez le matériel puis relancez plus tard :\n    sudo seedbox-setup network"
+    NET_IF=""; return 0
+  fi
+  if [[ $SB_DRYRUN != 1 ]]; then
+    for n in "${ifs[@]}"; do ip link set dev "$n" up 2>/dev/null || true; done
+    W --title "Réseau" --infobox "Détection des cartes réseau..." 7 50; sleep 3
+  fi
+  for n in "${ifs[@]}"; do
+    items+=("$n" "$(iface_desc "$n")")
+    [[ -z $def && $(cat "/sys/class/net/$n/carrier" 2>/dev/null) == 1 ]] && def=$n
+  done
+  [[ -n $NET_IF ]] && printf '%s\n' "${ifs[@]}" | grep -qx "$NET_IF" && def=$NET_IF
+  choice=$(W --title "Réseau (1/2) - Carte réseau" --default-item "${def:-${ifs[0]}}" \
+    --ok-button "Suivant" --cancel-button "Retour" \
+    --menu "Carte réseau utilisée pour administrer le serveur :" 18 76 8 "${items[@]}") || return 1
+  NET_IF=$choice
+  choice=$(W --title "Réseau (2/2) - Adressage IPv4" --default-item "$NET_MODE" \
+    --ok-button "Suivant" --cancel-button "Retour" \
+    --menu "Comment la carte $NET_IF obtient-elle son adresse ?" 13 76 2 \
+    dhcp "Automatiquement (DHCP)" \
+    static "Adresse IP fixe (statique)") || return 1
+  NET_MODE=$choice
+  if [[ $NET_MODE == static ]]; then ask_static || return 1; else NET_ADDR="" NET_GW="" NET_DNS=""; fi
+  return 0
+}
+
+ask_static() {
+  local v
+  while :; do
+    v=$(input "Adresse IP fixe" "Adresse IPv4 et masque au format CIDR (exemple : 192.168.1.50/24) :" "$NET_ADDR") || return 1
+    v=${v//[[:space:]]/}
+    is_ipv4_cidr "$v" && { NET_ADDR=$v; break; }
+    msg "Adresse invalide" "« $v » n'est pas une adresse IPv4 valide au format CIDR.\n\nExemple : 192.168.1.50/24" 10
+  done
+  while :; do
+    v=$(input "Passerelle" "Passerelle par défaut (laisser vide s'il n'y en a pas) :" "${NET_GW:-$(gw_guess "$NET_ADDR")}") || return 1
+    v=${v//[[:space:]]/}
+    [[ -z $v ]] && { NET_GW=""; break; }
+    is_ipv4 "$v" && same_subnet "$NET_ADDR" "$v" && { NET_GW=$v; break; }
+    msg "Passerelle invalide" "« $v » doit être une adresse du réseau $(net_of "$NET_ADDR")." 9
+  done
+  while :; do
+    v=$(input "Serveurs DNS" "Serveurs DNS, séparés par des espaces :" "${NET_DNS:-1.1.1.1 9.9.9.9}") || return 1
+    v=$(words "$v")
+    # shellcheck disable=SC2086
+    all_ips $v && { NET_DNS=$v; break; }
+    msg "DNS invalide" "Saisissez au moins une adresse IP valide (exemple : 10.0.0.53 1.1.1.1)." 9
+  done
+}
+
+write_netplan() {
+  local d
+  echo "# Généré par SeedBoxBuntu (seedbox-setup) le $(date '+%F %T')"
+  echo "network:"
+  echo "  version: 2"
+  echo "  renderer: networkd"
+  echo "  ethernets:"
+  echo "    $NET_IF:"
+  if [[ $NET_MODE == static ]]; then
+    echo "      dhcp4: false"
+    echo "      addresses: [\"$NET_ADDR\"]"
+    if [[ -n $NET_GW ]]; then
+      echo "      routes:"
+      echo "        - to: default"
+      echo "          via: \"$NET_GW\""
+    fi
+    if [[ -n $NET_DNS ]]; then
+      echo "      nameservers:"
+      printf '        addresses: ['
+      local first=1
+      for d in $NET_DNS; do ((first)) || printf ', '; printf '"%s"' "$d"; first=0; done
+      printf ']\n'
+    fi
+  else
+    echo "      dhcp4: true"
+  fi
+}
+
+apply_network() {
+  local bk="$NETPLAN_DIR/.seedboxbuntu-backup" f
+  mkdir -p "$bk"
+  for f in "$NETPLAN_DIR"/*.yaml; do
+    [[ -e $f && $f != "$NETPLAN_FILE" ]] && mv -f "$f" "$bk/"
+  done
+  [[ -f $NETPLAN_FILE ]] && cp -f "$NETPLAN_FILE" "$bk/01-seedboxbuntu.yaml.prev"
+  write_netplan > "$NETPLAN_FILE.tmp" && chmod 600 "$NETPLAN_FILE.tmp" && mv -f "$NETPLAN_FILE.tmp" "$NETPLAN_FILE"
+  if ! netplan generate; then
+    log "netplan generate a échoué"
+    [[ -f $bk/01-seedboxbuntu.yaml.prev ]] && cp -f "$bk/01-seedboxbuntu.yaml.prev" "$NETPLAN_FILE"
+    return 1
+  fi
+  save_network_conf
+  [[ $SB_DRYRUN == 1 ]] && return 0
+  timeout 90 netplan apply
+}
+
+wait_ip() {   # wait_ip IFACE SECONDES -> affiche l'IPv4 obtenue
+  local i ip
+  if [[ $SB_DRYRUN == 1 ]]; then echo "192.0.2.10"; return 0; fi
+  for ((i = 0; i < $2; i++)); do
+    ip=$(ip -4 -o addr show dev "$1" scope global 2>/dev/null | awk '{print $4; exit}')
+    [[ -n $ip ]] && { echo "${ip%/*}"; return 0; }
+    sleep 1
+  done
+  return 1
+}
+
+apply_network_interactive() {   # 0 = OK, 2 = l'utilisateur veut modifier la configuration
+  local choice
+  [[ -z $NET_IF ]] && return 0
+  while :; do
+    W --title "Réseau" --infobox "Configuration de $NET_IF en cours...\n\nAttente de l'adresse IP (30 secondes au maximum)." 9 76
+    NET_RESULT_IP=""
+    if apply_network >>"$LOG" 2>&1; then
+      NET_RESULT_IP=$(wait_ip "$NET_IF" 30) && return 0
+      choice=$(W --title "Réseau : pas d'adresse IP" --nocancel --ok-button "Valider" \
+        --menu "La carte $NET_IF n'a pas obtenu d'adresse IPv4\n(câble, VLAN, serveur DHCP ?).\n\nQue voulez-vous faire ?" 16 76 3 \
+        retry "Réessayer" \
+        modify "Modifier la configuration réseau" \
+        later "Continuer (configurer le réseau plus tard)") || choice=modify
+    else
+      msg "Réseau" "La configuration réseau a été refusée par netplan.\nDétails : $LOG" 9
+      choice=modify
+    fi
+    case $choice in retry) continue ;; later) return 0 ;; *) return 2 ;; esac
+  done
+}
+
+
+# --- nom de machine ---------------------------------------------------------------
+ask_hostname() {
+  local v
+  while :; do
+    v=$(input "Nom de machine" "Nom du serveur (exemple : seedbox-01 ou seedbox-01.mondomaine.local) :" "${HOST_NAME:-$(hostname 2>/dev/null || echo seedboxbuntu)}") || return 1
+    v=$(printf '%s' "$v" | tr 'A-Z' 'a-z' | tr -d '[:space:]')
+    valid_hostname "$v" && { HOST_NAME=$v; return 0; }
+    msg "Nom invalide" "« $v » n'est pas un nom de machine valide.\n\nCaractères autorisés : a-z, 0-9 et « - » (63 caractères au plus par partie,\npas de tiret au début ni à la fin)." 11
+  done
+}
+apply_hostname() {
+  local fqdn=$1 short=${1%%.*} line
+  if [[ $SB_DRYRUN == 1 ]] || ! hostnamectl set-hostname "$short" 2>/dev/null; then
+    printf '%s\n' "$short" > /etc/hostname
+    [[ $SB_DRYRUN == 1 ]] || hostname "$short" 2>/dev/null || true
+  fi
+  if [[ $fqdn == "$short" ]]; then line="127.0.1.1 $short"; else line="127.0.1.1 $fqdn $short"; fi
+  if grep -q '^127\.0\.1\.1[[:space:]]' /etc/hosts; then
+    sed -i "s/^127\.0\.1\.1[[:space:]].*/$line/" /etc/hosts
+  else
+    printf '%s\n' "$line" >> /etc/hosts
+  fi
+}
+
+# --- appels à seedboxctl -----------------------------------------------------------
+ctl_box() {   # ctl_box TITRE COMMANDE... : exécute avec journal à l'écran
+  local title=$1 rc; shift
+  clear
+  echo "== $title =="
+  "$@"; rc=$?
+  echo
+  if ((rc == 0)); then echo "Terminé."; else echo "Échec (code $rc)."; fi
+  read -rp "Entrée pour revenir au menu..." _ </dev/tty
+  return "$rc"
+}
+
+json_field() { python3 -c 'import json,sys; d=json.load(sys.stdin)
+for k in sys.argv[1:]: d=d[k]
+print(d)' "$@" 2>/dev/null; }
+
+env_value() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | head -n1; }
+domain() { local d; d=$(env_value DOMAIN); printf '%s' "${d:-$(primary_ip)}"; }
+admin_login() { local u; u=$(env_value ADMIN_USER); printf '%s' "${u:-admin}"; }
+
+status_short() {
+  local d state
+  if [[ ! -f $CONFIGURED_FLAG ]]; then
+    echo "  SeedBoxBuntu : configuration initiale à terminer sur la console du serveur"
+    return 0
+  fi
+  d=$(domain)
+  if [[ -f $SB_STATE/deployed ]]; then state="déployée"; else state="déploiement en cours (journal : $DEPLOY_LOG)"; fi
+  echo "  SeedBoxBuntu : $state"
+  [[ -f $SB_STATE/upgrade-pending ]] && echo "  Mise à jour de l'appliance en cours (journal : /var/log/seedboxbuntu-upgrade.log)"
+  [[ -f /run/reboot-required ]] && echo "  Redémarrage du serveur nécessaire : des correctifs sont installés"
+  [[ -n $d ]] || return 0
+  echo "  Tableau de bord : https://$d/"
+  echo "  Console         : https://$d/console/"
+}
+
+status_full() {
+  echo "Machine       : $(hostname)"
+  echo "Adresse IP    : $(primary_ip)"
+  status_short
+  echo
+  seedboxctl status 2>/dev/null | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+print("qBittorrent   :", ("VPN "+d["vpn"]["provider"]+" ("+str(d["vpn"]["state"])+")") if d["vpn"]["enabled"] else "accès direct, sans VPN")
+print()
+for a in d["apps"]:
+    print("  %-18s%-12s%s" % (a["name"], a["state"], a["health"]))'
+}
+
+menu_network() {
+  load_network_conf
+  ask_network || return 0
+  [[ -n $NET_IF ]] || return 0
+  apply_network_interactive
+  # Applications déjà déployées : certificat, connexion unique et liens suivent la nouvelle adresse
+  [[ -f $SB_STATE/deployed ]] && ctl_box "Adresses des applications" seedboxctl refresh
+  msg "Réseau" "Configuration réseau appliquée.\n\nAdresse : ${NET_RESULT_IP:-$(primary_ip)}\nTableau de bord : https://$(domain)/" 11
+}
+
+menu_hostname() {
+  HOST_NAME=$(hostname)
+  ask_hostname || return 0
+  apply_hostname "$HOST_NAME"
+  # Un nom complet (avec un point) devient aussi une adresse des applications
+  [[ -f $SB_STATE/deployed ]] && ctl_box "Adresses des applications" seedboxctl refresh
+  msg "Nom de machine" "Nouveau nom : $HOST_NAME" 8
+}
+
+ask_new_password() {   # -> $NEW_PASS
+  local p1 p2
+  while :; do
+    p1=$(pass "$1" "Nouveau mot de passe (8 caractères au minimum) :") || return 1
+    if ((${#p1} < 8)); then msg "Mot de passe trop court" "8 caractères au minimum." 8; continue; fi
+    p2=$(pass "Confirmation" "Saisissez à nouveau le mot de passe :") || return 1
+    [[ $p1 == "$p2" ]] && { NEW_PASS=$p1; return 0; }
+    msg "Erreur" "Les deux saisies ne sont pas identiques." 8
+  done
+}
+
+menu_accounts() {
+  local c login role list
+  while :; do
+    list=$(seedboxctl user list 2>/dev/null | python3 -c 'import json,sys
+for u in json.load(sys.stdin): print("  %s (%s)" % (u["login"], u["role"]))')
+    c=$(W --title "Comptes" --ok-button "Valider" --cancel-button "Retour" --menu "Comptes de l'appliance :\n$list" 20 76 5 \
+      show "Afficher les identifiants" \
+      add "Créer un compte" \
+      passwd "Changer un mot de passe web" \
+      del "Supprimer un compte" \
+      role "Changer le rôle d'un compte" \
+      system "Mot de passe du compte système seedbox (SSH, console)") || return 0
+    case $c in
+      show) seedboxctl credentials 2>/dev/null | python3 -c 'import json,sys
+for name, items in json.load(sys.stdin).items():
+    print(name + " : " + "  ".join(f"{k}={v or chr(45)}" for k, v in items.items()))' > /run/seedbox-cred.$$
+            W --title "Identifiants" --scrolltext --textbox "/run/seedbox-cred.$$" 22 78; rm -f "/run/seedbox-cred.$$" ;;
+      add)  login=$(input "Nouveau compte" "Identifiant (minuscules, chiffres, . _ -) :" "") || continue
+            role=$(W --title "Rôle" --menu "Rôle de $login :" 14 76 3 user "Utilisateur" manager "Gestionnaire (Radarr, Sonarr, Prowlarr, qBittorrent)" admin "Administrateur") || continue
+            ask_new_password "Compte $login" || continue
+            printf '%s\n' "$NEW_PASS" | ctl_box "Création de $login" seedboxctl user add "$login" --role "$role" ;;
+      passwd) login=$(input "Mot de passe" "Identifiant du compte :" "admin") || continue
+            ask_new_password "Compte $login" || continue
+            printf '%s\n' "$NEW_PASS" | ctl_box "Mot de passe de $login" seedboxctl user passwd "$login" ;;
+      role) login=$(input "Rôle" "Identifiant du compte :" "") || continue
+            role=$(W --title "Rôle" --menu "Nouveau rôle de $login :" 14 76 3 user "Utilisateur" manager "Gestionnaire (Radarr, Sonarr, Prowlarr, qBittorrent)" admin "Administrateur") || continue
+            ctl_box "Rôle de $login" seedboxctl user role "$login" "$role" ;;
+      del)  login=$(input "Suppression" "Identifiant du compte à supprimer :" "") || continue
+            ask "Suppression" "Supprimer le compte $login sur toutes les applications ?" && ctl_box "Suppression" seedboxctl user del "$login" ;;
+      system) ask_new_password "Compte seedbox" || continue
+            printf '%s:%s\n' "$SYSTEM_USER" "$NEW_PASS" | chpasswd && msg "Compte seedbox" "Mot de passe modifié." 8 ;;
+    esac
+  done
+}
+
+menu_domain() {
+  local d e
+  d=$(W --title "Adresse" --ok-button "Valider" --cancel-button "Retour" --inputbox \
+    "Adresse actuelle : https://$(domain)/\n\nNom personnalisé déclaré dans votre DNS (exemple : seedbox.exemple.fr).\nVide : adresse IP du serveur. L'IP reste toujours utilisable." 13 76 "") || return 0
+  e=""
+  [[ -n $d ]] && { e=$(input "Let's Encrypt" "E-mail Let's Encrypt (vide : certificat de l'autorité locale) :" "") || return 0; }
+  if [[ -n $e ]]; then ctl_box "Adresse" seedboxctl domain "$d" --email "$e"; else ctl_box "Adresse" seedboxctl domain "$d"; fi
+}
+
+menu_vpn() {
+  local provider key addr countries pf=() mode
+  mode=$(W --title "qBittorrent" --ok-button "Suivant" --cancel-button "Retour" --menu "Accès de qBittorrent :" 12 76 2 \
+    direct "Direct, sans VPN (accès local, port 6881 ouvert)" \
+    vpn "Dans un tunnel VPN WireGuard") || return 0
+  if [[ $mode == direct ]]; then ctl_box "qBittorrent" seedboxctl vpn direct; return 0; fi
+  provider=$(W --title "VPN" --ok-button "Suivant" --cancel-button "Retour" --menu "Fournisseur WireGuard :" 16 76 6 \
+    protonvpn "Proton VPN (redirection de port)" \
+    "private internet access" "PIA (redirection de port)" \
+    privatevpn "PrivateVPN (redirection de port)" \
+    mullvad "Mullvad" nordvpn "NordVPN" surfshark "Surfshark") || return 0
+  key=$(pass "VPN" "Clé privée WireGuard :") || return 0
+  addr=$(input "VPN" "Adresse WireGuard (exemple : 10.2.0.2/32) :" "") || return 0
+  countries=$(input "VPN" "Pays du serveur (exemple : Switzerland, vide : indifférent) :" "") || return 0
+  case $provider in protonvpn|"private internet access"|privatevpn) pf=(--port-forwarding) ;; esac
+  printf '%s\n' "$key" | ctl_box "VPN" seedboxctl vpn set --provider "$provider" --addresses "$addr" --countries "$countries" "${pf[@]}"
+}
+
+menu_apps() {   # catalogue d'applications installables
+  local c query id label items
+  while :; do
+    c=$(W --title "Catalogue d'applications" --ok-button "Valider" --cancel-button "Retour" --menu "Ajoutez des applications reliées à la seedbox (Lidarr, Audiobookshelf, Navidrome...) ou venues du web." 17 76 6 \
+      packs "Packs : musique, livres, sous-titres, qualité" \
+      preset "Qualité vidéo de Recyclarr (1080p ou 2160p)" \
+      list "Applications intégrées et de votre catalogue" \
+      search "Rechercher (inclut linuxserver.io)" \
+      refresh "Actualiser la liste sur le web" \
+      url "Adresse de votre catalogue JSON") || return 0
+    case $c in
+      refresh) ctl_box "Catalogue" seedboxctl apps refresh ;;
+      packs)
+        mapfile -t items < <(seedboxctl apps pack list 2>/dev/null | python3 -c 'import json,sys
+for p in json.load(sys.stdin):
+    print(p["id"]); print(("[complet] " if p["complete"] else "") + p["name"] + " : " + ", ".join(a["name"] for a in p["apps"]))')
+        id=$(W --title "Packs" --ok-button "Choisir" --cancel-button "Retour" --menu "Pack à installer :" 16 78 6 "${items[@]}") || continue
+        ask "Pack $id" "Installer les applications manquantes du pack $id ?" && ctl_box "Pack $id" seedboxctl apps pack install "$id" ;;
+      preset)
+        id=$(W --title "Recyclarr" --menu "Préréglage actuel : $(seedboxctl apps preset 2>/dev/null)" 12 70 2 1080p "HD Bluray + WEB" 2160p "UHD Bluray + WEB") || continue
+        ctl_box "Recyclarr" seedboxctl apps preset "$id" ;;
+      url) query=$(input "Catalogue" "Adresse https d'un fichier JSON (vide : aucune) :" "$(seedboxctl apps url 2>/dev/null)") || continue
+           ctl_box "Catalogue" seedboxctl apps url "$query" ;;
+      list|search)
+        query=""
+        if [[ $c == search ]]; then query=$(input "Recherche" "Mot à chercher (nom, catégorie, description) :" "") || continue; fi
+        mapfile -t items < <(seedboxctl apps list --json 2>/dev/null | python3 -c 'import json,sys
+mode, q = sys.argv[1], sys.argv[2].lower(); n = 0
+for a in json.load(sys.stdin)["apps"]:
+    if mode == "list" and a["source"] == "linuxserver": continue
+    if q and q not in " ".join((a["id"], a["name"], a["description"], a["category"])).lower(): continue
+    print(a["id"]); print(("[installée] " if a["installed"] else "") + a["name"] + " - " + a["description"][:46]); n += 1
+    if n >= 60: break' "$c" "$query")
+        if ((${#items[@]} == 0)); then msg "Catalogue" "Aucune application. Actualisez la liste sur le web." 8; continue; fi
+        id=$(W --title "Catalogue d'applications" --ok-button "Choisir" --cancel-button "Retour" --menu "Application :" 22 78 14 "${items[@]}") || continue
+        label=$(seedboxctl apps list --json 2>/dev/null | python3 -c 'import json,sys
+print("installée" if any(a["id"] == sys.argv[1] and a["installed"] for a in json.load(sys.stdin)["apps"]) else "absente")' "$id")
+        if [[ $label == installée ]]; then
+          ask "Retirer $id" "Retirer $id ? Sa configuration est conservée." && ctl_box "Retrait" seedboxctl apps remove "$id"
+        else
+          ask "Installer $id" "Installer $id ?" && ctl_box "Installation" seedboxctl apps install "$id"
+        fi ;;
+    esac
+  done
+}
+
+menu_tools() {   # sauvegarde, versions des services, double authentification
+  local c id mode
+  while :; do
+    c=$(W --title "Sauvegarde, versions et sécurité" --ok-button "Valider" --cancel-button "Retour" --menu "Outils d'exploitation de l'appliance." 18 76 6 \
+      backup "Créer une sauvegarde chiffrée maintenant" \
+      versions "Mettre à jour un service ou revenir à sa version précédente" \
+      steps "Réessayer les étapes de configuration en échec" \
+      check "Contrôle de santé des applications" \
+      twofa "Double authentification (aucune, administrateurs, tous)" \
+      auth "Codes de vérification en attente") || return 0
+    case $c in
+      backup) ctl_box "Sauvegarde" seedboxctl backup create ;;
+      steps)  ctl_box "Étapes" seedboxctl steps retry ;;
+      check)  ctl_box "Contrôle de santé" seedboxctl check ;;
+      auth)   seedboxctl auth code > "/run/seedbox-auth.$$" 2>&1; W --title "Codes de vérification" --scrolltext --textbox "/run/seedbox-auth.$$" 20 78; rm -f "/run/seedbox-auth.$$" ;;
+      twofa)  mode=$(W --title "Double authentification" --menu "Mode actuel : $(seedboxctl auth show 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])')" 12 76 3 \
+                none "Aucune" admins "Administrateurs seulement" all "Tous les comptes") || continue
+              ctl_box "Double authentification" seedboxctl auth 2fa "$mode" ;;
+      versions)
+        mapfile -t items < <(seedboxctl versions list 2>/dev/null | python3 -c 'import json,sys
+for s in json.load(sys.stdin)["services"]:
+    if s["local"]: continue
+    print(s["service"]); print((s["version"] or s["id"]) + (" (épinglé)" if s["pinned"] else "") + (" - " + str(len(s["previous"])) + " version(s) précédente(s)" if s["previous"] else ""))')
+        id=$(W --title "Versions" --ok-button "Choisir" --cancel-button "Retour" --menu "Service :" 22 78 14 "${items[@]}") || continue
+        mode=$(W --title "$id" --menu "Action :" 13 70 3 update "Mettre à jour" rollback "Revenir à la version précédente" unpin "Reprendre les mises à jour automatiques") || continue
+        ask "$id" "Confirmer : $mode ?" && ctl_box "$id" seedboxctl versions "$mode" "$id" ;;
+    esac
+  done
+}
+
+menu_appliance() {
+  local c token repo ref
+  while :; do
+    c=$(W --title "Mise à jour de l'appliance" --ok-button "Valider" --cancel-button "Retour" --menu "$(seedboxctl appliance status 2>/dev/null | python3 -c 'import json,sys
+d=json.load(sys.stdin); i=d["installed"]; c=d.get("check") or {}
+print("Version", i["version"], (i["commit"] or "")[:7], "-", ("mise à jour disponible" if c.get("available") else c.get("reason") or "pas encore vérifié"))')" 15 78 5 \
+      check "Rechercher une mise à jour" \
+      apply "Installer la dernière version (GitHub, sans ISO)" \
+      rollback "Annuler la dernière mise à jour" \
+      source "Dépôt et branche suivis" \
+      token "Enregistrer le jeton GitHub (dépôt privé)") || return 0
+    case $c in
+      check) ctl_box "Recherche" seedboxctl appliance check ;;
+      apply) ask "Mise à jour" "Installer la dernière version de l'appliance depuis GitHub ?\nLa console web redémarre à la fin ; les données sont conservées." && ctl_box "Mise à jour de l'appliance" seedboxctl appliance apply ;;
+      rollback) ask "Retour arrière" "Annuler la dernière mise à jour de l'appliance ?" && ctl_box "Retour arrière" seedboxctl appliance rollback ;;
+      source) repo=$(input "Dépôt" "Dépôt GitHub (propriétaire/dépôt) :" "$(seedboxctl appliance source | python3 -c 'import json,sys; print(json.load(sys.stdin)["repo"])')") || continue
+              ref=$(input "Branche" "Branche ou étiquette :" "$(seedboxctl appliance source | python3 -c 'import json,sys; print(json.load(sys.stdin)["ref"])')") || continue
+              seedboxctl appliance source --repo "$repo" --ref "$ref" && msg "Source" "Source enregistrée." 8 ;;
+      token) token=$(pass "Jeton GitHub" "Jeton GitHub en lecture seule :") || continue
+             printf '%s\n' "$token" | seedboxctl p2p token && msg "Jeton" "Jeton enregistré." 8 ;;
+    esac
+  done
+}
+
+menu_p2p() {
+  local c token
+  while :; do
+    c=$(W --title "P2P Aggregator" --ok-button "Valider" --cancel-button "Retour" --menu "$(seedboxctl p2p status 2>/dev/null | python3 -c 'import json,sys
+d=json.load(sys.stdin); print("Version", d["version"], d["commit"] or "", "- jeton", "enregistré" if d["token"] else "absent")')" 13 76 3 \
+      update "Mettre à jour" \
+      token "Enregistrer le jeton GitHub" \
+      session "Activer tracker-session") || return 0
+    case $c in
+      update) ctl_box "Mise à jour" seedboxctl p2p update ;;
+      token) token=$(pass "Jeton GitHub" "Jeton GitHub en lecture seule :") || continue
+             printf '%s\n' "$token" | seedboxctl p2p token && msg "Jeton" "Jeton enregistré." 8 ;;
+      session) ctl_box "tracker-session" seedboxctl p2p session ;;
+    esac
+  done
+}
+
+# --- paramètres : mises à jour planifiées, sécurité ----------------------------------
+DAY_NAMES="mon:Lundi tue:Mardi wed:Mercredi thu:Jeudi fri:Vendredi sat:Samedi sun:Dimanche"
+
+updates_summary() {
+  seedboxctl updates show 2>/dev/null | python3 -c 'import json,sys
+d=json.load(sys.stdin); s=d["settings"]["security"]; a=d["settings"]["apps"]
+names=dict(mon="lun",tue="mar",wed="mer",thu="jeu",fri="ven",sat="sam",sun="dim")
+def days(v): return "tous les jours" if v=="daily" else ",".join(names[x] for x in v.split(","))
+def line(label, c, extra=""): return "  %-14s %s" % (label, ("%s à %s%s" % (days(c["days"]), c["time"], extra)) if c["enabled"] else "désactivées")
+print(line("Sécurité", s, (", redémarrage à "+s["reboot_time"]) if s["reboot"] else ""))
+print(line("Applications", a, " + P2P Aggregator" if a["p2p"] else ""))
+if d["reboot_required"]: print("  Redémarrage du serveur nécessaire")'
+}
+
+pick_days() {   # pick_days COURANT : jours choisis dans DAYS_CHOICE
+  local cur=$1 items=() pair id st chosen
+  for pair in $DAY_NAMES; do
+    id=${pair%%:*}
+    if [[ $cur == daily || ,$cur, == *,$id,* ]]; then st=ON; else st=OFF; fi
+    items+=("$id" "${pair#*:}" "$st")
+  done
+  chosen=$(W --title "Jours de passage" --ok-button "Valider" --cancel-button "Retour" \
+    --checklist "Espace pour cocher, Entrée pour valider :" 18 60 7 "${items[@]}") || return 1
+  chosen=${chosen//\"/}; chosen=${chosen// /,}
+  [[ -n $chosen ]] || { msg "Jours" "Choisissez au moins un jour." 8; return 1; }
+  DAYS_CHOICE=$chosen
+}
+
+ask_clock() {   # ask_clock TITRE COURANT : heure choisie dans CLOCK_CHOICE
+  while :; do
+    CLOCK_CHOICE=$(input "$1" "Heure (HH:MM, 24 h) :" "$2") || return 1
+    [[ $CLOCK_CHOICE =~ ^([01]?[0-9]|2[0-3]):[0-5][0-9]$ ]] && return 0
+    msg "Heure" "Format attendu : HH:MM, par exemple 03:30." 8
+  done
+}
+
+setting_value() { seedboxctl updates show 2>/dev/null | python3 -c 'import json,sys
+print(json.load(sys.stdin)["settings"][sys.argv[1]][sys.argv[2]])' "$1" "$2"; }
+
+edit_security_updates() {
+  local en=false scope days time reboot=false rtime args
+  scope=$(setting_value security scope); days=$(setting_value security days); time=$(setting_value security time)
+  rtime=$(setting_value security reboot_time)
+  if ask "Mises à jour de sécurité" "Installer automatiquement les correctifs de sécurité du système ?"; then en=true; fi
+  args=(--security-enabled "$en")
+  if [[ $en == true ]]; then
+    scope=$(W --title "Périmètre" --ok-button "Valider" --cancel-button "Retour" --default-item "$scope" --menu "Quels correctifs installer ?" 12 76 2 \
+      security "Correctifs de sécurité uniquement (conseillé)" all "Sécurité et mises à jour ordinaires d'Ubuntu") || return 0
+    pick_days "$days" || return 0; days=$DAYS_CHOICE
+    ask_clock "Heure du passage" "$time" || return 0; time=$CLOCK_CHOICE
+    if ask "Redémarrage" "Redémarrer automatiquement le serveur lorsqu'un correctif l'exige (noyau...) ?"; then
+      reboot=true; ask_clock "Heure du redémarrage" "$rtime" || return 0; rtime=$CLOCK_CHOICE
+    fi
+    args+=(--security-scope "$scope" --security-days "$days" --security-time "$time" --security-reboot "$reboot" --security-reboot-time "$rtime")
+  fi
+  ctl_box "Planification" seedboxctl updates set "${args[@]}"
+}
+
+edit_app_updates() {
+  local en=false days time p2p=false args
+  days=$(setting_value apps days); time=$(setting_value apps time)
+  if ask "Mises à jour des applications" "Mettre à jour automatiquement les applications (Watchtower) ?"; then en=true; fi
+  args=(--apps-enabled "$en")
+  if [[ $en == true ]]; then
+    pick_days "$days" || return 0; days=$DAYS_CHOICE
+    ask_clock "Heure du passage" "$time" || return 0; time=$CLOCK_CHOICE
+    if ask "P2P Aggregator" "Mettre aussi à jour P2P Aggregator automatiquement (jeton GitHub requis) ?"; then p2p=true; fi
+    args+=(--apps-days "$days" --apps-time "$time" --apps-p2p "$p2p")
+  fi
+  ctl_box "Planification" seedboxctl updates set "${args[@]}"
+}
+
+menu_updates() {
+  local c
+  while :; do
+    c=$(W --title "Mises à jour planifiées" --ok-button "Valider" --cancel-button "Retour" --menu "$(updates_summary)" 16 78 4 \
+      security "Sécurité du système : jours, heure, redémarrage" \
+      apps "Applications : jours, heure, P2P Aggregator" \
+      runsec "Installer les correctifs de sécurité maintenant" \
+      runapps "Mettre à jour les applications maintenant") || return 0
+    case $c in
+      security) edit_security_updates ;;
+      apps)     edit_app_updates ;;
+      runsec)   ctl_box "Correctifs de sécurité" seedboxctl updates run security ;;
+      runapps)  ctl_box "Applications" seedboxctl updates run apps ;;
+    esac
+  done
+}
+
+security_report() {
+  seedboxctl security audit 2>/dev/null | python3 -c 'import json,sys
+d=json.load(sys.stdin)
+mark=dict(ok="[ OK ]",warn="[ !  ]",fail="[FAIL]")
+for c in d["checks"]:
+    print(mark[c["state"]], c["label"])
+    if c["detail"]: print("       ", c["detail"])
+p=d["ports"]
+extra=[str(x) for x in p["extra"]["tcp"]]+[str(x)+"/udp" for x in p["extra"]["udp"]]
+print()
+print("Ports ouverts : SSH %d ; web %s ; ajoutés : %s" % (p["base"]["ssh"], ", ".join(map(str,p["base"]["web"])), ", ".join(extra) or "aucun"))'
+}
+
+menu_security() {
+  local c ports
+  while :; do
+    c=$(W --title "Sécurité de l'hôte" --ok-button "Valider" --cancel-button "Retour" --menu "Pare-feu, SSH, fail2ban, ports publiés par Docker" 14 76 3 \
+      audit "Audit : état du durcissement" \
+      ports "Ports ouverts supplémentaires" \
+      apply "Réappliquer le durcissement") || return 0
+    case $c in
+      audit)  security_report > "/run/seedbox-audit.$$"; W --title "Audit de sécurité" --scrolltext --textbox "/run/seedbox-audit.$$" 22 78; rm -f "/run/seedbox-audit.$$" ;;
+      ports)  ports=$(input "Ports ouverts" "Ports supplémentaires, séparés par des virgules (ex. 8080, 51413/udp).\nVide : seuls SSH et le web sont joignables." \
+                "$(seedboxctl security ports 2>/dev/null | python3 -c 'import json,sys
+d=json.load(sys.stdin); print(", ".join([str(x) for x in d["tcp"]]+[str(x)+"/udp" for x in d["udp"]]))')") || continue
+              ctl_box "Ports ouverts" seedboxctl security ports "${ports:- }" ;;
+      apply)  ctl_box "Durcissement" seedboxctl security apply ;;
+    esac
+  done
+}
+
+menu_settings() {
+  local c
+  while :; do
+    c=$(W --title "Paramètres" --ok-button "Valider" --cancel-button "Retour" --menu "Mises à jour et sécurité du serveur" 12 76 2 \
+      updates "Mises à jour planifiées : système et applications" \
+      security "Sécurité : audit, ports ouverts, durcissement") || return 0
+    case $c in
+      updates)  menu_updates ;;
+      security) menu_security ;;
+    esac
+  done
+}
+
+# --- partages réseau et disques ------------------------------------------------------
+shares_json() { seedboxctl share list 2>/dev/null; }
+
+shares_summary() {
+  shares_json | python3 -c 'import json,sys,textwrap
+d=json.load(sys.stdin)
+print("Partages")
+for s in d["shares"]:
+    where = s["source"] if s["kind"] != "disk" else (s["label"] or s["fstype"])
+    print("  %-12s%-8s%s" % (s["name"], "monté" if s["mounted"] else "ABSENT", where))
+if not d["shares"]:
+    print("  aucun")
+print()
+print("Emplacements")
+for r in d["roles"]:
+    print("  %-40s%s" % (r["label"], r["location"] or "désactivé"))
+for w in d["warnings"]:
+    print()
+    print(textwrap.fill(w, 72, initial_indent="  ! ", subsequent_indent="    "))'
+}
+
+share_pick() {   # share_pick TITRE : nom choisi dans SHARE_PICK
+  local items=()
+  mapfile -t items < <(shares_json | python3 -c 'import json,sys
+for s in json.load(sys.stdin)["shares"]:
+    print(s["name"]); print(("monté - " if s["mounted"] else "absent - ") + s["source"])')
+  ((${#items[@]})) || { msg "$1" "Aucun partage." 8; return 1; }
+  SHARE_PICK=$(W --title "$1" --ok-button "Valider" --cancel-button "Retour" --menu "Partage :" 16 78 6 "${items[@]}")
+}
+
+share_add_menu() {
+  local kind name source user="" password="" domain="" version="" disks=()
+  kind=$(W --title "Ajouter un partage" --ok-button "Suivant" --cancel-button "Retour" --menu "Type :" 13 76 3 \
+    smb "Partage Windows ou Samba (SMB)" nfs "Export NFS" disk "Disque branché sur le serveur") || return 0
+  name=$(input "Ajouter un partage" "Nom court (minuscules et chiffres, exemple : nas) :" "nas") || return 0
+  case $kind in
+    smb) source=$(input "SMB" "Adresse du partage (exemple : //192.168.1.10/torrents) :" "//") || return 0
+         user=$(input "SMB" "Identifiant (vide : accès invité) :" "") || return 0
+         if [[ -n $user ]]; then
+           password=$(pass "SMB" "Mot de passe de $user :") || return 0
+           domain=$(input "SMB" "Domaine (facultatif) :" "") || return 0
+         fi
+         version=$(W --title "SMB" --menu "Version du protocole :" 15 76 6 auto "automatique (conseillé)" \
+           3.1.1 "" 3.0 "" 2.1 "" 2.0 "" 1.0 "ancien NAS, peu sûr") || return 0 ;;
+    nfs) source=$(input "NFS" "Export (exemple : 192.168.1.10:/volume1/torrents) :" "") || return 0
+         version=$(W --title "NFS" --menu "Version :" 14 76 5 auto "automatique (conseillé)" 4.2 "" 4.1 "" 4 "" 3 "") || return 0 ;;
+    disk) mapfile -t disks < <(seedboxctl share disks 2>/dev/null | python3 -c 'import json,sys
+for d in json.load(sys.stdin):
+    print(d["uuid"]); print("%s %s %s %d Go" % (d["device"], d["label"] or "sans nom", d["fstype"], d["size"] // 1000**3))')
+          ((${#disks[@]})) || { msg "Disque" "Aucun disque libre détecté. Branchez-le, puis réessayez." 9; return 0; }
+          source=$(W --title "Disque" --menu "Disque à utiliser (son contenu est conservé) :" 16 78 6 "${disks[@]}") || return 0 ;;
+  esac
+  [[ $version == auto ]] && version=""
+  local args=(seedboxctl share add "$name" --kind "$kind" --source "$source" --version "$version")
+  if [[ -n $user ]]; then
+    printf '%s\n' "$password" | ctl_box "Ajout du partage $name" "${args[@]}" --username "$user" --domain "$domain"
+  else
+    ctl_box "Ajout du partage $name" "${args[@]}" </dev/null
+  fi
+}
+
+share_role_menu() {
+  local role target path roles=() targets=()
+  mapfile -t roles < <(shares_json | python3 -c 'import json,sys
+for r in json.load(sys.stdin)["roles"]:
+    print(r["role"]); print(r["label"] + " : " + (r["location"] or "désactivé"))')
+  role=$(W --title "Emplacements" --ok-button "Suivant" --cancel-button "Retour" --menu "Usage :" 16 78 6 "${roles[@]}") || return 0
+  mapfile -t targets < <(shares_json | python3 -c 'import json,sys
+d=json.load(sys.stdin); r=next(x for x in d["roles"] if x["role"] == sys.argv[1])
+print("_local"); print("Stockage local" if r["local"] else "Désactivé")
+for s in d["shares"]:
+    if s["mounted"]:
+        print(s["name"]); print("Partage " + s["source"])' "$role")
+  target=$(W --title "Emplacements" --ok-button "Suivant" --cancel-button "Retour" --menu "Emplacement :" 16 78 6 "${targets[@]}") || return 0
+  if [[ $target == _local ]]; then
+    ctl_box "Emplacement" seedboxctl share role "$role"
+    return
+  fi
+  path=$(shares_json | python3 -c 'import json,sys
+print(next(x for x in json.load(sys.stdin)["roles"] if x["role"] == sys.argv[1])["path"])' "$role")
+  path=$(input "Emplacements" "Sous-dossier sur le partage $target :" "$path") || return 0
+  ctl_box "Emplacement" seedboxctl share role "$role" "$target" --path "$path"
+}
+
+menu_shares() {
+  local c
+  while :; do
+    c=$(W --title "Partages réseau et disques" --ok-button "Valider" --cancel-button "Retour" --menu \
+      "Un NAS ou un disque peut recevoir les téléchargements, les .torrent et les bibliothèques." 15 78 5 \
+      show "Afficher les partages et les emplacements" \
+      add "Ajouter un partage SMB, NFS ou un disque" \
+      role "Choisir l'emplacement d'un usage" \
+      mount "Monter ou démonter un partage" \
+      remove "Supprimer un partage") || return 0
+    case $c in
+      show)   shares_summary > "/run/seedbox-shares.$$"
+              W --title "Partages" --scrolltext --textbox "/run/seedbox-shares.$$" 22 78; rm -f "/run/seedbox-shares.$$" ;;
+      add)    share_add_menu ;;
+      role)   share_role_menu ;;
+      mount)  share_pick "Monter ou démonter" || continue
+              if shares_json | python3 -c 'import json,sys
+sys.exit(0 if next(s for s in json.load(sys.stdin)["shares"] if s["name"] == sys.argv[1])["mounted"] else 1)' "$SHARE_PICK"; then
+                ctl_box "Démontage" seedboxctl share umount "$SHARE_PICK"
+              else
+                ctl_box "Montage" seedboxctl share mount "$SHARE_PICK"
+              fi ;;
+      remove) share_pick "Supprimer" || continue
+              ask "Supprimer" "Supprimer le partage $SHARE_PICK ? Les fichiers du NAS ne sont pas effacés." &&
+                ctl_box "Suppression" seedboxctl share remove "$SHARE_PICK" ;;
+    esac
+  done
+}
+
+# --- assistant de premier démarrage ---------------------------------------------------
+ask_password() {
+  local p1 p2 kb
+  kb=$(kb_layout)
+  while :; do
+    p1=$(W --title "Mot de passe" --ok-button "Suivant" --cancel-button "Retour" --passwordbox \
+      "Mot de passe de l'appliance (8 caractères au minimum), pour :\n  - le compte SSH et console « $SYSTEM_USER »\n  - le compte web « $(admin_login) » (connexion unique, Jellyfin, Seerr...)\nClavier actif : ${kb:-?}" 13 76) || return 1
+    if ((${#p1} < 8 || ${#p1} > 128)); then msg "Mot de passe refusé" "Le mot de passe doit contenir de 8 à 128 caractères." 8; continue; fi
+    if [[ $p1 == "$SYSTEM_USER" || $p1 == "$(admin_login)" ]]; then msg "Mot de passe refusé" "Le mot de passe doit être différent des identifiants." 8; continue; fi
+    p2=$(W --title "Confirmation" --ok-button "Suivant" --cancel-button "Retour" --passwordbox "Saisissez à nouveau le mot de passe :" 9 76) || return 1
+    [[ $p1 == "$p2" ]] && { ADMIN_PASS=$p1; return 0; }
+    msg "Erreur" "Les deux saisies ne sont pas identiques." 8
+  done
+}
+
+apply_account() {   # compte système, puis compte web (appliqué par le déploiement s'il n'a pas eu lieu)
+  local p=$1
+  if [[ $SB_DRYRUN != 1 ]]; then
+    id "$SYSTEM_USER" >/dev/null 2>&1 || useradd -m -s /bin/bash -c "SeedBox" -G sudo "$SYSTEM_USER" || return 1
+    printf '%s:%s\n' "$SYSTEM_USER" "$p" | chpasswd || return 1
+  fi
+  if [[ -f $SB_STATE/deployed ]]; then
+    [[ $SB_DRYRUN == 1 ]] || printf '%s\n' "$p" | seedboxctl user passwd "$(admin_login)"
+  else
+    mkdir -p "$SB_ETC"
+    (umask 077 && printf '%s\n' "$p" > "$PASSWORD_FILE.tmp") && mv -f "$PASSWORD_FILE.tmp" "$PASSWORD_FILE"
+  fi
+}
+
+gauge() { printf 'XXX\n%d\n%s\nXXX\n' "$1" "$2"; }
+
+apply_all() {   # 0 = terminé, 1 = erreur, 2 = modifier le réseau
+  local err="$SB_STATE/apply.err" rc lock=/run/seedbox-setup.lock
+  [[ -d /run && -w /run ]] || lock="$SB_STATE/setup.lock"
+  # (ne jamais écrire « exec 9>... 2>/dev/null » : whiptail dessine sur stderr)
+  exec 9>"$lock"
+  if ! flock -n 9; then msg "Patientez" "Une configuration est déjà en cours sur une autre console." 8; return 1; fi
+  if [[ -f $CONFIGURED_FLAG && ${SB_FORCE:-0} != 1 ]]; then
+    msg "Déjà configuré" "L'appliance vient d'être configurée depuis une autre console." 8; exit 0
+  fi
+  apply_network_interactive; rc=$?
+  ((rc == 2)) && return 2
+  mkdir -p "$SB_STATE"
+  : > "$err"
+  {
+    gauge 20 "Nom de machine : $HOST_NAME"; apply_hostname "$HOST_NAME" >>"$LOG" 2>&1 || echo "nom de machine" >>"$err"
+    gauge 60 "Mot de passe";               apply_account "$ADMIN_PASS" >>"$LOG" 2>&1 || echo "mot de passe" >>"$err"
+    gauge 100 "Terminé"; sleep 1
+  } | W --title "Application de la configuration" --gauge "Préparation..." 8 76 0
+  if [[ -s $err ]]; then
+    msg "Erreur" "Échec de l'étape : $(paste -sd, "$err").\n\nDétails dans $LOG\nVous pouvez corriger puis réappliquer." 11
+    return 1
+  fi
+  date -Is > "$CONFIGURED_FLAG"
+  log "configuration appliquée (machine=$HOST_NAME réseau=$NET_IF/$NET_MODE)"
+  # Le déploiement attendait cette configuration : il reprend seul (relancé s'il avait échoué)
+  [[ $SB_DRYRUN == 1 ]] || systemctl --no-block start seedbox-deploy.service 2>/dev/null || true
+  return 0
+}
+
+summary_text() {
+  local net
+  if [[ -z $NET_IF ]]; then net="aucune carte réseau"
+  elif [[ $NET_MODE == dhcp ]]; then net="$NET_IF, adresse automatique (DHCP)"
+  else net="$NET_IF, $NET_ADDR\n                 passerelle : ${NET_GW:-aucune}\n                 DNS        : $NET_DNS"
+  fi
+  printf '%s' "Vérifiez la configuration avant de l'appliquer :\n\n  Réseau       : $net\n  Machine      : $HOST_NAME\n  Mot de passe : ******** (comptes $SYSTEM_USER et $(admin_login))\n"
+}
+
+addresses_text() {
+  local ip=$1 text
+  text="  Tableau de bord : https://$ip/\n  Console         : https://$ip/console/\n  Jellyfin        : https://$ip/jellyfin/     Seerr : https://$ip:5055/"
+  [[ $HOST_NAME == *.* ]] && text+="\n  (aussi https://$HOST_NAME/ une fois ce nom déclaré dans votre DNS)"
+  printf '%s' "$text"
+}
+
+follow_deploy() {   # suivi du déploiement sur la console, jusqu'à la fin ou un appui sur Entrée
+  local lines shown=""
+  while [[ ! -f $SB_STATE/deployed ]]; do
+    lines=$(tail -n 13 "$DEPLOY_LOG" 2>/dev/null | sed 's/^\[seedboxctl\] //' | cut -c1-72)
+    # Réaffiché seulement si le journal change : whiptail vide la saisie en attente au démarrage,
+    # un appui sur Entrée pendant son affichage serait perdu
+    if [[ ${lines:-.} != "$shown" ]]; then
+      W --title "Déploiement des applications (Entrée : fermer)" --infobox "${lines:-Démarrage du déploiement...}" 17 78
+      shown=${lines:-.}
+    fi
+    # Entrée (ou fin de l'entrée standard) ferme le suivi ; seul le délai de 3 s le prolonge
+    read -r -t 3 _; (($? > 128)) || return 0
+  done
+  msg "SeedBoxBuntu est prêt" "Toutes les applications sont déployées.\n\n$(addresses_text "$(domain)")\n\n  Identifiant web : $(admin_login)        SSH : ssh $SYSTEM_USER@$(domain)" 15 78
+}
+
+final_screen() {
+  local ip
+  ip=${NET_RESULT_IP:-$(primary_ip)}
+  W --title "Configuration terminée" --yes-button "Suivre" --no-button "Terminer" --yesno \
+"Les applications s'installent maintenant : 10 à 30 minutes, Internet requis.
+
+$(addresses_text "$ip")
+
+  Identifiant web : $(admin_login)        SSH : ssh $SYSTEM_USER@$ip
+  Mot de passe    : celui que vous venez de choisir (les deux comptes)
+
+  Certificat de l'autorité locale de l'appliance : le navigateur avertit
+  à la première visite (autorité téléchargeable dans la console).
+
+Suivre le déploiement sur cet écran ?" 21 78 && follow_deploy
+}
+
+stop_other_firstboot() {
+  [[ $SB_DRYRUN == 1 ]] && return 0
+  local u
+  for u in $(systemctl list-units --plain --no-legend 'seedbox-firstboot@*' 2>/dev/null | awk '{print $1}'); do
+    [[ $u == "seedbox-firstboot@${SB_TTY}.service" ]] || systemctl --no-block stop "$u" 2>/dev/null || true
+  done
+}
+
+firstboot() {
+  [[ -f $CONFIGURED_FLAG && ${SB_FORCE:-0} != 1 ]] && exit 0
+  mkdir -p "$SB_STATE" "$SB_ETC"
+  quiet_console; setup_term
+  [[ $SB_DRYRUN == 1 ]] || wait_boot_settled
+  clear
+  HOST_NAME=$(hostname 2>/dev/null || echo seedbox)
+  W --title "Bienvenue" --ok-button "Commencer" --msgbox "
+  SeedBoxBuntu : Ubuntu Server + stack seedbox Docker
+
+  L'installation du système est terminée. Plus que trois réglages :
+
+     1. le réseau (adresse automatique ou IP fixe)
+     2. le nom de la machine
+     3. le mot de passe de l'appliance
+
+  Les applications se déploient ensuite seules : rien d'autre ne sera
+  demandé. Leurs images se téléchargent déjà pendant cette saisie." 19 78
+  local step=net choice rc
+  while :; do
+    case $step in
+      net)  if ask_network; then step=host; else msg "Configuration obligatoire" "Ces réglages sont nécessaires pour utiliser l'appliance." 8; fi ;;
+      host) if ask_hostname; then step=pass; else step=net; fi ;;
+      pass) if ask_password; then step=sum;  else step=host; fi ;;
+      sum)
+        choice=$(W --title "Récapitulatif" --ok-button "Valider" --nocancel --default-item apply \
+          --menu "$(summary_text)" 21 78 4 \
+          apply "Appliquer cette configuration" \
+          net   "Modifier le réseau" \
+          host  "Modifier le nom de machine" \
+          pass  "Modifier le mot de passe") || choice=sum
+        if [[ $choice == apply ]]; then
+          apply_all; rc=$?
+          case $rc in 0) break ;; 2) step=net ;; *) step=sum ;; esac
+        else
+          step=$choice
+        fi ;;
+    esac
+  done
+  ADMIN_PASS=""
+  final_screen
+  stop_other_firstboot
+  clear
+}
+
+menu_main() {
+  local c
+  setup_term
+  quiet_console
+  while :; do
+    c=$(W --title "Menu de l'appliance" --ok-button "Valider" --cancel-button "Shell" --menu "$(status_short)" 26 78 16 \
+      status "État de l'appliance" \
+      accounts "Comptes et mots de passe" \
+      domain "Adresse et certificat" \
+      vpn "qBittorrent : accès direct ou VPN" \
+      apps "Catalogue d'applications (Lidarr, Navidrome...)" \
+      tools "Sauvegarde, versions des services, double authentification" \
+      trackers "Synchroniser les trackers" \
+      shares "Partages réseau et disques" \
+      p2p "P2P Aggregator et mises à jour" \
+      appliance "Mise à jour de l'appliance (GitHub, sans ISO)" \
+      settings "Paramètres : mises à jour planifiées, sécurité" \
+      network "Réseau" \
+      hostname "Nom de machine" \
+      redeploy "Relancer la configuration des applications" \
+      restart "Redémarrer les applications" \
+      logout "Se déconnecter" \
+      reboot "Redémarrer le serveur" \
+      poweroff "Éteindre le serveur") || { clear; return 0; }
+    case $c in
+      status)   status_full > "/run/seedbox-status.$$"; W --title "État de l'appliance" --scrolltext --textbox "/run/seedbox-status.$$" 22 78; rm -f "/run/seedbox-status.$$" ;;
+      accounts) menu_accounts ;;
+      domain)   menu_domain ;;
+      vpn)      menu_vpn ;;
+      apps)     menu_apps ;;
+      tools)    menu_tools ;;
+      trackers) ctl_box "Trackers" seedboxctl trackers sync ;;
+      shares)   menu_shares ;;
+      p2p)      menu_p2p ;;
+      appliance) menu_appliance ;;
+      settings) menu_settings ;;
+      network)  menu_network ;;
+      hostname) menu_hostname ;;
+      redeploy) ctl_box "Configuration" seedboxctl deploy ;;
+      restart)  ctl_box "Redémarrage" seedboxctl restart ;;
+      logout)   clear; return 10 ;;
+      reboot)   ask "Redémarrer" "Redémarrer le serveur maintenant ?" && { clear; systemctl reboot; return 10; } ;;
+      poweroff) ask "Éteindre" "Éteindre le serveur maintenant ?" && { clear; systemctl poweroff; return 10; } ;;
+    esac
+  done
+}
+
+need_root() { [[ $EUID -eq 0 ]] || exec sudo "$0" "$@"; }
+
+case "${1:-}" in
+  --firstboot) need_root "$@"; SB_TTY=${2:-}; firstboot ;;
+  menu)     need_root "$@"; menu_main; exit $? ;;
+  network)  need_root "$@"; setup_term; menu_network; clear ;;
+  hostname) need_root "$@"; setup_term; menu_hostname; clear ;;
+  status)   if [[ ${2:-} == --short ]]; then status_short; else status_full; fi ;;
+  *)        sed -n '3,7p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

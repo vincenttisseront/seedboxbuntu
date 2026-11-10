@@ -1,0 +1,13 @@
+---
+# =============================================================================
+#  SeedBoxBuntu - indicateurs système
+# =============================================================================
+#  CPU, RAM et disque se déclarent ici, pas dans services.yaml. disk doit être visible
+#  dans le conteneur : docker-compose.yml y monte /mnt/storage en lecture seule.
+- logo:
+    icon: /images/seedboxbuntu.svg
+- resources:
+    cpu: true
+    memory: true
+    disk: /mnt/storage
+    refresh: 3000

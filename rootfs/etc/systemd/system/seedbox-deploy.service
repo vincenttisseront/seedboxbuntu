@@ -1,0 +1,23 @@
+[Unit]
+Description=SeedBoxBuntu - déploiement de la stack
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+ConditionPathExists=!/var/lib/seedboxbuntu/deployed
+StartLimitIntervalSec=0
+
+[Service]
+# exec et non oneshot : le démarrage n'attend pas la fin du déploiement (plusieurs minutes),
+# sinon cloud-init n'appliquerait le pare-feu qu'après lui. Au premier démarrage, seedboxctl
+# télécharge les images puis attend la fin de l'assistant (/var/lib/seedboxbuntu/configured).
+Type=exec
+ExecStart=/usr/local/sbin/seedboxctl deploy
+StandardOutput=append:/var/log/seedboxbuntu-deploy.log
+StandardError=append:/var/log/seedboxbuntu-deploy.log
+# Réseau absent ou image indisponible : nouvel essai, jusqu'à la réussite
+Restart=on-failure
+RestartSec=120
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

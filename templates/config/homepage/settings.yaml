@@ -1,0 +1,32 @@
+---
+# =============================================================================
+#  SeedBoxBuntu - réglages de Homepage
+# =============================================================================
+title: SeedBoxBuntu
+favicon: /images/seedboxbuntu.svg
+language: fr
+theme: dark
+color: slate
+
+# Les indicateurs de widgets.yaml s'affichent dans un bandeau en haut de page
+headerStyle: boxedWidgets
+statusStyle: dot
+useEqualHeights: true
+target: _blank
+
+# Appliance privée : pas d'appel à GitHub, pas d'indexation
+disableUpdateCheck: true
+hideVersion: true
+disableIndexing: true
+
+# Les noms doivent reprendre exactement ceux des groupes de services.yaml
+layout:
+  Téléchargement:
+    style: row
+    columns: 3
+  Médias:
+    style: row
+    columns: 3
+  Administration:
+    style: row
+    columns: 3

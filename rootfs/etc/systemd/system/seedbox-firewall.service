@@ -1,0 +1,13 @@
+[Unit]
+Description=SeedBoxBuntu - garde des ports publiés par Docker
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/seedboxctl firewall-guard
+
+[Install]
+WantedBy=multi-user.target docker.service

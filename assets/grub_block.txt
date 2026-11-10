@@ -1,0 +1,52 @@
+# Si SeedBoxBuntu est deja installe sur un disque de ce serveur, on propose de le METTRE A JOUR
+# (rien n'est efface) plutot que de tout reinstaller ; a version egale, on demarre dessus.
+# La cle USB peut rester branchee sans risque de reinstallation.
+set sb_root=""
+set sb_boot=""
+set sb_installed_version=""
+EOF
+    printf 'set sb_new_version="%s"\n' "$SB_VERSION"
+    cat <<'EOF'
+if search --no-floppy --file --set=sb_root /seedboxbuntu-installed; then
+	set sb_boot=""
+elif search --no-floppy --file --set=sb_root /boot/seedboxbuntu-installed; then
+	set sb_boot="/boot"
+fi
+export sb_root
+export sb_boot
+if [ -n "$sb_root" ]; then
+	if [ -f ($sb_root)$sb_boot/seedboxbuntu-installed.cfg ]; then
+		source ($sb_root)$sb_boot/seedboxbuntu-installed.cfg
+	fi
+	set default="sb-local"
+	set timeout=15
+	if [ -z "$sb_installed_version" -o "$sb_installed_version" '<' "$sb_new_version" ]; then
+		set default="sb-update"
+	fi
+	menuentry "Demarrer SeedBoxBuntu deja installe ($sb_installed_version)" --id sb-local {
+		if [ "$grub_platform" = "efi" ]; then
+			configfile ($sb_root)$sb_boot/grub/grub.cfg
+EOF
+    if ((BIOS_CHAIN)); then
+      cat <<'EOF'
+		else
+			regexp --set=1:sb_disk '^([^,]+)' "$sb_root"
+			set root=$sb_disk
+			chainloader +1
+			boot
+EOF
+    else
+      cat <<'EOF'
+		else
+			configfile ($sb_root)$sb_boot/grub/grub.cfg
+EOF
+    fi
+    cat <<'EOF'
+		fi
+	}
+EOF
+    entry "METTRE A JOUR SeedBoxBuntu deja installe (conserve vos donnees)" sb-update "$KERNEL" "$INITRD" "autoinstall subiquity.autoinstallpath=/cdrom/autoinstall-update.yaml" "" | sed 's/^/\t/'
+    cat <<'EOF'
+fi
+
+EOF

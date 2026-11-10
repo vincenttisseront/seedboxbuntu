@@ -1,0 +1,54 @@
+# =============================================================================
+#  SeedBoxBuntu - configuration statique de Traefik
+#  Généré par seedboxctl : modifier l'adresse ou le TLS depuis la console.
+# =============================================================================
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+ping: {}
+
+api:
+  dashboard: true
+  # Tableau de bord sous https://<adresse>/traefik/dashboard/
+  basePath: /traefik
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+    http:
+      tls: @@TRAEFIK_TLS@@
+  # Applications qui ne fonctionnent qu'à la racine d'une adresse : un port HTTPS chacune
+  seerr:
+    address: ":5055"
+    http:
+      tls: @@TRAEFIK_TLS@@
+  dockge:
+    address: ":5001"
+    http:
+      tls: @@TRAEFIK_TLS@@
+  p2p:
+    address: ":3000"
+    http:
+      tls: @@TRAEFIK_TLS@@
+
+providers:
+  docker:
+    # Accès en lecture seule, à travers socket-proxy
+    endpoint: tcp://socket-proxy:2375
+    exposedByDefault: false
+    network: seedbox
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+@@TRAEFIK_ACME@@

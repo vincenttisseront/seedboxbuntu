@@ -1,0 +1,3 @@
+#!/bin/sh
+# Ouvre le menu console de l'appliance SeedBoxBuntu
+exec sudo /usr/local/sbin/seedbox-setup menu

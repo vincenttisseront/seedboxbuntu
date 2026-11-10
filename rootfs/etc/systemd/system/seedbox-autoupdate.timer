@@ -1,0 +1,10 @@
+[Unit]
+Description=SeedBoxBuntu - planification des mises à jour des applications
+
+[Timer]
+# Remplacé par la planification des Paramètres (seedbox-autoupdate.timer.d)
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

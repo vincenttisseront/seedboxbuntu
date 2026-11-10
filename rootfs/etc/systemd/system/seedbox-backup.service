@@ -1,0 +1,10 @@
+[Unit]
+Description=SeedBoxBuntu - sauvegarde de la configuration
+After=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl backup auto
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,11 @@
+[Unit]
+Description=SeedBoxBuntu - remontage des partages réseau absents
+After=network-online.target docker.service
+Wants=network-online.target
+ConditionPathExists=/etc/seedboxbuntu/shares.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl share remount
+# Un NAS absent n'est pas une panne de l'appliance : le message reste dans le journal
+SuccessExitStatus=1

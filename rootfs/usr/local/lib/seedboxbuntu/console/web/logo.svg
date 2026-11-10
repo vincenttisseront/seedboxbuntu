@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SeedBoxBuntu">
+  <title>SeedBoxBuntu</title>
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+    <linearGradient id="feuille" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ecfccb"/>
+      <stop offset="1" stop-color="#86efac"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#fond)"/>
+  <!-- caisse ouverte (vue isométrique) -->
+  <path d="M160 286 256 340 256 452 160 398Z" fill="#ffffff" fill-opacity=".96"/>
+  <path d="M256 340 352 286 352 398 256 452Z" fill="#ffffff" fill-opacity=".74"/>
+  <path d="M160 286 256 232 352 286 256 340Z" fill="#0b4f4a"/>
+  <path d="M160 286 256 232 352 286 256 340Z" fill="none" stroke="#ffffff" stroke-width="10" stroke-linejoin="round"/>
+  <!-- pousse -->
+  <path d="M256 312V196" fill="none" stroke="#bbf7d0" stroke-width="14" stroke-linecap="round"/>
+  <path d="M256 204C256 132 322 98 384 110 384 176 334 220 256 204Z" fill="url(#feuille)"/>
+  <path d="M256 238C256 190 214 166 160 176 160 224 198 260 256 246Z" fill="url(#feuille)" fill-opacity=".92"/>
+</svg>

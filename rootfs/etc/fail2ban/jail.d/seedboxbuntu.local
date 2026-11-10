@@ -1,0 +1,14 @@
+# SeedBoxBuntu : bannissement des adresses qui devinent un mot de passe SSH
+# (la connexion web est protégée par la régulation d'Authelia : 5 essais, puis 10 minutes)
+[DEFAULT]
+backend = systemd
+ignoreip = 127.0.0.1/8 ::1
+bantime = 1h
+findtime = 10m
+maxretry = 5
+bantime.increment = true
+bantime.maxtime = 1w
+
+[sshd]
+enabled = true
+port = ssh

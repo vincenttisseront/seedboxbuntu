@@ -1,0 +1,15 @@
+[Unit]
+Description=SeedBoxBuntu - console d'administration web
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/seedboxbuntu/console/server.py
+# L'adresse d'écoute n'existe qu'une fois le réseau Docker créé
+Restart=always
+RestartSec=5
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target

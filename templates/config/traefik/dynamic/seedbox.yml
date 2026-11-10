@@ -1,0 +1,113 @@
+# =============================================================================
+#  SeedBoxBuntu - configuration dynamique de Traefik
+#  Généré par seedboxctl : contient le secret partagé avec la console.
+# =============================================================================
+http:
+  middlewares:
+    # Connexion unique : Traefik interroge Authelia avant chaque requête. L'entrée de
+    # Traefik efface les en-têtes X-Forwarded-* envoyés par le navigateur : seuls ceux
+    # posés par Traefik lui-même parviennent à Authelia.
+    authelia:
+      forwardAuth:
+        address: http://authelia:9091/auth/api/authz/forward-auth
+        trustForwardHeader: true
+        authResponseHeaders:
+          - Remote-User
+          - Remote-Groups
+          - Remote-Name
+          - Remote-Email
+    # Dockge (port 5001) est servi à la racine, comme le tableau de bord : Authelia ne
+    # distingue pas les ports. Le chemin fictif /dockge/ présenté à Authelia applique la
+    # règle des administrateurs ; le retour après connexion est redirigé vers la racine.
+    authelia-dockge:
+      chain:
+        middlewares:
+          - dockge-return
+          - dockge-uri
+          - authelia
+    dockge-uri:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Uri: /dockge/
+    dockge-return:
+      redirectRegex:
+        regex: "^(https://[^/]+)/dockge/?$"
+        replacement: "${1}/"
+    # /console -> /console/ : les chemins relatifs des pages en dépendent
+    slash:
+      redirectRegex:
+        regex: "^(https://[^/]+/[a-z]+)$"
+        replacement: "${1}/"
+    # Nom inconnu (nom court du serveur, alias DNS...) : renvoi vers l'adresse principale, port
+    # et chemin conservés ; la connexion unique n'est possible que sur les adresses déclarées
+    to-main-address:
+      redirectRegex:
+        regex: "^https://[^/:]+(:[0-9]+)?(.*)$"
+        replacement: "https://@@DOMAIN@@${1}${2}"
+    # /traefik et /traefik/ -> tableau de bord
+    traefik-home:
+      redirectRegex:
+        regex: "^(https://[^/]+)/traefik/?$"
+        replacement: "${1}/traefik/dashboard/"
+    # Applications sans chemin de base : Traefik retire le préfixe avant de transmettre
+    console-strip:
+      stripPrefix:
+        prefixes:
+          - /console
+    qbittorrent-strip:
+      stripPrefix:
+        prefixes:
+          - /qbittorrent
+    secure-headers:
+      headers:
+        stsSeconds: 31536000
+        contentTypeNosniff: true
+        referrerPolicy: same-origin
+        customFrameOptionsValue: SAMEORIGIN
+    # Frein contre les essais de mots de passe sur les pages de connexion
+    rate-limit:
+      rateLimit:
+        average: 50
+        burst: 100
+    # Prouve à la console que la requête vient de Traefik, donc d'Authelia : les autres
+    # conteneurs du réseau peuvent joindre son port, mais ne connaissent pas ce secret.
+    console-secret:
+      headers:
+        customRequestHeaders:
+          X-Seedbox-Proxy-Secret: "@@CONSOLE_PROXY_SECRET@@"
+
+  routers:
+    other-hosts:
+      rule: "@@OTHER_HOSTS_RULE@@"
+      priority: 100000
+      entryPoints:
+        - websecure
+        - seerr
+        - dockge
+        - p2p
+      service: noop@internal
+      middlewares:
+        - to-main-address
+    console:
+      rule: PathPrefix(`/console`)
+      entryPoints:
+        - websecure
+      service: console
+      middlewares:
+        - slash
+        - authelia
+        - console-strip
+        - secure-headers
+        - console-secret
+
+  services:
+    console:
+      loadBalancer:
+        servers:
+          - url: http://172.30.0.1:8090
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+@@TRAEFIK_DEFAULT_CERT@@

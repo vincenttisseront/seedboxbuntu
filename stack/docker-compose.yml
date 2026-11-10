@@ -1,0 +1,715 @@
+# =============================================================================
+#  SeedBoxBuntu - stack Docker principale          /opt/seedbox/docker-compose.yml
+# =============================================================================
+#  Pilotage : seedboxctl, console web (https://<adresse>/console/) ou seedbox-menu.
+#  Variables : /opt/seedbox/.env (lu automatiquement par Docker Compose).
+#
+#  PUBLICATION
+#    Traefik est le seul conteneur à publier des ports. Une seule adresse, l'IP du
+#    serveur ou son nom (aucun DNS à configurer), et un chemin par application :
+#      https://<adresse>/             tableau de bord (Homepage)
+#      https://<adresse>/console/     console d'administration
+#      https://<adresse>/sonarr/ ...  applications servies dans un sous-chemin
+#    Jackett est servi sous /jackett/ ; FlareSolverr n'a aucune route (réseau Docker seulement).
+#    Applications ajoutées depuis le catalogue (console > Catalogue) : elles vivent dans
+#    docker-compose.apps.yml, généré par seedboxctl et fusionné à ce fichier ; elles survivent aux mises à jour.
+#    Seerr, Dockge et p2p-aggregator ne savent pas fonctionner dans un sous-chemin :
+#    ils ont leur propre port, toujours en HTTPS (5055, 5001 et 3000).
+#    Les règles n'imposent aucun nom d'hôte : l'IP, le nom du serveur et un domaine
+#    personnalisé mènent aux mêmes applications. Le TLS se règle sur les points d'entrée
+#    (traefik.yml) : certificat de l'appliance, ou Let's Encrypt pour un domaine.
+#
+#  AUTHENTIFICATION
+#    Le middleware authelia@file protège les applications d'administration
+#    (connexion unique). Jellyfin, Seerr et p2p-aggregator gèrent leurs propres
+#    comptes : seedboxctl les synchronise avec l'annuaire Authelia.
+#
+#  RÉSEAU
+#    Réseau « seedbox » à sous-réseau fixe : qBittorrent ne dispense de mot de passe que
+#    Traefik (172.30.0.2), déjà protégé par Authelia. qBittorrent n'a pas de nom propre :
+#    en mode VPN il partage la pile réseau de gluetun (gluetun:8080) ; en mode direct, sans
+#    VPN, il est joint sous qbittorrent:8080.
+#
+#  STOCKAGE ET HARDLINKS
+#    ${DATA_DIR} (/mnt/storage) est monté en un seul volume /data dans qBittorrent,
+#    Radarr, Sonarr, qbit_manage et cross-seed. Deux volumes séparés seraient vus
+#    comme deux systèmes de fichiers et imposeraient une copie à chaque import.
+#
+#  PARTAGES RÉSEAU ET DISQUES EXTERNES
+#    /mnt/shares/<nom> (SMB, NFS, disque) est monté sur l'hôte par la console, puis vu
+#    sous /shares par les mêmes applications et par Jellyfin. Propagation « rslave » : un
+#    partage monté après le démarrage d'un conteneur y apparaît sans redémarrage. Jellyfin
+#    fait exception : en lecture seule, il est redémarré à chaque montage.
+#
+#  PROFILS
+#    direct   qBittorrent sans VPN (accès local), qbit_manage, cross-seed  (par défaut)
+#    vpn      gluetun, qBittorrent dans le tunnel, qbit_manage, cross-seed (identifiants VPN requis)
+#    session  tracker-session de p2p-aggregator (renouvellement des sessions trackers)
+# =============================================================================
+
+name: seedbox
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-base: &base
+  restart: unless-stopped
+  logging: *logging
+  security_opt:
+    - no-new-privileges:true
+
+# qBittorrent : partie commune aux deux modes (vpn : réseau de gluetun, direct : réseau seedbox)
+x-qbittorrent: &qbittorrent
+  image: lscr.io/linuxserver/qbittorrent:latest
+  container_name: qbittorrent
+  # Connexions et fichiers ouverts simultanés de libtorrent
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+  environment:
+    PUID: ${PUID}
+    PGID: ${PGID}
+    TZ: ${TZ}
+    UMASK: ${UMASK}
+    WEBUI_PORT: 8080
+    TORRENTING_PORT: 6881
+  volumes:
+    - ${CONFIG_DIR}/qbittorrent:/config
+    - ${DATA_DIR}:/data
+    - ${SHARES_DIR:-/mnt/shares}:/shares:rslave
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:8080/"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+
+x-lsio-env: &lsio-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+  UMASK: ${UMASK}
+
+services:
+  # ---------------------------------------------------------------------------
+  #  Publication et authentification
+  # ---------------------------------------------------------------------------
+  socket-proxy:
+    <<: *base
+    # Traefik lit la liste des conteneurs sans accès direct au socket Docker
+    image: ghcr.io/tecnativa/docker-socket-proxy:latest
+    container_name: socket-proxy
+    environment:
+      CONTAINERS: 1
+      POST: 0
+      LOG_LEVEL: warning
+      # IPv4 seul : l'IPv6 n'est pas toujours disponible dans les conteneurs
+      BIND_CONFIG: 0.0.0.0:2375
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket
+    tmpfs:
+      - /run
+      - /var/lib/haproxy
+
+  traefik:
+    <<: *base
+    image: traefik:v3
+    container_name: traefik
+    depends_on:
+      - socket-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+      # Applications incompatibles avec un sous-chemin : un port HTTPS chacune
+      - "5055:5055"
+      - "5001:5001"
+      - "3000:3000"
+    environment:
+      TZ: ${TZ}
+    # Identifiants du fournisseur DNS pour Let's Encrypt (défi DNS-01) ; fichier vide par défaut
+    env_file:
+      - ${CONFIG_DIR}/traefik/acme-dns.env
+    volumes:
+      - ${CONFIG_DIR}/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ${CONFIG_DIR}/traefik/dynamic:/etc/traefik/dynamic:ro
+      - ${CONFIG_DIR}/traefik/certs:/certs:ro
+      - ${CONFIG_DIR}/traefik/acme:/acme
+    networks:
+      seedbox:
+        ipv4_address: 172.30.0.2
+      socket: {}
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      traefik.enable: "true"
+      # Tableau de bord sous /traefik/ (api.basePath dans traefik.yml)
+      traefik.http.routers.traefik.rule: PathPrefix(`/traefik`)
+      traefik.http.routers.traefik.entrypoints: websecure
+      traefik.http.routers.traefik.service: api@internal
+      traefik.http.routers.traefik.middlewares: traefik-home@file,authelia@file,secure-headers@file
+
+  # Sessions de la connexion unique : conservées si Authelia redémarre (mise à jour, changement d'adresse),
+  # personne n'est déconnecté. Redis n'est joignable que depuis le réseau interne, avec un mot de passe.
+  authelia-redis:
+    <<: *base
+    image: redis:7-alpine
+    container_name: authelia-redis
+    user: "${PUID}:${PGID}"
+    environment:
+      REDIS_PASSWORD: ${AUTHELIA_REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes --save 60 1 --dir /data"]
+    volumes:
+      - ${CONFIG_DIR}/redis:/data
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Accès distant par Tailscale (profil « tailscale », activé depuis la console) : mode userspace, aucun
+  # privilège ; « tailscale serve » publie Traefik en HTTPS sur le tailnet, sans ouvrir de port de la box.
+  tailscale:
+    <<: *base
+    image: tailscale/tailscale:stable
+    container_name: tailscale
+    profiles: ["tailscale"]
+    hostname: ${TAILSCALE_HOSTNAME:-seedbox}
+    environment:
+      TS_AUTHKEY: ${TAILSCALE_AUTHKEY:-}
+      TS_HOSTNAME: ${TAILSCALE_HOSTNAME:-seedbox}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_ACCEPT_DNS: "false"
+      TS_SERVE_CONFIG: /serve/serve.json
+    volumes:
+      - ${CONFIG_DIR}/tailscale:/var/lib/tailscale
+      - ${CONFIG_DIR}/tailscale-serve:/serve:ro
+    networks:
+      - seedbox
+
+  authelia:
+    <<: *base
+    image: authelia/authelia:4
+    container_name: authelia
+    environment:
+      TZ: ${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      AUTHELIA_SESSION_SECRET: ${AUTHELIA_SESSION_SECRET}
+      AUTHELIA_STORAGE_ENCRYPTION_KEY: ${AUTHELIA_STORAGE_KEY}
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${AUTHELIA_JWT_SECRET}
+      AUTHELIA_SESSION_REDIS_PASSWORD: ${AUTHELIA_REDIS_PASSWORD}
+    volumes:
+      - ${CONFIG_DIR}/authelia:/config
+    networks:
+      - seedbox
+    depends_on:
+      authelia-redis:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      # Portail de connexion sous /auth/ (server.address dans configuration.yml)
+      traefik.http.routers.authelia.rule: PathPrefix(`/auth`)
+      traefik.http.routers.authelia.entrypoints: websecure
+      traefik.http.routers.authelia.middlewares: rate-limit@file,secure-headers@file
+      traefik.http.services.authelia.loadbalancer.server.port: "9091"
+
+  # ---------------------------------------------------------------------------
+  #  Tableau de bord et administration
+  # ---------------------------------------------------------------------------
+  homepage:
+    <<: *base
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      # Adresses acceptées : IP, nom du serveur et domaine personnalisé (tenu à jour par seedboxctl)
+      HOMEPAGE_ALLOWED_HOSTS: ${PUBLIC_HOSTS}
+      HOMEPAGE_VAR_DOMAIN: ${DOMAIN}
+      HOMEPAGE_VAR_RADARR_API_KEY: ${RADARR_API_KEY}
+      HOMEPAGE_VAR_SONARR_API_KEY: ${SONARR_API_KEY}
+      HOMEPAGE_VAR_PROWLARR_API_KEY: ${PROWLARR_API_KEY}
+      HOMEPAGE_VAR_JACKETT_API_KEY: ${JACKETT_API_KEY}
+      HOMEPAGE_VAR_JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      HOMEPAGE_VAR_SEERR_API_KEY: ${SEERR_API_KEY}
+      HOMEPAGE_VAR_QBIT_USERNAME: ${QBIT_USERNAME}
+      HOMEPAGE_VAR_QBIT_PASSWORD: ${QBIT_PASSWORD}
+    volumes:
+      - ${CONFIG_DIR}/homepage:/app/config
+      # Logo de l'appliance (images/seedboxbuntu.svg)
+      - ${CONFIG_DIR}/homepage/images:/app/public/images:ro
+      # Le widget « resources » ne voit que les disques montés dans le conteneur
+      - ${DATA_DIR}:/mnt/storage:ro
+    networks:
+      - seedbox
+    labels:
+      traefik.enable: "true"
+      # Tout ce qui ne correspond à aucune autre application : priorité la plus basse
+      traefik.http.routers.homepage.rule: PathPrefix(`/`)
+      traefik.http.routers.homepage.priority: "1"
+      traefik.http.routers.homepage.entrypoints: websecure
+      traefik.http.routers.homepage.middlewares: authelia@file,secure-headers@file
+      traefik.http.services.homepage.loadbalancer.server.port: "3000"
+
+  dockge:
+    <<: *base
+    image: louislam/dockge:1
+    container_name: dockge
+    environment:
+      TZ: ${TZ}
+      DOCKGE_STACKS_DIR: ${STACKS_DIR}
+    volumes:
+      # Équivalent d'un accès root à l'hôte : réservé au groupe admins par Authelia
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${CONFIG_DIR}/dockge:/app/data
+      # Chemin identique dans le conteneur et sur l'hôte : Docker les résout sur l'hôte
+      - ${STACKS_DIR}:${STACKS_DIR}
+    networks:
+      - seedbox
+    labels:
+      traefik.enable: "true"
+      # Port 5001 : Dockge ne fonctionne qu'à la racine d'une adresse
+      traefik.http.routers.dockge.rule: PathPrefix(`/`)
+      traefik.http.routers.dockge.entrypoints: dockge
+      traefik.http.routers.dockge.middlewares: authelia-dockge@file,secure-headers@file
+      traefik.http.services.dockge.loadbalancer.server.port: "5001"
+
+  watchtower:
+    <<: *base
+    # Planifié dans la console (Paramètres) : le profil autoupdate l'active ou le retire
+    profiles: ["autoupdate"]
+    # Fork maintenu : l'image containrrr/watchtower est incompatible avec Docker 29
+    image: nickfedor/watchtower:latest
+    container_name: watchtower
+    environment:
+      TZ: ${TZ}
+      WATCHTOWER_SCHEDULE: ${WATCHTOWER_SCHEDULE:-0 0 3 * * *}
+      WATCHTOWER_CLEANUP: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - seedbox
+
+  # ---------------------------------------------------------------------------
+  #  Téléchargement : qBittorrent enfermé dans le tunnel VPN de gluetun
+  # ---------------------------------------------------------------------------
+  gluetun:
+    <<: *base
+    profiles: ["vpn"]
+    image: qmcgaw/gluetun:v3
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # Tampons TCP du tunnel : qBittorrent partage cet espace réseau
+    sysctls:
+      net.ipv4.tcp_rmem: "4096 1048576 67108864"
+      net.ipv4.tcp_wmem: "4096 1048576 67108864"
+      net.ipv4.tcp_congestion_control: bbr
+      net.ipv4.tcp_slow_start_after_idle: "0"
+      net.ipv4.conf.all.src_valid_mark: "1"
+    environment:
+      TZ: ${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER}
+      VPN_TYPE: wireguard
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES}
+      WIREGUARD_ENDPOINT_IP: ${WIREGUARD_ENDPOINT_IP}
+      WIREGUARD_ENDPOINT_PORT: ${WIREGUARD_ENDPOINT_PORT}
+      WIREGUARD_PUBLIC_KEY: ${WIREGUARD_PUBLIC_KEY}
+      # Un port entrant ouvert est le facteur n°1 du ratio : sans lui, seuls les pairs
+      # joignables peuvent échanger avec vous. Fournisseurs compatibles : protonvpn,
+      # private internet access, privatevpn.
+      VPN_PORT_FORWARDING: ${VPN_PORT_FORWARDING}
+      VPN_PORT_FORWARDING_UP_COMMAND: >-
+        /bin/sh -c 'wget -q -O- --post-data "json={\"listen_port\":{{PORT}}}"
+        http://127.0.0.1:8080/api/v2/app/setPreferences'
+    volumes:
+      - ${CONFIG_DIR}/gluetun:/gluetun
+    networks:
+      - seedbox
+    labels:
+      # qBittorrent n'ayant pas de réseau propre, sa publication se déclare ICI
+      traefik.enable: "true"
+      # L'interface de qBittorrent n'a pas de chemin de base : Traefik retire /qbittorrent
+      traefik.http.routers.qbittorrent.rule: PathPrefix(`/qbittorrent`)
+      traefik.http.routers.qbittorrent.entrypoints: websecure
+      traefik.http.routers.qbittorrent.middlewares: slash@file,authelia@file,qbittorrent-strip@file,secure-headers@file
+      traefik.http.services.qbittorrent.loadbalancer.server.port: "8080"
+
+  qbittorrent:
+    <<: [*base, *qbittorrent]
+    profiles: ["vpn"]
+    # Tout le trafic passe par le tunnel ; le pare-feu de gluetun bloque le reste
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+        restart: true
+
+  # Même qBittorrent, sans VPN (accès local) : réseau « seedbox », port de partage publié.
+  # Un seul des deux profils (vpn ou direct) est actif ; la console bascule de l'un à l'autre.
+  qbittorrent-direct:
+    <<: [*base, *qbittorrent]
+    profiles: ["direct"]
+    networks:
+      - seedbox
+    ports:
+      - "${QBIT_PEER_PORT:-6881}:6881/tcp"
+      - "${QBIT_PEER_PORT:-6881}:6881/udp"
+    labels:
+      traefik.enable: "true"
+      # L'interface de qBittorrent n'a pas de chemin de base : Traefik retire /qbittorrent
+      traefik.http.routers.qbittorrent.rule: PathPrefix(`/qbittorrent`)
+      traefik.http.routers.qbittorrent.entrypoints: websecure
+      traefik.http.routers.qbittorrent.middlewares: slash@file,authelia@file,qbittorrent-strip@file,secure-headers@file
+      traefik.http.services.qbittorrent.loadbalancer.server.port: "8080"
+
+  qbit-manage:
+    <<: *base
+    profiles: ["vpn", "direct"]
+    # Règles par tracker : tags, seuils de partage, détection des erreurs de tracker
+    image: ghcr.io/stuffanthings/qbit_manage:latest
+    container_name: qbit-manage
+    depends_on:
+      qbittorrent: {condition: service_started, required: false}
+      qbittorrent-direct: {condition: service_started, required: false}
+    environment:
+      <<: *lsio-env
+      QBT_WEB_SERVER: "true"
+      QBT_PORT: 8181
+      QBT_BASE_URL: /qbm
+      QBT_SCHEDULE: 10
+      QBT_CONFIG_DIR: /config
+    volumes:
+      - ${CONFIG_DIR}/qbit-manage:/config
+      - ${DATA_DIR}:/data
+      - ${SHARES_DIR:-/mnt/shares}:/shares:rslave
+      - ${CONFIG_DIR}/qbittorrent/qBittorrent/data/BT_backup:/torrents:ro
+    networks:
+      - seedbox
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.qbit-manage.rule: PathPrefix(`/qbm`)
+      traefik.http.routers.qbit-manage.entrypoints: websecure
+      traefik.http.routers.qbit-manage.middlewares: slash@file,authelia@file,secure-headers@file
+      traefik.http.services.qbit-manage.loadbalancer.server.port: "8181"
+
+  cross-seed:
+    <<: *base
+    profiles: ["vpn", "direct"]
+    # Réutilise les fichiers déjà téléchargés sur les autres trackers, par hardlink
+    image: ghcr.io/cross-seed/cross-seed:6
+    container_name: cross-seed
+    user: ${PUID}:${PGID}
+    command: daemon
+    depends_on:
+      qbittorrent: {condition: service_started, required: false}
+      qbittorrent-direct: {condition: service_started, required: false}
+    volumes:
+      - ${CONFIG_DIR}/cross-seed:/config
+      - ${DATA_DIR}:/data
+      - ${SHARES_DIR:-/mnt/shares}:/shares:rslave
+    networks:
+      - seedbox
+
+  autobrr:
+    <<: *base
+    # Surveille les annonces IRC des trackers et envoie les sorties à qBittorrent
+    image: ghcr.io/autobrr/autobrr:latest
+    container_name: autobrr
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+      AUTOBRR__HOST: 0.0.0.0
+      AUTOBRR__SESSION_SECRET: ${AUTOBRR_SESSION_SECRET}
+      # Servi directement sous /autobrr/, sans réécriture d'adresse par Traefik
+      AUTOBRR__BASE_URL: /autobrr/
+      AUTOBRR__BASE_URL_MODE_LEGACY: "false"
+    volumes:
+      - ${CONFIG_DIR}/autobrr:/config
+    networks:
+      - seedbox
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.autobrr.rule: PathPrefix(`/autobrr`)
+      traefik.http.routers.autobrr.entrypoints: websecure
+      traefik.http.routers.autobrr.middlewares: slash@file,authelia@file,secure-headers@file
+      traefik.http.services.autobrr.loadbalancer.server.port: "7474"
+
+  # ---------------------------------------------------------------------------
+  #  Automatisation des médias
+  # ---------------------------------------------------------------------------
+  prowlarr:
+    <<: *base
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      <<: *lsio-env
+      PROWLARR__AUTH__APIKEY: ${PROWLARR_API_KEY}
+      PROWLARR__SERVER__URLBASE: /prowlarr
+      # External : aucune page de connexion, Authelia s'en charge
+      PROWLARR__AUTH__METHOD: External
+    volumes:
+      - ${CONFIG_DIR}/prowlarr:/config
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:9696/prowlarr/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.prowlarr.rule: PathPrefix(`/prowlarr`)
+      traefik.http.routers.prowlarr.entrypoints: websecure
+      traefik.http.routers.prowlarr.middlewares: authelia@file,secure-headers@file
+      traefik.http.services.prowlarr.loadbalancer.server.port: "9696"
+
+  jackett:
+    <<: *base
+    # Indexeurs que Prowlarr ne couvre pas : seedboxctl les recopie dans Prowlarr (flux Torznab)
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    environment:
+      <<: *lsio-env
+      # La mise à jour de Jackett passe par l'image (Watchtower), jamais par lui-même
+      AUTO_UPDATE: "false"
+    volumes:
+      - ${CONFIG_DIR}/jackett:/config
+    depends_on:
+      flaresolverr:
+        condition: service_started
+        required: false
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:9117/jackett/UI/Dashboard"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    labels:
+      traefik.enable: "true"
+      # Chemin de base géré par Jackett (BasePathOverride) : Traefik ne retire rien
+      traefik.http.routers.jackett.rule: PathPrefix(`/jackett`)
+      traefik.http.routers.jackett.entrypoints: websecure
+      traefik.http.routers.jackett.middlewares: slash@file,authelia@file,secure-headers@file
+      traefik.http.services.jackett.loadbalancer.server.port: "9117"
+
+  flaresolverr:
+    <<: *base
+    # Résout les défis Cloudflare des trackers pour Prowlarr et Jackett. Aucune interface,
+    # aucune route publique : seul le réseau Docker « seedbox » l'atteint (flaresolverr:8191).
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: info
+      CAPTCHA_SOLVER: none
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:8191/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  radarr:
+    <<: *base
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      <<: *lsio-env
+      RADARR__AUTH__APIKEY: ${RADARR_API_KEY}
+      RADARR__SERVER__URLBASE: /radarr
+      RADARR__AUTH__METHOD: External
+    volumes:
+      - ${CONFIG_DIR}/radarr:/config
+      - ${DATA_DIR}:/data
+      - ${SHARES_DIR:-/mnt/shares}:/shares:rslave
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:7878/radarr/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.radarr.rule: PathPrefix(`/radarr`)
+      traefik.http.routers.radarr.entrypoints: websecure
+      traefik.http.routers.radarr.middlewares: authelia@file,secure-headers@file
+      traefik.http.services.radarr.loadbalancer.server.port: "7878"
+
+  sonarr:
+    <<: *base
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      <<: *lsio-env
+      SONARR__AUTH__APIKEY: ${SONARR_API_KEY}
+      SONARR__SERVER__URLBASE: /sonarr
+      SONARR__AUTH__METHOD: External
+    volumes:
+      - ${CONFIG_DIR}/sonarr:/config
+      - ${DATA_DIR}:/data
+      - ${SHARES_DIR:-/mnt/shares}:/shares:rslave
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:8989/sonarr/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.sonarr.rule: PathPrefix(`/sonarr`)
+      traefik.http.routers.sonarr.entrypoints: websecure
+      traefik.http.routers.sonarr.middlewares: authelia@file,secure-headers@file
+      traefik.http.services.sonarr.loadbalancer.server.port: "8989"
+
+  jellyfin:
+    <<: *base
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      <<: *lsio-env
+      # Chemin /jellyfin : BaseUrl de config/jellyfin/network.xml, écrit par seedboxctl
+      JELLYFIN_PublishedServerUrl: https://${DOMAIN}/jellyfin
+    volumes:
+      - ${CONFIG_DIR}/jellyfin:/config
+      - ${DATA_DIR}/media:/data/media:ro
+      # Sans propagation : la lecture seule s'applique alors aussi aux partages montés dessous
+      # (Docker 25 et plus). seedboxctl redémarre Jellyfin quand un partage est monté.
+      - ${SHARES_DIR:-/mnt/shares}:/shares:ro
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:8096/jellyfin/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    labels:
+      # Pas d'Authelia : les applications TV et mobiles parlent directement à l'API
+      traefik.enable: "true"
+      traefik.http.routers.jellyfin.rule: PathPrefix(`/jellyfin`)
+      traefik.http.routers.jellyfin.entrypoints: websecure
+      traefik.http.routers.jellyfin.middlewares: secure-headers@file
+      traefik.http.services.jellyfin.loadbalancer.server.port: "8096"
+
+  seerr:
+    <<: *base
+    image: ghcr.io/seerr-team/seerr:latest
+    container_name: seerr
+    init: true
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: info
+    volumes:
+      - ${CONFIG_DIR}/seerr:/app/config
+    networks:
+      - seedbox
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5055/api/v1/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    labels:
+      # Connexion par les comptes Jellyfin, synchronisés par seedboxctl
+      traefik.enable: "true"
+      # Port 5055 : Seerr ne fonctionne qu'à la racine d'une adresse
+      traefik.http.routers.seerr.rule: PathPrefix(`/`)
+      traefik.http.routers.seerr.entrypoints: seerr
+      traefik.http.routers.seerr.middlewares: rate-limit@file,secure-headers@file
+      traefik.http.services.seerr.loadbalancer.server.port: "5055"
+
+  # ---------------------------------------------------------------------------
+  #  P2P Aggregator (image construite localement, voir seedboxctl p2p-update)
+  # ---------------------------------------------------------------------------
+  p2p-aggregator:
+    <<: *base
+    image: seedbox/p2p-aggregator:current
+    pull_policy: never
+    container_name: p2p-aggregator
+    environment:
+      NUXT_JWT_SECRET: ${P2P_JWT_SECRET}
+      NUXT_CREDENTIAL_KEY: ${P2P_CREDENTIAL_KEY}
+      NUXT_COOKIE_SECURE: "true"
+      DATABASE_URL: file:/app/data/p2p.db
+      ENABLE_MOCK_TRACKERS: "false"
+      SEED_DEMO_DATA: "false"
+      ALLOW_DATABASE_RESET: "false"
+      # Utilisé uniquement à la création du compte admin : voir seed de l'image
+      SEED_ADMIN_PASSWORD: ${ADMIN_INITIAL_PASSWORD}
+      TRACKER_SESSION_URL: http://tracker-session:8192
+      TRACKER_SESSION_API_KEY: ${P2P_SESSION_API_KEY}
+    volumes:
+      - ${CONFIG_DIR}/p2p-aggregator:/app/data
+    networks:
+      - seedbox
+    labels:
+      # Image locale : mise à jour par seedboxctl, jamais par Watchtower
+      com.centurylinklabs.watchtower.enable: "false"
+      traefik.enable: "true"
+      # Port 3000 : l'interface appelle /api à la racine de l'adresse
+      traefik.http.routers.p2p.rule: PathPrefix(`/`)
+      traefik.http.routers.p2p.entrypoints: p2p
+      traefik.http.routers.p2p.middlewares: rate-limit@file,secure-headers@file
+      traefik.http.services.p2p.loadbalancer.server.port: "3000"
+
+  tracker-session:
+    <<: *base
+    profiles: ["session"]
+    image: seedbox/tracker-session:current
+    pull_policy: never
+    container_name: tracker-session
+    environment:
+      TRACKER_SESSION_API_KEY: ${P2P_SESSION_API_KEY}
+      TRACKER_SESSION_HEADED: "1"
+      PORT: "8192"
+    networks:
+      - seedbox
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+networks:
+  seedbox:
+    name: seedbox
+    driver: bridge
+    driver_opts:
+      # Nom fixe : UFW n'autorise que cette interface à joindre la console de l'hôte
+      com.docker.network.bridge.name: br-seedbox
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+          # Adresses automatiques hors de .2, réservée à Traefik
+          ip_range: 172.30.0.128/25
+  socket:
+    name: seedbox-socket
+    internal: true

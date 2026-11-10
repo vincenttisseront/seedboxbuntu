@@ -1,0 +1,20 @@
+[Unit]
+Description=SeedBoxBuntu - application d'une mise à jour faite depuis l'ISO
+After=docker.service network-online.target seedbox-firewall.service
+Wants=network-online.target
+Requires=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/upgrade-pending
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+ExecStart=/usr/local/sbin/seedboxctl upgrade
+StandardOutput=append:/var/log/seedboxbuntu-upgrade.log
+StandardError=append:/var/log/seedboxbuntu-upgrade.log
+# Internet absent ou application en panne : nouvel essai jusqu'à la réussite
+Restart=on-failure
+RestartSec=120
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "apps": [
+    {
+      "id": "lidarr",
+      "name": "Lidarr",
+      "category": "Musique",
+      "description": "Gestion et téléchargement automatique de la musique. Relié à Prowlarr et à qBittorrent, bibliothèque Musique créée dans Jellyfin.",
+      "image": "lscr.io/linuxserver/lidarr:latest",
+      "port": 8686,
+      "path": "/lidarr",
+      "auth": "sso",
+      "access": "admin",
+      "lsio": true,
+      "env": {
+        "LIDARR__AUTH__APIKEY": "${LIDARR_API_KEY}",
+        "LIDARR__SERVER__URLBASE": "/lidarr",
+        "LIDARR__AUTH__METHOD": "External"
+      },
+      "volumes": ["${CONFIG_DIR}/lidarr:/config", "${DATA_DIR}:/data"],
+      "health": {"tool": "curl", "path": "/lidarr/ping"},
+      "secrets": ["LIDARR_API_KEY"],
+      "dirs": ["media/music"],
+      "integration": "lidarr",
+      "icon": "lidarr.png",
+      "widget": {"type": "lidarr", "key": "LIDARR_API_KEY"}
+    },
+    {
+      "id": "audiobookshelf",
+      "name": "Audiobookshelf",
+      "category": "Livres et livres audio",
+      "description": "Bibliothèque de livres audio, de livres et de podcasts, avec applications mobiles. Compte propre, comme Jellyfin.",
+      "image": "ghcr.io/advplyr/audiobookshelf:latest",
+      "port": 80,
+      "path": "/audiobookshelf",
+      "auth": "own",
+      "user": true,
+      "env": {"ROUTER_BASE_PATH": "/audiobookshelf", "CONFIG_PATH": "/config", "METADATA_PATH": "/metadata"},
+      "volumes": [
+        "${CONFIG_DIR}/audiobookshelf/config:/config",
+        "${CONFIG_DIR}/audiobookshelf/metadata:/metadata",
+        "${DATA_DIR}/media/audiobooks:/audiobooks",
+        "${DATA_DIR}/media/books:/books"
+      ],
+      "health": {"tool": "wget", "path": "/audiobookshelf/healthcheck"},
+      "dirs": ["media/audiobooks", "media/books"],
+      "integration": "audiobookshelf",
+      "icon": "audiobookshelf.png"
+    },
+    {
+      "id": "navidrome",
+      "name": "Navidrome",
+      "category": "Musique",
+      "description": "Serveur de streaming musical compatible Subsonic (applications mobiles). Lit le dossier Musique alimenté par Lidarr. Compte propre.",
+      "image": "ghcr.io/navidrome/navidrome:latest",
+      "port": 4533,
+      "path": "/navidrome",
+      "auth": "own",
+      "user": true,
+      "env": {"ND_BASEURL": "/navidrome", "ND_MUSICFOLDER": "/music", "ND_DATAFOLDER": "/data", "ND_LOGLEVEL": "info"},
+      "volumes": ["${CONFIG_DIR}/navidrome:/data", "${DATA_DIR}/media/music:/music:ro"],
+      "health": {"tool": "wget", "path": "/navidrome/ping"},
+      "dirs": ["media/music"],
+      "integration": "navidrome",
+      "icon": "navidrome.png"
+    },
+    {
+      "id": "recyclarr",
+      "name": "Recyclarr",
+      "category": "Qualité et sous-titres",
+      "description": "Synchronise chaque jour les profils de qualité et formats personnalisés des guides TRaSH dans Radarr et Sonarr (préréglage 1080p ou 2160p). Service sans interface web.",
+      "image": "ghcr.io/recyclarr/recyclarr:7",
+      "user": true,
+      "env": {"RADARR_API_KEY": "${RADARR_API_KEY}", "SONARR_API_KEY": "${SONARR_API_KEY}"},
+      "volumes": ["${CONFIG_DIR}/recyclarr:/config"],
+      "integration": "recyclarr",
+      "icon": "recyclarr.png"
+    },
+    {
+      "id": "bazarr",
+      "name": "Bazarr",
+      "category": "Qualité et sous-titres",
+      "description": "Télécharge automatiquement les sous-titres des films et séries de Radarr et Sonarr. Relié aux deux ; choisissez vos langues dans ses réglages.",
+      "image": "lscr.io/linuxserver/bazarr:latest",
+      "port": 6767,
+      "path": "/bazarr",
+      "auth": "sso",
+      "access": "admin",
+      "lsio": true,
+      "volumes": ["${CONFIG_DIR}/bazarr:/config", "${DATA_DIR}:/data"],
+      "health": {"tool": "curl", "path": "/bazarr/"},
+      "integration": "bazarr",
+      "icon": "bazarr.png"
+    },
+    {
+      "id": "unpackerr",
+      "name": "Unpackerr",
+      "category": "Qualité et sous-titres",
+      "description": "Décompresse les téléchargements en archives (rar, zip...) pour que Radarr et Sonarr puissent les importer. Téléchargements attendus sous /data/downloads. Service sans interface web.",
+      "image": "ghcr.io/unpackerr/unpackerr:latest",
+      "user": true,
+      "env": {
+        "UN_RADARR_0_URL": "http://radarr:7878/radarr", "UN_RADARR_0_API_KEY": "${RADARR_API_KEY}", "UN_RADARR_0_PATHS_0": "/data/downloads",
+        "UN_SONARR_0_URL": "http://sonarr:8989/sonarr", "UN_SONARR_0_API_KEY": "${SONARR_API_KEY}", "UN_SONARR_0_PATHS_0": "/data/downloads"
+      },
+      "volumes": ["${DATA_DIR}:/data"],
+      "icon": "unpackerr.png"
+    }
+  ],
+  "packs": [
+    {"id": "musique", "name": "Musique", "description": "Lidarr pour télécharger la musique, Navidrome pour l'écouter (applications Subsonic).", "apps": ["lidarr", "navidrome"]},
+    {"id": "livres", "name": "Livres et livres audio", "description": "Audiobookshelf : livres audio, livres et podcasts.", "apps": ["audiobookshelf"]},
+    {"id": "sous-titres", "name": "Sous-titres", "description": "Bazarr, relié à Radarr et Sonarr.", "apps": ["bazarr"]},
+    {"id": "qualite", "name": "Qualité et archives", "description": "Recyclarr (profils de qualité TRaSH) et Unpackerr (décompression des archives).", "apps": ["recyclarr", "unpackerr"]}
+  ]
+}

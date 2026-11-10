@@ -1,0 +1,7 @@
+# Fins de ligne LF partout (les scripts bash et les fichiers copiés dans le serveur refusent le CRLF)
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.woff2 binary
+# Windows PowerShell 5.1 lit mieux un script en CRLF
+*.ps1 text eol=crlf

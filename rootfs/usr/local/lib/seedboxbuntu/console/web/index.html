@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SeedBoxBuntu - Console</title>
+<meta name="theme-color" content="#020617">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SeedBox">
+<link rel="preload" href="fonts/fira-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="offline" class="notice warn hidden" role="status">Hors connexion : les données affichées peuvent être périmées et les actions sont indisponibles.</div>
+<header class="top">
+  <div class="brand"><img src="logo.svg" alt="" width="34" height="34">SeedBox<b>Buntu</b><span id="version" class="ver"></span></div>
+  <nav id="nav">
+    <a href="#apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>Applications</a>
+    <a href="#users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Comptes</a>
+    <a href="#catalog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Catalogue</a>
+    <a href="#trackers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Trackers</a>
+    <a href="#shares"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>Partages</a>
+    <a href="#vpn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>VPN</a>
+    <a href="#domain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Adresse</a>
+    <a href="#p2p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></svg>P2P Aggregator</a>
+    <a href="#system"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/><path d="m7 11 3-3 3 3 4-4"/></svg>Système</a>
+    <a href="#alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Alertes</a>
+    <a href="#backup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Sauvegardes</a>
+    <a href="#secrets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>Identifiants</a>
+    <a href="#settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>Paramètres</a>
+  </nav>
+  <span id="who" class="who"></span>
+</header>
+
+<main>
+  <section id="view-apps" class="view">
+    <div class="title"><h1>Applications</h1><button id="deploy" class="btn" type="button">Relancer la configuration</button></div>
+    <div id="apps-state" class="notice hidden"></div>
+    <div id="appliance-banner" class="notice hidden"><span id="appliance-banner-text"></span> <a href="#settings">Voir dans Paramètres</a></div>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Application</th><th>État</th><th>Connexion</th><th></th></tr></thead>
+      <tbody id="apps-list"></tbody>
+    </table></div>
+    <div class="card">
+      <div class="title"><h2>Contrôle de santé</h2><button id="check-run" class="btn" type="button">Vérifier maintenant</button></div>
+      <p class="muted small">Interroge l'API de chaque application et vérifie leurs liaisons : Radarr, Sonarr et Prowlarr entre eux, Jackett et FlareSolverr, clients qBittorrent, Seerr, Jellyfin, autobrr, Dockge.</p>
+      <p id="check-summary" class="small"></p>
+      <ul id="check-list" class="checks"></ul>
+    </div>
+    <div class="card" id="steps-card">
+      <div class="title"><h2>Configuration et mises à jour</h2><button id="steps-retry" class="btn" type="button">Réessayer les étapes en échec</button></div>
+      <p class="muted small">Chaque étape de liaison entre applications est suivie ici. Une étape annexe en échec (Jackett, applications ajoutées...) n'arrête pas l'appliance : elle est réessayée chaque heure.</p>
+      <div id="upgrade-box" class="notice hidden"></div>
+      <pre id="upgrade-log" class="log hidden"></pre>
+      <p><button id="upgrade-skip" class="btn danger hidden" type="button">Abandonner la mise à jour en attente</button></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Étape</th><th>État</th><th>Détail</th><th></th></tr></thead>
+        <tbody id="steps-list"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="versions-card">
+      <div class="title"><h2>Versions des services</h2><button id="versions-load" class="btn" type="button">Afficher</button></div>
+      <p class="muted small">Met à jour un service à la fois. La version précédente est gardée : « Revenir » la rétablit et épingle le service (plus de mise à jour automatique) jusqu'à sa prochaine mise à jour manuelle.</p>
+      <div id="versions-wrap" class="table-wrap hidden"><table>
+        <thead><tr><th>Service</th><th>Version</th><th>Construite le</th><th>Versions gardées</th><th></th></tr></thead>
+        <tbody id="versions-list"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="view-catalog" class="view hidden">
+    <div class="title"><h1>Catalogue d'applications</h1><button id="catalog-refresh" class="btn" type="button">Actualiser sur le web</button></div>
+    <p class="muted">Ajoutez des applications à la seedbox en un clic. Celles marquées « intégré » sont reliées aux autres (Prowlarr, qBittorrent, Jellyfin...) ; celles venues de linuxserver.io sont installées en mode générique, derrière la connexion unique et réservées aux administrateurs : elles ne fonctionnent que si l'application accepte d'être servie sous un sous-chemin.</p>
+    <p id="catalog-state" class="muted small"></p>
+    <div class="card" id="packs-card">
+      <h2>Packs</h2>
+      <p class="muted small">Plusieurs applications reliées entre elles, installées d'un seul geste. Celles déjà présentes sont ignorées.</p>
+      <div id="packs-list" class="packs"></div>
+    </div>
+    <div class="card hidden" id="preset-card">
+      <h2>Qualité vidéo (Recyclarr)</h2>
+      <p class="muted small">Profils de qualité et formats personnalisés des guides TRaSH, appliqués à Radarr et Sonarr puis resynchronisés chaque jour. Ne change pas les films déjà téléchargés.</p>
+      <form id="preset-form" class="row">
+        <label>Préréglage<select name="value"><option value="1080p">1080p (Bluray + WEB)</option><option value="2160p">2160p (UHD Bluray + WEB)</option></select></label>
+        <button class="btn primary" type="submit">Appliquer et synchroniser</button>
+      </form>
+    </div>
+    <div class="card">
+      <label>Rechercher<input id="catalog-search" type="search" placeholder="lidarr, musique, wiki..." autocomplete="off"></label>
+    </div>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Application</th><th>Description</th><th>Origine</th><th>État</th><th></th></tr></thead>
+      <tbody id="catalog-list"></tbody>
+    </table></div>
+    <div class="card">
+      <h2>Catalogue personnel</h2>
+      <p class="muted small">Adresse (https) d'un fichier JSON que vous publiez, par exemple dans un dépôt GitHub : il ajoute vos applications sans modifier l'appliance. Format : <code>{"apps": [{"id": "monapp", "name": "Mon app", "image": "ghcr.io/…", "port": 8080, "volumes": ["${CONFIG_DIR}/monapp:/config"]}]}</code>. Les images, volumes et variables sont contrôlés.</p>
+      <form id="catalog-url-form" class="row">
+        <label>Adresse du catalogue<input name="url" type="url" placeholder="https://raw.githubusercontent.com/…/catalog.json"></label>
+        <button class="btn primary" type="submit">Enregistrer et actualiser</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="view-users" class="view hidden">
+    <div class="title"><h1>Comptes</h1></div>
+    <p class="muted">Un compte vaut pour toute l'appliance : connexion unique, Jellyfin, Seerr et P2P Aggregator.</p>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Identifiant</th><th>Rôle</th><th></th></tr></thead>
+      <tbody id="users-list"></tbody>
+    </table></div>
+    <form id="user-form" class="card form">
+      <h2>Nouveau compte</h2>
+      <label>Identifiant<input name="login" required pattern="[a-z][a-z0-9_.\-]{1,30}" autocomplete="off"></label>
+      <label>Mot de passe<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+      <label>Rôle
+        <select name="role">
+          <option value="user">Utilisateur : tableau de bord, Jellyfin, Seerr, P2P Aggregator</option>
+          <option value="manager">Gestionnaire : en plus, Radarr, Sonarr, Prowlarr, qBittorrent et les applications reliées</option>
+          <option value="admin">Administrateur : toutes les applications</option>
+        </select>
+      </label>
+      <button class="btn primary" type="submit">Créer le compte</button>
+    </form>
+  </section>
+
+  <section id="view-trackers" class="view hidden">
+    <div class="title"><h1>Trackers</h1>
+      <div class="row">
+        <a id="tracker-add" class="btn" target="_blank" rel="noopener">Ajouter dans Prowlarr</a>
+        <button id="trackers-sync" class="btn primary" type="button">Synchroniser</button>
+      </div>
+    </div>
+    <p class="muted">Un indexeur ajouté dans Prowlarr (ou dans Jackett : il est repris automatiquement par Prowlarr, FlareSolverr est déjà branché) est transmis à Radarr, Sonarr, cross-seed, qbit_manage et P2P Aggregator.</p>
+    <div class="card">
+      <h2>Règles de seed</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tracker</th><th>Temps de seed minimal (h)</th><th>Ratio maximal</th><th></th></tr></thead>
+        <tbody id="rules-list"></tbody>
+      </table></div>
+      <p class="muted small">Ratio maximal -1 : partage illimité. Le temps minimal protège des hit-and-run.</p>
+    </div>
+    <div class="card">
+      <h2>Partage en cours dans qBittorrent</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tracker</th><th>Torrents</th><th>Envoyé</th><th>Reçu</th><th>Ratio</th><th>Débit</th></tr></thead>
+        <tbody id="stats-list"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="view-shares" class="view hidden">
+    <div class="title"><h1>Partages réseau et disques</h1></div>
+    <p class="muted">Un NAS (SMB ou NFS) ou un disque branché sur le serveur peut recevoir les téléchargements, les fichiers .torrent ou les bibliothèques. Les applications sont reconfigurées automatiquement.</p>
+    <div id="shares-notes" class="notice hidden"></div>
+    <div class="card">
+      <h2>Partages</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nom</th><th>Source</th><th>État</th><th>Espace libre</th><th>Utilisé pour</th><th></th></tr></thead>
+        <tbody id="shares-list"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Emplacements</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Usage</th><th>Emplacement</th><th>Sous-dossier</th><th>Chemin dans les applications</th><th></th></tr></thead>
+        <tbody id="roles-list"></tbody>
+      </table></div>
+      <p class="muted small">Changer l'emplacement des téléchargements ne déplace pas les torrents existants : ils continuent d'être partagés depuis leur emplacement actuel.</p>
+    </div>
+    <form id="share-form" class="card form" autocomplete="off">
+      <h2>Ajouter un partage</h2>
+      <label>Type
+        <select name="kind" id="share-kind">
+          <option value="smb">Partage Windows ou Samba (SMB)</option>
+          <option value="nfs">Export NFS</option>
+          <option value="disk">Disque branché sur le serveur (NTFS, exFAT, ext4...)</option>
+        </select>
+      </label>
+      <label>Nom court<input name="name" required pattern="[a-z][a-z0-9]{0,19}" placeholder="nas"></label>
+      <label data-kinds="smb nfs">Adresse<input name="source" id="share-source" placeholder="//192.168.1.10/torrents"></label>
+      <label data-kinds="disk">Disque
+        <select name="disk" id="share-disk"></select>
+      </label>
+      <label data-kinds="smb">Identifiant<input name="username" placeholder="vide : accès invité" autocomplete="off"></label>
+      <label data-kinds="smb">Mot de passe<input name="password" type="password" autocomplete="new-password"></label>
+      <label data-kinds="smb">Domaine<input name="domain" placeholder="facultatif" autocomplete="off"></label>
+      <label data-kinds="smb nfs">Version du protocole
+        <select name="version" id="share-version"></select>
+      </label>
+      <p class="muted small" data-kinds="smb">Le compte doit pouvoir écrire dans le partage. Les fichiers appartiennent aux applications (utilisateur 1000) côté serveur.</p>
+      <p class="muted small" data-kinds="nfs">Autorisez l'adresse IP de ce serveur dans l'export, et mappez les accès en écriture (all_squash, anonuid=1000 ou équivalent du NAS).</p>
+      <p class="muted small" data-kinds="disk">Seuls les disques non montés sont proposés. Le disque n'est pas formaté : son contenu est conservé.</p>
+      <button class="btn primary" type="submit">Monter et ajouter</button>
+    </form>
+    <form id="share-credentials" class="card form hidden" autocomplete="off">
+      <h2>Identifiants SMB</h2>
+      <label>Partage<select name="name" id="credentials-share"></select></label>
+      <label>Identifiant<input name="username" required autocomplete="off"></label>
+      <label>Mot de passe<input name="password" type="password" autocomplete="new-password"></label>
+      <label>Domaine<input name="domain" placeholder="facultatif" autocomplete="off"></label>
+      <button class="btn primary" type="submit">Enregistrer et remonter</button>
+    </form>
+  </section>
+
+  <section id="view-vpn" class="view hidden">
+    <div class="title"><h1>qBittorrent : accès direct ou VPN</h1></div>
+    <div class="card"><dl id="vpn-state" class="kv"></dl></div>
+    <form id="vpn-form" class="card form">
+      <h2>Passer par un tunnel VPN (WireGuard)</h2>
+      <p class="muted small">Par défaut qBittorrent est utilisé en accès direct, sans VPN : le port de partage 6881 est ouvert sur le serveur. Renseignez un fournisseur pour faire passer tout son trafic par le tunnel.</p>
+      <label>Fournisseur
+        <select name="provider">
+          <option value="protonvpn">Proton VPN : redirection de port</option>
+          <option value="private internet access">Private Internet Access : redirection de port</option>
+          <option value="privatevpn">PrivateVPN : redirection de port</option>
+          <option value="mullvad">Mullvad : sans redirection de port</option>
+          <option value="airvpn">AirVPN : ports à déclarer sur son site</option>
+          <option value="nordvpn">NordVPN : sans redirection de port</option>
+          <option value="surfshark">Surfshark : sans redirection de port</option>
+          <option value="windscribe">Windscribe : sans redirection de port</option>
+        </select>
+      </label>
+      <label>Clé privée WireGuard<input name="private_key" type="password" required autocomplete="off"></label>
+      <label>Adresse WireGuard<input name="addresses" placeholder="10.2.0.2/32" autocomplete="off"></label>
+      <label>Pays du serveur<input name="countries" placeholder="Switzerland,Netherlands" autocomplete="off"></label>
+      <label class="check"><input name="port_forwarding" type="checkbox" checked>Redirection de port : indispensable à un bon ratio</label>
+      <p class="muted small">Proton VPN : générez la configuration WireGuard avec l'option NAT-PMP activée.</p>
+      <div class="row">
+        <button class="btn primary" type="submit">Appliquer</button>
+        <button id="vpn-disable" class="btn danger" type="button">Repasser en accès direct (sans VPN)</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="view-domain" class="view hidden">
+    <div class="title"><h1>Adresse et certificat</h1></div>
+    <div class="card"><dl id="domain-state" class="kv"></dl>
+      <div class="row"><a class="btn" href="api/ca.crt">Télécharger l'autorité locale</a></div>
+      <p class="muted small">À installer sur vos appareils pour éviter l'alerte du navigateur en mode auto-signé.</p>
+    </div>
+    <form id="domain-form" class="card form">
+      <h2>Nom personnalisé</h2>
+      <label>Nom<input name="domain" placeholder="seedbox.exemple.fr" autocomplete="off"></label>
+      <label>E-mail Let's Encrypt<input name="email" type="email" placeholder="vide : certificat de l'autorité locale" autocomplete="off"></label>
+      <p class="muted small">Vide : l'adresse IP du serveur, suivie automatiquement. Un nom doit pointer vers ce serveur dans votre DNS (un seul enregistrement : les applications sont servies par chemin). L'adresse IP reste toujours utilisable. Avec Let's Encrypt, ouvrez aussi le port 80 depuis Internet.</p>
+      <button class="btn primary" type="submit">Appliquer</button>
+    </form>
+    <form id="hosts-form" class="card form">
+      <h2>Adresses supplémentaires</h2>
+      <label>Alias DNS ou adresses IP servis en plus (séparés par des virgules)<input name="value" placeholder="nas.exemple.lan, 10.0.0.5" autocomplete="off"></label>
+      <p class="muted small">Chaque adresse reçoit son propre cookie de connexion et sa place dans le certificat de l'appliance. Une adresse non déclarée ici est redirigée vers l'adresse principale.</p>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+    <div class="card form" id="ts-card">
+      <h2>Accès distant : Tailscale (expérimental)</h2>
+      <p class="muted small">Publie l'appliance sur votre réseau privé Tailscale avec un vrai certificat HTTPS, sans ouvrir de port de la box. Prérequis : un compte Tailscale, « HTTPS Certificates » activé dans sa console d'administration. Générez une clé d'authentification (Settings, Keys) ou laissez le champ vide pour valider la connexion depuis un lien.</p>
+      <dl id="ts-state" class="kv"></dl>
+      <form id="ts-form">
+        <label>Nom de la machine sur le tailnet<input name="hostname" value="seedbox" autocomplete="off"></label>
+        <label>Clé d'authentification (facultative)<input name="key" type="password" placeholder="tskey-auth-..." autocomplete="off"></label>
+        <div class="row"><button class="btn primary" type="submit">Activer ou mettre à jour</button><button id="ts-off" class="btn danger" type="button">Désactiver</button></div>
+      </form>
+    </div>
+    <div class="card form" id="dns-card">
+      <h2>Let's Encrypt par DNS (sans ouvrir le port 80)</h2>
+      <p class="muted small">Pour un nom de domaine personnalisé : le certificat est obtenu en créant un enregistrement DNS chez votre fournisseur, donc sans exposer le serveur à Internet. Renseignez d'abord le nom et l'e-mail ci-dessus.</p>
+      <p id="dns-state" class="small"></p>
+      <form id="dns-form">
+        <label>Fournisseur DNS<select name="provider" id="dns-provider"></select></label>
+        <label>Variables d'accès, une par ligne (NOM=valeur)<textarea name="variables" id="dns-vars" rows="3" autocomplete="off" spellcheck="false"></textarea></label>
+        <div class="row"><button class="btn primary" type="submit">Activer</button><button id="dns-off" class="btn" type="button">Revenir au défi HTTP</button></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="view-p2p" class="view hidden">
+    <div class="title"><h1>P2P Aggregator</h1></div>
+    <div class="card"><dl id="p2p-state" class="kv"></dl>
+      <div class="row">
+        <button id="p2p-update" class="btn primary" type="button">Mettre à jour</button>
+        <button id="p2p-session" class="btn" type="button">Activer tracker-session</button>
+      </div>
+      <p class="muted small">La mise à jour reconstruit l'application sur ce serveur, puis revient à la version précédente si elle ne démarre pas.</p>
+    </div>
+    <form id="token-form" class="card form">
+      <h2>Accès au dépôt privé</h2>
+      <label>Jeton GitHub en lecture seule<input name="token" type="password" required autocomplete="off"></label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+  </section>
+
+  <section id="view-system" class="view hidden">
+    <div class="title"><h1>Système</h1><span id="sys-up" class="muted small"></span></div>
+    <div class="grid">
+      <div class="card"><h2>Processeur</h2><progress id="sys-cpu" max="100" value="0"></progress><p id="sys-cpu-t" class="small muted"></p></div>
+      <div class="card"><h2>Mémoire</h2><progress id="sys-mem" max="100" value="0"></progress><p id="sys-mem-t" class="small muted"></p></div>
+      <div class="card"><h2>Réseau</h2><p id="sys-net" class="secret"></p><p id="sys-net-t" class="small muted"></p></div>
+    </div>
+    <div class="card">
+      <h2>Disques</h2>
+      <div id="sys-disks"></div>
+      <ul id="sys-smart" class="checks"></ul>
+    </div>
+    <div class="card">
+      <h2>Conteneurs</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Conteneur</th><th>Processeur</th><th>Mémoire</th><th>Réseau (reçu / émis)</th></tr></thead>
+        <tbody id="sys-containers"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="title"><h2>Journaux</h2>
+        <div class="row">
+          <select id="log-source" aria-label="Source du journal"></select>
+          <select id="log-lines" aria-label="Nombre de lignes"><option>50</option><option selected>100</option><option>200</option><option>500</option></select>
+          <button id="log-refresh" class="btn" type="button">Actualiser</button>
+        </div>
+      </div>
+      <pre id="log-view" class="log"></pre>
+    </div>
+  </section>
+
+  <section id="view-alerts" class="view hidden">
+    <div class="title"><h1>Alertes</h1><button id="alerts-test" class="btn" type="button">Envoyer un message de test</button></div>
+    <p class="muted">L'appliance se surveille toutes les 5 minutes : services arrêtés, disque presque plein, mise à jour bloquée, étape de configuration en échec, certificat proche de l'expiration. Un problème n'est signalé qu'après deux constats successifs, rappelé selon l'intervalle choisi, et un message « rétabli » l'annonce à sa disparition.</p>
+    <div class="card"><h2>Problèmes en cours</h2><ul id="alerts-active" class="checks"></ul></div>
+    <form id="alerts-form" class="card form">
+      <label class="check"><input name="enabled" type="checkbox">Activer les alertes</label>
+      <label>Seuil d'alerte du disque (% utilisés)<input name="disk_percent" type="number" autocomplete="off" min="50" max="99"></label>
+      <label>Rappel toutes les (heures)<input name="repeat_hours" type="number" autocomplete="off" min="1" max="168"></label>
+      <h2>ntfy</h2>
+      <label>Serveur<input name="ntfy.url" type="url" autocomplete="off" placeholder="https://ntfy.sh"></label>
+      <label>Sujet (secret : choisissez un nom difficile à deviner)<input name="ntfy.topic" type="text" autocomplete="off"></label>
+      <label>Jeton d'accès (facultatif)<input name="ntfy.token" type="password" autocomplete="off"></label>
+      <h2>Discord</h2>
+      <label>Adresse du webhook<input name="discord.webhook" type="password" autocomplete="off"></label>
+      <h2>Webhook générique (JSON)</h2>
+      <label>Adresse<input name="webhook.url" type="password" autocomplete="off"></label>
+      <label>Secret transmis dans X-SeedBox-Secret (facultatif)<input name="webhook.secret" type="password" autocomplete="off"></label>
+      <h2>E-mail (SMTP)</h2>
+      <label>Serveur SMTP<input name="email.host" type="text" autocomplete="off"></label>
+      <label>Port<input name="email.port" type="number" autocomplete="off" min="1" max="65535"></label>
+      <label>Sécurité<select name="email.security"><option value="starttls">STARTTLS (587)</option><option value="ssl">SSL/TLS (465)</option><option value="none">Aucune</option></select></label>
+      <label>Utilisateur<input name="email.user" type="text" autocomplete="off"></label>
+      <label>Mot de passe<input name="email.password" type="password" autocomplete="off"></label>
+      <label>Expéditeur<input name="email.sender" type="email" autocomplete="off"></label>
+      <label>Destinataire<input name="email.to" type="email" autocomplete="off"></label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+  </section>
+
+  <section id="view-backup" class="view hidden">
+    <div class="title"><h1>Sauvegardes</h1><button id="backup-create" class="btn primary" type="button">Sauvegarder maintenant</button></div>
+    <p class="muted">Configuration de l'appliance : comptes, clés, réglages des applications, partages, applications ajoutées. Les médias et téléchargements n'en font pas partie (c'est le stockage), ni les caches, journaux et vignettes de Jellyfin. L'archive est chiffrée avec une clé propre à ce serveur. Restaurez après le premier déploiement d'un serveur neuf.</p>
+    <div class="card table-wrap"><table>
+      <thead><tr><th>Date</th><th>Emplacement</th><th>Taille</th><th></th></tr></thead>
+      <tbody id="backup-list"></tbody>
+    </table></div>
+    <form id="backup-form" class="card form">
+      <h2>Planification</h2>
+      <label class="check"><input name="enabled" type="checkbox">Sauvegarder automatiquement</label>
+      <div class="days" id="backup-days"></div>
+      <label>Heure<input name="time" type="time" required></label>
+      <label>Sauvegardes conservées<input name="keep" type="number" min="1" max="60" required></label>
+      <label>Partage de destination (nom du partage monté ; vide : ce serveur)<input name="destination" placeholder="ex. nas"></label>
+      <p id="backup-warn" class="notice hidden"></p>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+    <div class="card">
+      <h2>Clé de chiffrement</h2>
+      <p class="muted small">Sans cette clé, une sauvegarde ne peut pas être restaurée sur un autre serveur : notez-la dans un gestionnaire de mots de passe.</p>
+      <button id="backup-key-show" class="btn" type="button">Afficher la clé</button>
+      <p id="backup-key" class="secret"></p>
+    </div>
+  </section>
+
+  <section id="view-secrets" class="view hidden">
+    <div class="title"><h1>Identifiants</h1><button id="secrets-show" class="btn" type="button">Afficher</button></div>
+    <p class="muted">Comptes de service utilisés entre les applications. Un renouvellement met aussi à jour les applications qui en dépendent.</p>
+    <div id="secrets-list" class="grid"></div>
+  </section>
+
+  <section id="view-settings" class="view hidden">
+    <div class="title"><h1>Paramètres</h1></div>
+    <div id="reboot-notice" class="notice hidden"></div>
+    <div class="card form" id="appliance-card">
+      <h2>Mise à jour de l'appliance</h2>
+      <p class="muted small">Installe la dernière version de SeedBoxBuntu depuis GitHub, sans passer par l'ISO : fichiers de l'appliance, modèles et stack. Comptes, secrets, bibliothèques et réglages sont conservés ; les fichiers remplacés sont sauvegardés (retour arrière possible). Aucun redémarrage du serveur : seule cette console redémarre à la fin.</p>
+      <dl id="appliance-state" class="kv"></dl>
+      <div id="appliance-changes" class="hidden"><p class="small muted">Nouveautés :</p><ul id="appliance-changes-list" class="checks"></ul></div>
+      <div id="appliance-notice" class="notice hidden"></div>
+      <div class="row">
+        <button id="appliance-check" class="btn" type="button">Rechercher une mise à jour</button>
+        <button id="appliance-apply" class="btn primary" type="button">Mettre à jour</button>
+        <button id="appliance-rollback" class="btn" type="button">Annuler la dernière mise à jour</button>
+      </div>
+      <pre id="appliance-log" class="log hidden"></pre>
+      <details>
+        <summary class="small">Source des mises à jour</summary>
+        <div class="form">
+          <label>Dépôt GitHub<input id="appliance-repo" placeholder="propriétaire/dépôt" autocomplete="off"></label>
+          <label>Branche ou étiquette<input id="appliance-ref" placeholder="main" autocomplete="off"></label>
+          <label>Jeton GitHub (dépôt privé, lecture seule ; partagé avec P2P Aggregator)<input id="appliance-token" type="password" autocomplete="off" placeholder="laisser vide pour conserver le jeton actuel"></label>
+          <button id="appliance-source-save" class="btn" type="button">Enregistrer</button>
+        </div>
+      </details>
+    </div>
+    <div class="card form" id="auth-card">
+      <h2>Connexion unique : double authentification</h2>
+      <p class="muted small">Les sessions sont conservées dans Redis : un redémarrage d'Authelia ne vous déconnecte plus. Pour exiger un second facteur (application TOTP ou clé de sécurité), chaque compte concerné doit d'abord l'enregistrer depuis la page Authelia ; Authelia demande alors un code de vérification, affiché ci-dessous (pas de serveur de messagerie).</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Compte</th><th>Rôle</th><th>Seconde étape</th></tr></thead>
+        <tbody id="auth-users"></tbody>
+      </table></div>
+      <p><a class="btn" href="/auth/settings" target="_blank" rel="noopener">Enregistrer une application ou une clé de sécurité</a></p>
+      <pre id="auth-notif" class="log"></pre>
+      <form id="auth-form" class="row">
+        <label>Exiger la double authentification pour
+          <select name="mode"><option value="none">personne</option><option value="admins">les administrateurs</option><option value="all">tous les comptes</option></select></label>
+        <button class="btn primary" type="submit">Appliquer</button>
+      </form>
+    </div>
+    <form id="upd-security" class="card form">
+      <h2>Mises à jour de sécurité du système</h2>
+      <label class="check"><input name="enabled" type="checkbox">Installer automatiquement les correctifs Ubuntu</label>
+      <label>Périmètre<select name="scope" id="sec-scope"></select></label>
+      <div class="days" id="sec-days"></div>
+      <label>Heure<input name="time" type="time" required></label>
+      <label class="check"><input name="reboot" type="checkbox">Redémarrer le serveur lorsqu'un correctif l'exige (noyau, bibliothèques)</label>
+      <label>Heure du redémarrage<input name="reboot_time" type="time" required></label>
+      <p id="sec-next" class="muted small"></p>
+      <div class="row">
+        <button class="btn primary" type="submit">Enregistrer</button>
+        <button id="sec-run" class="btn" type="button">Installer maintenant</button>
+      </div>
+    </form>
+    <form id="upd-apps" class="card form">
+      <h2>Mises à jour des applications</h2>
+      <label class="check"><input name="enabled" type="checkbox">Mettre à jour automatiquement les conteneurs (Watchtower)</label>
+      <div class="days" id="apps-days"></div>
+      <label>Heure<input name="time" type="time" required></label>
+      <label class="check"><input name="p2p" type="checkbox">Mettre aussi à jour P2P Aggregator (jeton GitHub requis)</label>
+      <p id="apps-next" class="muted small"></p>
+      <div class="row">
+        <button class="btn primary" type="submit">Enregistrer</button>
+        <button id="apps-run" class="btn" type="button">Mettre à jour maintenant</button>
+      </div>
+      <p class="muted small">Une application mise à jour redémarre quelques secondes. Choisissez une heure creuse.</p>
+    </form>
+    <div class="card">
+      <h2>Sécurité de l'hôte</h2>
+      <p id="audit-score" class="muted small"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Contrôle</th><th>État</th><th>Détail</th></tr></thead>
+        <tbody id="audit-list"></tbody>
+      </table></div>
+      <div class="row">
+        <button id="audit-reload" class="btn" type="button">Relancer l'audit</button>
+        <button id="audit-apply" class="btn" type="button">Réappliquer le durcissement</button>
+      </div>
+    </div>
+    <form id="ports-form" class="card form">
+      <h2>Ports ouverts</h2>
+      <dl id="ports-base" class="kv"></dl>
+      <label>Ports supplémentaires<input name="ports" id="ports-extra" placeholder="8080, 51413/udp" autocomplete="off"></label>
+      <p class="muted small">Seuls ces ports sont joignables depuis le réseau. Les applications ajoutées dans Dockge qui publient un port doivent y figurer, sinon le garde de l'appliance bloque ce port. En accès direct, le port de partage de qBittorrent (6881) est ouvert automatiquement ; en mode VPN, le trafic torrent passe dans le tunnel et aucun port P2P n'est à ouvrir.</p>
+      <button class="btn primary" type="submit">Appliquer</button>
+    </form>
+  </section>
+
+  <section id="job" class="card hidden">
+    <h2 id="job-title"></h2>
+    <pre id="job-log" class="log"></pre>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

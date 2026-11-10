@@ -1,0 +1,6 @@
+out/
+seedboxbuntu-build/
+__pycache__/
+*.pyc
+*.iso
+*.sha256

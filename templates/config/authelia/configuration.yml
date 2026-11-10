@@ -1,0 +1,89 @@
+# =============================================================================
+#  SeedBoxBuntu - configuration d'Authelia (connexion unique)
+#  Les secrets viennent de .env ; seedboxctl écrit les adresses du serveur (IP, nom,
+#  domaine personnalisé) : chacune a son cookie de session.
+# =============================================================================
+theme: dark
+default_2fa_method: totp
+
+server:
+  # Portail servi sous https://<adresse>/auth/
+  address: tcp://0.0.0.0:9091/auth
+  endpoints:
+    authz:
+      forward-auth:
+        implementation: ForwardAuth
+
+log:
+  level: info
+
+totp:
+  issuer: SeedBoxBuntu
+
+# Clés de sécurité (WebAuthn) : enregistrées depuis https://<adresse>/auth/settings
+webauthn:
+  display_name: SeedBoxBuntu
+
+# Annuaire : un fichier géré par seedboxctl et la console, relu à chaud
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+    watch: true
+  password_change:
+    disable: true
+  password_reset:
+    disable: true
+
+access_control:
+  default_policy: deny
+  rules:
+    # Administration : groupe admins uniquement. Le chemin est vérifié tel que Traefik
+    # le route ; Dockge (port 5001) se présente sous le chemin fictif /dockge/.
+    - domain: @@AUTH_DOMAINS@@
+      resources:
+        - &administration '^/(@@ADMIN_PATHS@@)'
+      policy: @@POLICY_ADMIN@@
+      subject:
+        - 'group:admins'
+    # Gestionnaires : seulement les applications de gestion des médias (Radarr, Sonarr, Prowlarr, qBittorrent...)
+    - domain: @@AUTH_DOMAINS@@
+      resources:
+        - '^/(@@MANAGER_PATHS@@)'
+      policy: @@POLICY_USERS@@
+      subject:
+        - 'group:managers'
+    # Indispensable : un compte hors du groupe admins (ou gestionnaire sur ce chemin) passerait sinon à la règle suivante
+    - domain: @@AUTH_DOMAINS@@
+      resources:
+        - *administration
+      policy: deny
+    # Tableau de bord : tous les comptes
+    - domain: @@AUTH_DOMAINS@@
+      policy: @@POLICY_USERS@@
+      subject:
+        - 'group:admins'
+        - 'group:managers'
+        - 'group:users'
+
+# Sessions dans Redis (mot de passe : AUTHELIA_SESSION_REDIS_PASSWORD) : elles survivent au redémarrage d'Authelia
+session:
+  redis:
+    host: authelia-redis
+    port: 6379
+  cookies:
+@@AUTH_COOKIES@@
+
+# Bannissement temporaire après des échecs répétés
+regulation:
+  max_retries: 5
+  find_time: 2m
+  ban_time: 10m
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+# Pas de serveur de messagerie : les notifications sont écrites dans un fichier
+notifier:
+  filesystem:
+    filename: /config/notification.txt
