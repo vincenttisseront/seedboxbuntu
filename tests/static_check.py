@@ -28,7 +28,7 @@ for path in python_files:
 check(f"{len(python_files)} fichiers Python compilent", not broken, broken)
 
 web = SRC / "rootfs/usr/local/lib/seedboxbuntu/console/web"
-for script in (web / "app.js", web / "sw.js"):
+for script in (web / "app.js", web / "features.js", web / "invite.js", web / "sw.js"):
     result = subprocess.run(["node", "--check", str(script)], capture_output=True, text=True)
     check(f"JavaScript valide : {script.name}", result.returncode == 0, result.stderr[:150])
 
@@ -97,5 +97,40 @@ with tempfile.TemporaryDirectory() as tmp:
         check("droits : sudoers en 0440", sudoers and all(oct(p.stat().st_mode & 0o777) == "0o440" for p in sudoers))
         check("droits : stack/ et templates/ non exécutables", not any(p.stat().st_mode & 0o111 for p in (rootfs / "usr/share/seedboxbuntu").rglob("*") if p.is_file()))
 
-print("échecs :", bad)
+
+
+# --- interface : identifiants, CSP, ressources ---------------------------------------------------------------------------
+index = (web / "index.html").read_text()
+ids_html = set(re.findall(r'\bid="([^"]+)"', index))
+used = set()
+for script in ("app.js", "features.js"):
+    used |= set(re.findall(r"\$\('([a-z0-9-]+)'\)", (web / script).read_text()))
+    used |= set(re.findall(r"\$\(`view-([a-z0-9-]+)`\)", (web / script).read_text()))
+missing = sorted(i for i in used if i not in ids_html)
+check("interface : tous les éléments $('…') existent dans index.html", not missing, missing)
+views = set(re.findall(r'<section id="view-([a-z0-9-]+)"', index))
+routes = set(re.findall(r'<a href="#([a-z0-9-]+)">', index))
+check("interface : chaque entrée du menu a sa vue", routes <= views, sorted(routes - views))
+for name in ("index.html", "invite.html"):
+    html = (web / name).read_text()
+    check(f"CSP : pas de style ni de script en ligne ({name})", not re.search(r"<style|\sstyle=|\sonclick=|<script(?![^>]*\ssrc=)", html))
+check("interface : features.js chargé avant app.js", index.index("features.js") < index.index("app.js"))
+shell = re.search(r"SHELL = \[(.*?)\]", (web / "sw.js").read_text()).group(1)
+check("service worker : features.js mis en cache", "features.js" in shell)
+
+# --- unités systemd et modules ----------------------------------------------------------------------------------------------
+units = SRC / "rootfs/etc/systemd/system"
+post = (SRC / "rootfs/usr/local/lib/seedboxbuntu/postinstall.sh").read_text()
+enabled = set(re.findall(r"(seedbox-[a-z-]+\.timer)", post))
+check("minuteries activées : unités présentes", all((units / t).exists() for t in enabled), sorted(t for t in enabled if not (units / t).exists()))
+for timer in ("seedbox-appliance", "seedbox-restoretest", "seedbox-metrics"):
+    check(f"unité {timer} : service et minuterie", (units / f"{timer}.service").exists() and (units / f"{timer}.timer").exists() and f"{timer}.timer" in post)
+for name in ("offsite", "metrics", "cleanup", "gpu", "guests", "audit", "importer", "appliance"):
+    check(f"module {name}.py présent", (SRC / f"rootfs/usr/local/lib/seedboxbuntu/{name}.py").exists())
+check("rclone installé par l'ISO", "rclone" in (SRC / "lib/60-autoinstall.sh").read_text())
+check("outil de manifeste et workflow de publication", (SRC / "tools/manifest.py").exists() and (SRC / ".github/workflows/release.yml").exists())
+traefik = (SRC / "templates/config/traefik/dynamic/seedbox.yml").read_text()
+check("Traefik : route publique /invite limitée", "invite-limit" in traefik and "invite-public" in traefik)
+
+print(f"échecs : {bad}")
 sys.exit(1 if bad else 0)

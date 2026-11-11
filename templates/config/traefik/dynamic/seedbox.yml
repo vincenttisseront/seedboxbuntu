@@ -76,6 +76,29 @@ http:
         customRequestHeaders:
           X-Seedbox-Proxy-Secret: "@@CONSOLE_PROXY_SECRET@@"
 
+    # Invitations : page publique (sans Authelia). Le secret public est un autre en-tête que celui de
+    # l'administration, que cette route vide, ainsi que tout en-tête d'identité envoyé par le navigateur.
+    invite-public:
+      headers:
+        customRequestHeaders:
+          X-Seedbox-Public-Secret: "@@CONSOLE_PROXY_SECRET@@"
+          X-Seedbox-Proxy-Secret: ""
+          Remote-User: ""
+          Remote-Groups: ""
+          Remote-Name: ""
+          Remote-Email: ""
+    invite-limit:
+      rateLimit:
+        average: 30
+        period: 1m
+        burst: 20
+    invite-headers:
+      headers:
+        stsSeconds: 31536000
+        contentTypeNosniff: true
+        referrerPolicy: no-referrer
+        customFrameOptionsValue: DENY
+
   routers:
     other-hosts:
       rule: "@@OTHER_HOSTS_RULE@@"
@@ -99,6 +122,16 @@ http:
         - console-strip
         - secure-headers
         - console-secret
+
+    invite:
+      rule: PathPrefix(`/invite`)
+      entryPoints:
+        - websecure
+      service: console
+      middlewares:
+        - invite-limit
+        - invite-headers
+        - invite-public
 
   services:
     console:

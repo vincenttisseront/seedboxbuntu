@@ -6,8 +6,8 @@ set -u
 cd "$(dirname "$0")/.."
 unset HTTPS_PROXY HTTP_PROXY https_proxy http_proxy
 fail=0
-for t in static_check backup_test alerts_test catalog2_test roles_test upgrade_test appliance_test hardening_unit_test migrate_test; do
+for t in static_check backup_test alerts_test catalog2_test roles_test upgrade_test appliance_test hardening_unit_test migrate_test offsite_test metrics_test cleanup_test gpu_test guests_test audit_test importer_test; do
   printf '%-24s' "$t"
-  if out=$(timeout 300 python3 "tests/$t.py" 2>&1); then echo "OK   $(tail -1 <<<"$out")"; else echo "ÉCHEC"; echo "$out" | tail -25; fail=1; fi
+  if out=$(timeout 300 python3 "tests/$t.py" 2>&1); then echo "OK   $(grep -E 'échecs|ECHECS|contrôles réussis' <<<"$out" | tail -1)"; else echo "ÉCHEC"; echo "$out" | tail -25; fail=1; fi
 done
 exit $fail

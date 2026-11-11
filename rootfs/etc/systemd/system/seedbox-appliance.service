@@ -1,0 +1,13 @@
+[Unit]
+Description=SeedBoxBuntu - mise à jour planifiée de l'appliance (depuis GitHub)
+After=network-online.target docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl appliance auto
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=truncate:/var/log/seedboxbuntu-selfupdate.log
+StandardError=inherit
+TimeoutStartSec=1800
+Nice=10

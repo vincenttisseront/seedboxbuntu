@@ -30,6 +30,9 @@
     <a href="#system"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/><path d="m7 11 3-3 3 3 4-4"/></svg>Système</a>
     <a href="#alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Alertes</a>
     <a href="#backup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Sauvegardes</a>
+    <a href="#guests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>Invités</a>
+    <a href="#cleanup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>Nettoyage</a>
+    <a href="#journal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>Journal</a>
     <a href="#secrets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>Identifiants</a>
     <a href="#settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>Paramètres</a>
   </nav>
@@ -301,6 +304,13 @@
       <div class="card"><h2>Mémoire</h2><progress id="sys-mem" max="100" value="0"></progress><p id="sys-mem-t" class="small muted"></p></div>
       <div class="card"><h2>Réseau</h2><p id="sys-net" class="secret"></p><p id="sys-net-t" class="small muted"></p></div>
     </div>
+    <div class="card" id="history-card">
+      <div class="title"><h2>Historique</h2><div id="history-ranges" class="segmented" role="group" aria-label="Période"></div></div>
+      <div id="history-empty" class="muted small hidden">Les mesures sont enregistrées toutes les 5 minutes : le graphique apparaît après quelques relevés.</div>
+      <div id="history-charts" class="charts"></div>
+      <h2 class="sub">Prévision de remplissage des disques</h2>
+      <ul id="history-forecast" class="checks"></ul>
+    </div>
     <div class="card">
       <h2>Disques</h2>
       <div id="sys-disks"></div>
@@ -312,6 +322,17 @@
         <thead><tr><th>Conteneur</th><th>Processeur</th><th>Mémoire</th><th>Réseau (reçu / émis)</th></tr></thead>
         <tbody id="sys-containers"></tbody>
       </table></div>
+    </div>
+    <div class="card" id="gpu-card">
+      <h2>Transcodage matériel (GPU)</h2>
+      <p class="muted small">Jellyfin peut utiliser la carte graphique du serveur pour transcoder sans saturer le processeur : Intel (QSV, VAAPI), AMD (VAAPI) ou NVIDIA (NVENC, pilote et NVIDIA Container Toolkit requis).</p>
+      <dl id="gpu-state" class="kv"></dl>
+      <div class="row">
+        <label>Mode<select id="gpu-mode"></select></label>
+        <button id="gpu-save" class="btn primary" type="button">Appliquer</button>
+        <button id="gpu-test" class="btn" type="button">Essayer l’encodage</button>
+      </div>
+      <p class="muted small">Appliquer recrée le conteneur Jellyfin (quelques secondes d’interruption) et règle le transcodage dans Jellyfin.</p>
     </div>
     <div class="card">
       <div class="title"><h2>Journaux</h2>
@@ -371,11 +392,152 @@
       <p id="backup-warn" class="notice hidden"></p>
       <button class="btn primary" type="submit">Enregistrer</button>
     </form>
+    <div class="card" id="offsite-card">
+      <h2>Copie hors du serveur</h2>
+      <p class="muted small">Chaque sauvegarde est aussi envoyée (déjà chiffrée) vers un autre endroit : si le serveur ou son disque disparaît, la configuration reste récupérable. Un test de restauration mensuel prouve que les copies sont lisibles.</p>
+      <dl id="offsite-state" class="kv"></dl>
+      <form id="offsite-form" autocomplete="off">
+        <label class="check"><input name="enabled" type="checkbox">Envoyer chaque sauvegarde hors du serveur</label>
+        <label>Destination<select name="type" id="offsite-type"></select></label>
+        <div id="offsite-fields" class="form"></div>
+        <div class="split">
+          <label>Dossier distant<input name="path" placeholder="seedbox" autocomplete="off"></label>
+          <label>Copies conservées<input name="keep" type="number" min="1" max="365"></label>
+        </div>
+        <div class="row">
+          <button class="btn primary" type="submit">Enregistrer</button>
+          <button id="offsite-connection" class="btn" type="button">Tester la connexion</button>
+          <button id="offsite-push" class="btn" type="button">Envoyer la dernière sauvegarde</button>
+          <button id="offsite-test" class="btn" type="button">Test de restauration</button>
+          <button id="offsite-clear" class="btn danger" type="button">Retirer la destination</button>
+        </div>
+      </form>
+    </div>
+    <div class="card" id="import-card">
+      <h2>Importer une autre seedbox</h2>
+      <p class="muted small">Déposez les sauvegardes de l’ancienne seedbox (<code>radarr_backup_….zip</code>, <code>sonarr_backup_….zip</code>, le dossier <code>BT_backup</code> de qBittorrent…) dans <code id="import-folder">stockage/import</code> (partage réseau ou SFTP), puis cliquez sur Rechercher. La clé d’API, le port et la connexion de CE serveur sont conservés ; une sauvegarde complète est faite avant l’import et l’ancienne base est gardée.</p>
+      <div class="row"><button id="import-scan" class="btn" type="button">Rechercher dans le dossier</button></div>
+      <div id="import-items" class="table-wrap hidden"><table>
+        <thead><tr><th class="check-col"></th><th>Élément</th><th>Contenu</th><th>Fichier</th></tr></thead>
+        <tbody id="import-list"></tbody>
+      </table></div>
+      <p id="import-empty" class="muted small hidden">Rien d’importable trouvé dans le dossier.</p>
+      <div id="import-map-box" class="hidden">
+        <h2 class="sub">Table des chemins (ancien dossier → dossier de ce serveur)</h2>
+        <p class="muted small">Les chemins des films, séries et torrents sont convertis d’après ces lignes. Les fichiers eux-mêmes se copient avec le partage réseau vers ces nouveaux dossiers. Sans correspondance, un chemin reste inchangé.</p>
+        <div id="import-targets" class="muted small"></div>
+        <div id="import-map" class="map"></div>
+        <div class="row">
+          <button id="import-map-add" class="btn sm" type="button">Ajouter une ligne</button>
+          <button id="import-dry" class="btn" type="button">Simuler</button>
+          <button id="import-run" class="btn primary" type="button">Importer</button>
+          <button id="import-clear" class="btn danger" type="button">Vider le dossier d’import</button>
+        </div>
+        <p class="muted small">Les torrents importés sont mis en pause : reprenez-les dans qBittorrent après avoir copié les données.</p>
+      </div>
+    </div>
     <div class="card">
       <h2>Clé de chiffrement</h2>
       <p class="muted small">Sans cette clé, une sauvegarde ne peut pas être restaurée sur un autre serveur : notez-la dans un gestionnaire de mots de passe.</p>
       <button id="backup-key-show" class="btn" type="button">Afficher la clé</button>
       <p id="backup-key" class="secret"></p>
+    </div>
+  </section>
+
+  <section id="view-guests" class="view hidden">
+    <div class="title"><h1>Invités</h1></div>
+    <p class="muted">Invitez quelqu’un par un lien à usage limité : il choisit son identifiant et son mot de passe, sans que vous ayez à créer le compte. Chaque compte peut avoir une échéance, un nombre d’écrans simultanés, un débit maximal et des quotas de demandes Seerr.</p>
+    <div id="guest-link" class="notice ok hidden">
+      <p class="small">Lien d’invitation — il n’est affiché qu’une seule fois :</p>
+      <p class="secret" id="guest-link-text"></p>
+      <div class="row"><button id="guest-link-copy" class="btn sm" type="button">Copier le lien</button><span id="guest-link-note" class="muted small"></span></div>
+    </div>
+    <form id="guest-form" class="card form">
+      <h2>Nouvelle invitation</h2>
+      <label>Nom (pour vous y retrouver)<input name="label" maxlength="60" placeholder="Marie, cousine" autocomplete="off"></label>
+      <div class="split">
+        <label>Valable (jours)<input name="days" type="number" min="1" max="30" value="7"></label>
+        <label>Utilisations<input name="uses" type="number" min="1" max="20" value="1"></label>
+      </div>
+      <details><summary class="small">Limites du compte créé</summary><div id="guest-profile" class="form"></div></details>
+      <button class="btn primary" type="submit">Créer l’invitation</button>
+    </form>
+    <div class="card">
+      <h2>Invitations</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nom</th><th>État</th><th>Expire</th><th>Utilisations</th><th>Comptes créés</th><th></th></tr></thead>
+        <tbody id="guest-invites"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Comptes « utilisateur »</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Compte</th><th>Origine</th><th>Échéance</th><th>Limites</th><th></th></tr></thead>
+        <tbody id="guest-accounts"></tbody>
+      </table></div>
+    </div>
+    <form id="guest-edit" class="card form hidden">
+      <h2 id="guest-edit-title">Limites du compte</h2>
+      <div id="guest-edit-fields" class="form"></div>
+      <div class="row"><button class="btn primary" type="submit">Appliquer</button><button id="guest-edit-cancel" class="btn" type="button">Annuler</button></div>
+    </form>
+    <div class="card hidden" id="guest-history-card"><h2>Derniers événements</h2><pre id="guest-history" class="log"></pre></div>
+  </section>
+
+  <section id="view-cleanup" class="view hidden">
+    <div class="title"><h1>Nettoyage</h1><button id="cleanup-scan" class="btn primary" type="button">Analyser</button></div>
+    <p class="muted">Trouve ce qui prend de la place pour rien. L’analyse ne supprime rien : les éléments choisis vont dans une corbeille (sur le même disque, donc instantané) et ne sont effacés qu’au vidage, automatique après 14 jours. Chaque élément est revérifié juste avant d’être déplacé.</p>
+    <p id="cleanup-summary" class="small muted"></p>
+    <div id="cleanup-notes" class="notice hidden"></div>
+    <div id="cleanup-categories"></div>
+    <div class="card">
+      <div class="title"><h2>Corbeille</h2><div class="row">
+        <button id="cleanup-restore" class="btn sm" type="button">Restaurer la sélection</button>
+        <button id="cleanup-empty" class="btn sm danger" type="button">Vider la corbeille</button></div></div>
+      <p id="cleanup-trash-summary" class="small muted"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th class="check-col"></th><th>Élément</th><th>Taille</th><th>Mis de côté</th></tr></thead>
+        <tbody id="cleanup-trash"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="view-journal" class="view hidden">
+    <div class="title"><h1>Journal</h1></div>
+    <div class="tabs" role="tablist">
+      <button class="tab active" type="button" role="tab" data-tab="actions" aria-selected="true">Actions et connexions</button>
+      <button class="tab" type="button" role="tab" data-tab="logs" aria-selected="false">Journaux des services</button>
+    </div>
+    <div id="tab-actions">
+      <p class="muted">Qui a fait quoi, depuis quelle adresse : actions de la console, connexions à la connexion unique et en SSH, comptes créés par invitation. Conservé 400 jours. Aucun mot de passe ni clé n’y est enregistré.</p>
+      <p id="journal-chain" class="small"></p>
+      <form id="journal-form" class="card row filters">
+        <label>Recherche<input name="q" type="search" placeholder="compte, adresse, action…" autocomplete="off"></label>
+        <label>Utilisateur<select name="user"><option value="">Tous</option></select></label>
+        <label>Source<select name="source"><option value="">Toutes</option></select></label>
+        <label>Résultat<select name="outcome"><option value="">Tous</option><option value="ok">réussi</option><option value="refusé">refusé</option><option value="erreur">erreur</option></select></label>
+        <button class="btn primary" type="submit">Filtrer</button>
+        <a id="journal-export" class="btn" href="api/audit/export?format=csv">Exporter (CSV)</a>
+      </form>
+      <div class="card table-wrap"><table>
+        <thead><tr><th>Date</th><th>Source</th><th>Utilisateur</th><th>Adresse</th><th>Action</th><th>Résultat</th></tr></thead>
+        <tbody id="journal-list"></tbody>
+      </table>
+        <div class="row more"><span id="journal-count" class="muted small"></span><button id="journal-more" class="btn sm hidden" type="button">Afficher la suite</button></div>
+      </div>
+    </div>
+    <div id="tab-logs" class="hidden">
+      <p class="muted">Une seule recherche dans les journaux de tous les conteneurs et services. Les mots de passe, clés d’API et jetons repérables sont masqués.</p>
+      <form id="logs-form" class="card row filters">
+        <label>Texte ou expression<input name="q" type="search" placeholder="erreur, 403, timeout…" autocomplete="off"></label>
+        <label>Période<select name="since"><option value="15m">15 minutes</option><option value="1h" selected>1 heure</option><option value="6h">6 heures</option><option value="24h">24 heures</option><option value="7j">7 jours</option></select></label>
+        <label>Source<select name="source" id="logs-source"><option value="">Toutes</option></select></label>
+        <label class="check"><input name="regex" type="checkbox">Expression régulière</label>
+        <button class="btn primary" type="submit">Chercher</button>
+        <a id="logs-export" class="btn" href="api/logs/export">Exporter (texte)</a>
+      </form>
+      <p id="logs-summary" class="small muted"></p>
+      <pre id="logs-view" class="log tall"></pre>
     </div>
   </section>
 
@@ -393,6 +555,7 @@
       <p class="muted small">Installe la dernière version de SeedBoxBuntu depuis GitHub, sans passer par l'ISO : fichiers de l'appliance, modèles et stack. Comptes, secrets, bibliothèques et réglages sont conservés ; les fichiers remplacés sont sauvegardés (retour arrière possible). Aucun redémarrage du serveur : seule cette console redémarre à la fin.</p>
       <dl id="appliance-state" class="kv"></dl>
       <div id="appliance-changes" class="hidden"><p class="small muted">Nouveautés :</p><ul id="appliance-changes-list" class="checks"></ul></div>
+      <div id="appliance-blocked" class="notice hidden"><span id="appliance-blocked-text"></span> <button id="appliance-force" class="btn sm" type="button">Réessayer quand même</button></div>
       <div id="appliance-notice" class="notice hidden"></div>
       <div class="row">
         <button id="appliance-check" class="btn" type="button">Rechercher une mise à jour</button>
@@ -400,6 +563,29 @@
         <button id="appliance-rollback" class="btn" type="button">Annuler la dernière mise à jour</button>
       </div>
       <pre id="appliance-log" class="log hidden"></pre>
+      <details id="appliance-extra">
+        <summary class="small">Canal, contrôles et planification</summary>
+        <div class="form">
+          <label>Canal
+            <select id="appliance-channel">
+              <option value="stable">Stable : versions publiées (étiquettes v…)</option>
+              <option value="dev">Développement : dernier commit de la branche</option>
+            </select>
+          </label>
+          <label class="check"><input id="appliance-guard" type="checkbox">Garde-fou : après une mise à jour, surveiller les services et revenir seul à la version précédente si l’un d’eux tombe</label>
+          <label class="check"><input id="appliance-signed" type="checkbox">N’installer que des versions signées (signature de la version ou commit vérifié par GitHub)</label>
+          <label class="check"><input id="appliance-auto" type="checkbox">Mettre à jour automatiquement</label>
+          <div class="days" id="appliance-auto-days"></div>
+          <label>Heure<input id="appliance-auto-time" type="time"></label>
+          <p id="appliance-auto-next" class="muted small"></p>
+          <label>Clé publique de signature (une ligne, format ssh-ed25519 ou ssh-rsa…)<textarea id="appliance-signer" rows="2" spellcheck="false" autocomplete="off" placeholder="ssh-ed25519 AAAA… vincent"></textarea></label>
+          <p id="appliance-signer-state" class="muted small"></p>
+          <div class="row">
+            <button id="appliance-extra-save" class="btn primary" type="button">Enregistrer</button>
+            <button id="appliance-signer-save" class="btn" type="button">Enregistrer la clé</button>
+          </div>
+        </div>
+      </details>
       <details>
         <summary class="small">Source des mises à jour</summary>
         <div class="form">
@@ -478,6 +664,7 @@
     <pre id="job-log" class="log"></pre>
   </section>
 </main>
+<script src="features.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

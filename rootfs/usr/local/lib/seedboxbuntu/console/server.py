@@ -33,6 +33,12 @@ SEEDBOXCTL = HERE.parent / "seedboxctl.py"
 MAX_BODY = 64 * 1024
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+PUBLIC_JOBS = set()                      # tâches lancées par une personne invitée : seul leur état est visible publiquement
+ATTEMPTS = {}                            # adresse -> instants des essais d'invitation (limite de débit)
+ATTEMPTS_LOCK = threading.Lock()
+PUBLIC_FILES = {"app.css", "invite.js", "logo.svg", "favicon.ico", "icon-192.png"}
+ATTEMPT_LIMIT, ATTEMPT_WINDOW = 12, 600   # essais par adresse et par 10 minutes
+MAX_PUBLIC_JOBS = 3                       # créations de compte simultanées au plus
 TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
          ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2",
          ".webmanifest": "application/manifest+json"}
@@ -72,11 +78,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     # --- réponses ---------------------------------------------------------------
     def send_json(self, payload, status=200):
+        self.last_status = status
+        self.last_payload = payload if isinstance(payload, dict) else {}
         body = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_text(self, text, kind, filename):
+        body = text.encode()
+        self.last_status = 200
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
@@ -119,10 +139,114 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length) or b"{}")
 
     # --- routes -------------------------------------------------------------------
+    # --- partie publique : invitations (Traefik sans Authelia) -----------------------------------------------------
+    def public_request(self):
+        """Requête arrivée par la route publique /invite : elle porte le secret public, jamais celui de l'administration."""
+        return "X-Seedbox-Public-Secret" in self.headers
+
+    def public_authorized(self):
+        expected = ctl.env_read().get("CONSOLE_PROXY_SECRET", "")
+        if not expected or not hmac.compare_digest(expected, self.headers.get("X-Seedbox-Public-Secret", "")):
+            self.send_json({"error": "accès direct refusé"}, 403)
+            return False
+        return True
+
+    def client_address_text(self):
+        forwarded = self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        return forwarded or self.client_address[0]
+
+    def throttled(self, weight=1):
+        """Au plus ATTEMPT_LIMIT essais par adresse et par ATTEMPT_WINDOW secondes."""
+        now = time.time()
+        with ATTEMPTS_LOCK:
+            for key in [k for k, v in ATTEMPTS.items() if not v or now - v[-1] > ATTEMPT_WINDOW]:
+                del ATTEMPTS[key]
+            history = [t for t in ATTEMPTS.get(self.client_address_text(), []) if now - t < ATTEMPT_WINDOW]
+            if len(history) + weight > ATTEMPT_LIMIT:
+                ATTEMPTS[self.client_address_text()] = history
+                return True
+            ATTEMPTS[self.client_address_text()] = history + [now] * weight
+        return False
+
+    def send_public_file(self, name):
+        target = (WEB / name).resolve()
+        font = name.startswith("fonts/") and name.endswith(".woff2") and (WEB / "fonts").resolve() in target.parents
+        if not (name in PUBLIC_FILES or font) or not target.is_file():
+            return self.send_json({"error": "introuvable"}, 404)
+        body = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", TYPES.get(target.suffix, "application/octet-stream"))
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_invite_page(self):
+        body = (WEB / "invite.html").read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def public_get(self, path):
+        if not self.public_authorized():
+            return
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        if path == "/invite/api/info":
+            if self.throttled():
+                return self.send_json({"error": "trop d'essais, réessayez dans quelques minutes"}, 429)
+            return self.send_json(ctl.guests().info(query.get("token", [""])[0]))
+        if path == "/invite/api/job":
+            identifier = query.get("id", [""])[0]
+            job = JOBS.get(identifier)
+            if not job or identifier not in PUBLIC_JOBS:
+                return self.send_json({"error": "introuvable"}, 404)
+            return self.send_json({"state": job["state"]})            # jamais le journal : il peut contenir des détails internes
+        match = re.fullmatch(r"/invite/static/((?:fonts/)?[A-Za-z0-9._-]+)", path)
+        if match:
+            return self.send_public_file(match.group(1))
+        if re.fullmatch(r"/invite/[A-Za-z0-9_-]{0,64}/?", path):
+            return self.send_invite_page()
+        self.send_json({"error": "introuvable"}, 404)
+
+    def public_post(self, path):
+        if not self.public_authorized():
+            return
+        if path != "/invite/api/accept":
+            return self.send_json({"error": "introuvable"}, 404)
+        if self.throttled(2):
+            return self.send_json({"error": "trop d'essais, réessayez dans quelques minutes"}, 429)
+        data = self.body()
+        token, login, password = str(data.get("token", "")), str(data.get("login", "")).strip().lower(), str(data.get("password", ""))
+        with JOBS_LOCK:
+            running = sum(1 for i in PUBLIC_JOBS if JOBS.get(i, {}).get("state") == "running")
+        if running >= MAX_PUBLIC_JOBS:
+            return self.send_json({"error": "plusieurs comptes sont en cours de création, réessayez dans une minute"}, 429)
+        try:
+            invite_id = ctl.guests().reserve(token, login, password)
+        except ctl.SeedboxError as error:
+            return self.send_json({"error": str(error)}, 400)
+        identifier = start_job(f"Compte invité {login}", ["guests", "redeem", invite_id, login], password)
+        PUBLIC_JOBS.add(identifier)
+        try:
+            ctl.audit().record(login, self.client_address_text(), "compte créé par invitation", "invitation=" + str(invite_id), "invitation")
+        except Exception as error:  # noqa: BLE001
+            sys.stderr.write("audit : %s\n" % error)
+        self.send_json({"job": identifier})
+
     def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/invite" or path.startswith("/invite/"):
+            return self.public_get(path)
+        if self.public_request():                    # un en-tête public n'ouvre jamais l'administration
+            return self.send_json({"error": "accès refusé"}, 403)
         if not self.authorized():
             return
-        path = self.path.split("?", 1)[0]
         if not path.startswith("/api/"):
             return self.send_file(path)
         try:
@@ -131,12 +255,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({"error": str(error)}, 400)
 
     def do_POST(self):
+        self.last_status, self.last_payload = 0, {}
+        path = self.path.split("?", 1)[0]
+        if path == "/invite" or path.startswith("/invite/"):
+            try:
+                return self.public_post(path)
+            except (ctl.SeedboxError, OSError, ValueError, KeyError) as error:
+                return self.send_json({"error": "requête invalide"}, 400)
+        if self.public_request():
+            return self.send_json({"error": "accès refusé"}, 403)
         if not self.authorized():
             return
+        data = {}
         try:
-            self.route_post(self.path.split("?", 1)[0], self.body())
+            data = self.body()
+            self.route_post(path, data)
         except (ctl.SeedboxError, OSError, ValueError, KeyError) as error:
             self.send_json({"error": str(error)}, 400)
+        self.audit_request(path, data)
+
+    def audit_request(self, path, data):
+        """Chaque action de l'administration entre dans le journal d'audit (sans secret). Une panne du journal ne bloque rien."""
+        try:
+            job = JOBS.get(self.last_payload.get("job", ""), {})
+            ctl.audit().request_event(self.headers.get("Remote-User", ""), self.client_address_text(), path,
+                                      data if isinstance(data, dict) else {}, self.last_status, job.get("title", ""))
+        except Exception as error:  # noqa: BLE001 - le journal ne doit jamais casser une action
+            sys.stderr.write("audit : %s\n" % error)
 
     def route_get(self, path):
         if path == "/api/session":
@@ -173,6 +318,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.alerts().overview())
         if path == "/api/backup":
             return self.send_json(ctl.backup().overview())
+        if path == "/api/guests":
+            return self.send_json(ctl.guests().overview())
+        if path == "/api/audit":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            one = lambda key, default="": query.get(key, [default])[0]  # noqa: E731
+            return self.send_json(ctl.audit().search(one("q")[:100], one("user")[:64], one("source")[:20], one("outcome")[:10],
+                                                    int(one("since", "0") or 0), int(one("until", "0") or 0),
+                                                    int(one("limit", "100") or 100), int(one("offset", "0") or 0)))
+        if path == "/api/import":
+            return self.send_json(ctl.importer().overview())
+        if path == "/api/audit/status":
+            return self.send_json(ctl.audit().overview())
+        if path == "/api/audit/export":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            fmt = query.get("format", ["csv"])[0]
+            if fmt not in ("csv", "json"):
+                raise ctl.SeedboxError("format inconnu")
+            body, kind = ctl.audit().export(fmt, q=query.get("q", [""])[0][:100])
+            return self.send_text(body, kind, f"audit.{fmt}")
+        if path == "/api/logs/search":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            sources = [s for s in query.get("sources", [""])[0].split(",") if s] or None
+            return self.send_json(ctl.audit().search_logs(query.get("q", [""])[0][:200], query.get("since", ["1h"])[0], sources,
+                                                         query.get("regex", ["0"])[0] == "1", int(query.get("limit", ["300"])[0] or 300)))
+        if path == "/api/logs/export":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            sources = [s for s in query.get("sources", [""])[0].split(",") if s] or None
+            text = ctl.audit().export_logs(query=query.get("q", [""])[0][:200], since=query.get("since", ["1h"])[0], sources=sources,
+                                           regex=query.get("regex", ["0"])[0] == "1")
+            return self.send_text(text, "text/plain; charset=utf-8", "journaux.txt")
+        if path == "/api/gpu":
+            return self.send_json(ctl.gpu().overview())
+        if path == "/api/cleanup":
+            return self.send_json(ctl.cleanup().overview())
+        if path == "/api/metrics":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            return self.send_json(ctl.metrics().history(query.get("range", ["24h"])[0]))
+        if path == "/api/offsite":
+            return self.send_json(ctl.offsite().overview())
         if path == "/api/backup/key":
             return self.send_json({"key": ctl.backup().key()})
         if path == "/api/backup/download":
@@ -287,6 +471,74 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for key, value in values.items():
                 argv += [f"--{key}", "true" if value is True else "false" if value is False else str(value)]
             return self.send_json({"job": start_job("Réglages de la sauvegarde", argv)})
+        if path == "/api/offsite/settings":
+            module = ctl.offsite()
+            module.validate(data)
+            return self.send_json({"job": start_job("Sauvegarde hors serveur : réglages", ["offsite", "set"], json.dumps(data))})
+        match = re.fullmatch(r"/api/offsite/(connection|push|restore-test|clear)", path)
+        if match:
+            labels = {"connection": "Essai de la destination distante", "push": "Envoi de la dernière sauvegarde hors du serveur",
+                      "restore-test": "Test de restauration", "clear": "Destination distante retirée"}
+            argv = ["offsite", match.group(1)] + (["--local"] if match.group(1) == "restore-test" and data.get("local") else [])
+            return self.send_json({"job": start_job(labels[match.group(1)], argv)})
+        if path == "/api/import/scan":
+            return self.send_json({"job": start_job("Recherche dans le dossier d'import", ["import", "scan"])})
+        if path == "/api/import/run":
+            module = ctl.importer()
+            ids = data.get("ids")
+            if not isinstance(ids, list) or not ids or len(ids) > 8 or any(not module.ID_RE.match(str(i)) for i in ids):
+                raise ctl.SeedboxError("élément à importer invalide")
+            pairs = module.clean_map(data.get("map"))
+            argv = ["import", "run", *ids]
+            for old_path, new_path in pairs:
+                argv += ["--map", f"{old_path}={new_path}"]
+            if data.get("dry_run"):
+                argv.append("--dry-run")
+            return self.send_json({"job": start_job("Import (simulation)" if data.get("dry_run") else "Import d'une autre seedbox", argv)})
+        if path == "/api/import/clear":
+            return self.send_json({"job": start_job("Dossier d'import vidé", ["import", "clear"])})
+        if path == "/api/guests/invite":
+            module = ctl.guests()
+            created = module.create(str(data.get("label", "")), data.get("days", 7), data.get("uses", 1), data.get("profile"),
+                                    self.headers.get("Remote-User", ""))
+            return self.send_json(created)
+        if path == "/api/guests/revoke":
+            if not ctl.guests().ID_RE.match(str(data.get("id", ""))):
+                raise ctl.SeedboxError("invitation invalide")
+            ctl.guests().revoke(data["id"])
+            return self.send_json(ctl.guests().overview())
+        if path == "/api/guests/profile":
+            login = str(data.get("login", ""))
+            if not ctl.VALID_LOGIN.match(login):
+                raise ctl.SeedboxError("compte invalide")
+            profile = ctl.guests().clean_profile(data.get("profile"))
+            return self.send_json({"job": start_job(f"Limites de {login}", ["guests", "profile", login], json.dumps(profile))})
+        if path == "/api/guests/extend":
+            login = str(data.get("login", ""))
+            if not ctl.VALID_LOGIN.match(login):
+                raise ctl.SeedboxError("compte invalide")
+            days = int(data.get("days", 0))
+            if not 0 <= days <= 365:
+                raise ctl.SeedboxError("prolongation : 0 à 365 jours")
+            return self.send_json({"job": start_job(f"Échéance de {login}", ["guests", "extend", login, str(days)])})
+        if path == "/api/gpu/settings":
+            if data.get("mode") not in ctl.gpu().MODES:
+                raise ctl.SeedboxError("mode inconnu")
+            return self.send_json({"job": start_job("Transcodage matériel", ["gpu", "set", "--mode", data["mode"]])})
+        if path == "/api/gpu/test":
+            return self.send_json({"job": start_job("Essai d'encodage matériel", ["gpu", "test"])})
+        match = re.fullmatch(r"/api/cleanup/(scan|trash|restore|empty)", path)
+        if match:
+            action = match.group(1)
+            if action == "scan":
+                return self.send_json({"job": start_job("Analyse de l'espace récupérable", ["cleanup", "scan"])})
+            if action == "empty":
+                return self.send_json({"job": start_job("Vidage de la corbeille", ["cleanup", "empty"])})
+            ids = data.get("ids")
+            if not isinstance(ids, list) or not ids or len(ids) > 1000 or not all(isinstance(i, str) and ctl.cleanup().ID_RE.match(i) for i in ids):
+                raise ctl.SeedboxError("sélection invalide")
+            label = "Mise à la corbeille" if action == "trash" else "Restauration depuis la corbeille"
+            return self.send_json({"job": start_job(label, ["cleanup", action, *ids])})
         if path == "/api/steps/retry":
             return self.send_json({"job": start_job("Nouvel essai des étapes en échec", ["steps", "retry"])})
         if path == "/api/steps/ignore":
@@ -365,7 +617,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ctl.appliance().check()
             return self.send_json(ctl.appliance().overview())
         if path == "/api/appliance/source":
-            ctl.appliance().set_config(str(data.get("repo", "")), str(data.get("ref", "")))
+            ctl.appliance().set_config(str(data.get("repo", "")), str(data.get("ref", "")), data.get("channel"),
+                                       data.get("guard"), data.get("require_signed"), data.get("auto") or None)
+            return self.send_json(ctl.appliance().overview())
+        if path == "/api/appliance/signer":
+            ctl.appliance().set_signers(str(data.get("key", "")))
             return self.send_json(ctl.appliance().overview())
         if path == "/api/appliance/apply":
             ctl.appliance().launch("apply", str(data.get("ref", "")) or None, bool(data.get("force")))

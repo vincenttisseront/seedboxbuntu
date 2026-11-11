@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Invitation - SeedBoxBuntu</title>
+<meta name="theme-color" content="#020617">
+<link rel="icon" type="image/svg+xml" href="/invite/static/logo.svg">
+<link rel="stylesheet" href="/invite/static/app.css">
+</head>
+<body>
+<main class="invite">
+  <div class="brand"><img src="/invite/static/logo.svg" alt="" width="34" height="34">SeedBox<b>Buntu</b></div>
+  <div id="invite-loading" class="card"><p class="muted">Vérification de l'invitation…</p></div>
+
+  <div id="invite-invalid" class="card hidden">
+    <h2>Invitation indisponible</h2>
+    <p>Ce lien n'est plus valable : il a expiré, il a déjà été utilisé ou il a été annulé.</p>
+    <p class="muted small">Demandez un nouveau lien à la personne qui gère ce serveur.</p>
+  </div>
+
+  <div id="invite-form-card" class="card hidden">
+    <h2 id="invite-title">Vous êtes invité</h2>
+    <p id="invite-perks" class="muted small"></p>
+    <form id="invite-form" autocomplete="off">
+      <label>Identifiant<input id="invite-login" name="login" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="2" maxlength="31" pattern="[a-z][a-z0-9_.\-]{1,30}"></label>
+      <p class="muted small" id="login-hint">Lettres minuscules, chiffres, « . », « _ » ou « - » ; commence par une lettre.</p>
+      <label>Mot de passe<input id="invite-password" name="password" type="password" autocomplete="new-password" required minlength="8"></label>
+      <label>Confirmer le mot de passe<input id="invite-confirm" name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>
+      <p id="invite-error" class="notice err hidden" role="alert"></p>
+      <button id="invite-submit" class="btn primary" type="submit">Créer mon compte</button>
+    </form>
+  </div>
+
+  <div id="invite-progress" class="card hidden"><h2>Création du compte</h2><p class="muted">Quelques instants : le compte est ouvert sur chaque application…</p></div>
+
+  <div id="invite-done" class="card hidden">
+    <h2>Compte créé</h2>
+    <p>Votre compte <b id="done-login"></b> est prêt. Connectez-vous avec l'identifiant et le mot de passe que vous venez de choisir.</p>
+    <p class="row"><a class="btn primary" href="/">Ouvrir le tableau de bord</a><a class="btn" href="/jellyfin/">Ouvrir Jellyfin</a></p>
+    <p id="done-expiry" class="muted small"></p>
+  </div>
+  <div id="invite-failed" class="card hidden"><h2>La création a échoué</h2><p>Le compte n'a pas pu être créé. Prévenez la personne qui gère ce serveur ; votre invitation reste utilisable.</p></div>
+</main>
+<script src="/invite/static/invite.js"></script>
+</body>
+</html>

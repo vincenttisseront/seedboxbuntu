@@ -1,0 +1,11 @@
+[Unit]
+Description=SeedBoxBuntu - test mensuel de restauration d'une sauvegarde
+After=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl offsite restore-test --auto
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=3h

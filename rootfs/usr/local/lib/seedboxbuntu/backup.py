@@ -171,6 +171,11 @@ def create(label=""):
     partial.replace(target)
     prune(folder, cfg["keep"])
     say(f"sauvegarde terminée : {target.name} ({target.stat().st_size // 1024} Ko)")
+    if not label:
+        try:
+            ctl.offsite().push(target.name)     # copie hors du serveur si elle est configurée
+        except ctl.SeedboxError as error:
+            say(f"envoi hors serveur : {error}")
     return target.name
 
 

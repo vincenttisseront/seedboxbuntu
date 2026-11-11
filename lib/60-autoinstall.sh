@@ -44,8 +44,8 @@ gen_autoinstall() {
     echo "  install-server: true"
     echo "  allow-pw: true"
     echo "packages:"
-    # cifs-utils, nfs-common, ntfs-3g : partages réseau et disques montés depuis la console
-    for p in docker.io docker-compose-v2 ufw fail2ban unattended-upgrades curl git zstd whiptail python3 openssl cifs-utils nfs-common ntfs-3g; do echo "  - $p"; done
+    # cifs-utils, nfs-common, ntfs-3g : partages réseau et disques montés depuis la console ; rclone : sauvegardes hors serveur
+    for p in docker.io docker-compose-v2 ufw fail2ban unattended-upgrades curl git zstd whiptail python3 openssl cifs-utils nfs-common ntfs-3g rclone; do echo "  - $p"; done
     echo "updates: security"
     echo "late-commands:"
     echo "  - bash /cdrom/seedboxbuntu/late.sh"

@@ -16,7 +16,14 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl trackers list|sync|rule    trackers et règles de seed
   seedboxctl p2p status|update|token    application p2p-aggregator
   seedboxctl share list|add|role|...    partages réseau (SMB, NFS) et disques externes
-  seedboxctl appliance status|check|apply|rollback|source   mise à jour de l'appliance depuis GitHub (sans ISO)
+  seedboxctl import scan|show|run|clear    importer une autre seedbox
+  seedboxctl audit show|sync|verify|export|logs   journal d'audit, recherche dans les journaux
+  seedboxctl guests list|create|revoke|profile|extend|expire   invitations par lien, limites, comptes temporaires
+  seedboxctl gpu show|set|apply|test   transcodage matériel de Jellyfin (GPU)
+  seedboxctl cleanup scan|show|trash|restore|empty   assistant de nettoyage avec corbeille
+  seedboxctl metrics collect|show|forecast   historique des ressources, prévision de saturation des disques
+  seedboxctl offsite show|set|connection|push|restore-test   sauvegarde hors du serveur (rclone)
+  seedboxctl appliance status|check|apply|rollback|source|auto|signer   mise à jour de l'appliance depuis GitHub (sans ISO)
 """
 import argparse
 import base64
@@ -205,6 +212,69 @@ def backup():
     if here not in sys.path:
         sys.path.insert(0, here)
     import backup as module
+    return module
+
+
+def audit():
+    """Journal d'audit et recherche dans les journaux, chargés à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import audit as module
+    return module
+
+
+def importer():
+    """Import depuis une autre seedbox, chargé à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import importer as module
+    return module
+
+
+def guests():
+    """Invités : invitations, limites, comptes temporaires, chargés à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import guests as module
+    return module
+
+
+def gpu():
+    """Transcodage matériel de Jellyfin, chargé à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import gpu as module
+    return module
+
+
+def cleanup():
+    """Assistant de nettoyage, chargé à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import cleanup as module
+    return module
+
+
+def metrics():
+    """Historique des ressources et prévision, chargés à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import metrics as module
+    return module
+
+
+def offsite():
+    """Sauvegarde hors serveur (rclone), chargée à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import offsite as module
     return module
 
 
@@ -699,15 +769,8 @@ def qbit_pbkdf2(password):
 
 
 def write_gpu_override():
-    """Transmet le GPU à Jellyfin s'il existe, pour le transcodage matériel."""
-    override = BASE / "docker-compose.override.yml"
-    if Path("/dev/dri").is_dir():
-        override.write_text(
-            "# Généré par seedboxctl : GPU détecté, transmis à Jellyfin\n"
-            "services:\n  jellyfin:\n    devices:\n      - /dev/dri:/dev/dri\n")
-    elif override.exists():
-        override.unlink()
-    sync_compose_files()
+    """Transmet le GPU à Jellyfin s'il existe (transcodage matériel) : voir gpu.py."""
+    gpu().write_override()
 
 
 def set_ownership():
@@ -2399,6 +2462,18 @@ def refresh():
     except (SeedboxError, OSError, ValueError, KeyError) as error:
         say(f"mise à jour de l'appliance : {error}")
     try:
+        audit().maintain()             # connexions Authelia et SSH dans le journal d'audit
+    except (SeedboxError, OSError, ValueError, KeyError) as error:
+        say(f"audit : {error}")
+    try:
+        guests().expire()              # comptes invités arrivés à échéance
+    except (SeedboxError, OSError, ValueError, KeyError, http.client.HTTPException) as error:
+        say(f"invités : {error}")
+    try:
+        cleanup().purge_expired()      # la corbeille du nettoyage garde les éléments 14 jours
+    except (SeedboxError, OSError, ValueError, KeyError) as error:
+        say(f"corbeille : {error}")
+    try:
         versions().snapshot_all()      # garde l'image courante de chaque service avant la mise à jour nocturne
     except (SeedboxError, OSError, ValueError, KeyError) as error:
         say(f"versions : {error}")
@@ -2489,6 +2564,66 @@ def main():
     bk_set.add_argument("--time")
     bk_set.add_argument("--keep")
     bk_set.add_argument("--destination")
+    au = commands.add_parser("audit", help="journal d'audit et recherche dans les journaux").add_subparsers(dest="action", required=True)
+    for name in ("sync", "verify", "prune"):
+        au.add_parser(name)
+    au_show = au.add_parser("show")
+    au_show.add_argument("--limit", type=int, default=50)
+    au_show.add_argument("--q", default="")
+    au_export = au.add_parser("export")
+    au_export.add_argument("--format", choices=("csv", "json"), default="csv")
+    au_find = au.add_parser("logs", help="recherche dans les journaux de tous les services")
+    au_find.add_argument("query", nargs="?", default="")
+    au_find.add_argument("--since", default="1h")
+    au_find.add_argument("--regex", action="store_true")
+    im = commands.add_parser("import", help="importer une autre seedbox (sauvegardes Radarr/Sonarr…, torrents qBittorrent)").add_subparsers(
+        dest="action", required=True)
+    for name in ("scan", "show", "clear"):
+        im.add_parser(name)
+    im_run = im.add_parser("run")
+    im_run.add_argument("ids", nargs="+")
+    im_run.add_argument("--map", action="append", default=[], metavar="ANCIEN=NOUVEAU")
+    im_run.add_argument("--dry-run", action="store_true")
+    gs = commands.add_parser("guests", help="invitations par lien, limites et comptes temporaires").add_subparsers(dest="action", required=True)
+    for name in ("list", "expire"):
+        gs.add_parser(name)
+    gs_create = gs.add_parser("create", help="profil de limites lu en JSON sur l'entrée standard")
+    gs_create.add_argument("--label", default="")
+    gs_create.add_argument("--days", default="7")
+    gs_create.add_argument("--uses", default="1")
+    gs_create.add_argument("--by", default="")
+    gs.add_parser("revoke").add_argument("id")
+    gs_redeem = gs.add_parser("redeem", help="mot de passe lu sur l'entrée standard")
+    gs_redeem.add_argument("id")
+    gs_redeem.add_argument("login")
+    gs.add_parser("profile", help="profil de limites lu en JSON sur l'entrée standard").add_argument("login")
+    gs_extend = gs.add_parser("extend")
+    gs_extend.add_argument("login")
+    gs_extend.add_argument("days")
+    gp = commands.add_parser("gpu", help="transcodage matériel de Jellyfin (GPU)").add_subparsers(dest="action", required=True)
+    for name in ("show", "apply", "test"):
+        gp.add_parser(name)
+    gp.add_parser("set").add_argument("--mode", required=True)
+    cln = commands.add_parser("cleanup", help="assistant de nettoyage avec corbeille").add_subparsers(dest="action", required=True)
+    for name in ("scan", "show", "docker"):
+        cln.add_parser(name)
+    cln.add_parser("trash").add_argument("ids", nargs="+")
+    cln.add_parser("restore").add_argument("ids", nargs="+")
+    cln_empty = cln.add_parser("empty")
+    cln_empty.add_argument("--days", type=int, default=0)
+    met = commands.add_parser("metrics", help="historique des ressources et prévision de saturation des disques").add_subparsers(
+        dest="action", required=True)
+    met.add_parser("collect")
+    met.add_parser("forecast")
+    met_show = met.add_parser("show")
+    met_show.add_argument("--range", default="24h")
+    off = commands.add_parser("offsite", help="sauvegarde hors du serveur (rclone) et test de restauration").add_subparsers(
+        dest="action", required=True)
+    for name in ("show", "set", "connection", "push", "clear"):
+        off.add_parser(name)
+    off_test = off.add_parser("restore-test", help="récupère, déchiffre et vérifie la dernière sauvegarde")
+    off_test.add_argument("--local", action="store_true", help="teste la copie locale même si une destination est configurée")
+    off_test.add_argument("--auto", action="store_true", help="appel du minuteur mensuel")
     auth = commands.add_parser("auth", help="connexion unique : double authentification").add_subparsers(
         dest="action", required=True)
     auth.add_parser("show")
@@ -2584,9 +2719,18 @@ def main():
     apply_cmd.add_argument("--ref", default="", help="branche ou étiquette (sinon celle des réglages)")
     apply_cmd.add_argument("--force", action="store_true", help="réinstalle même si la version est déjà à jour")
     app.add_parser("rollback", help="annule la dernière mise à jour faite depuis la console")
-    source_cmd = app.add_parser("source", help="dépôt GitHub et branche suivis")
+    source_cmd = app.add_parser("source", help="dépôt GitHub, branche, canal et options de mise à jour")
     source_cmd.add_argument("--repo", default="")
     source_cmd.add_argument("--ref", default="")
+    source_cmd.add_argument("--channel", choices=("dev", "stable"), default=None, help="dev : la branche ; stable : dernière version publiée")
+    source_cmd.add_argument("--guard", default=None, help="retour automatique si la santé se dégrade (true/false)")
+    source_cmd.add_argument("--require-signed", default=None, help="n'installer que des versions signées (true/false)")
+    source_cmd.add_argument("--auto-enabled", default=None, help="mise à jour automatique planifiée (true/false)")
+    source_cmd.add_argument("--auto-days", default=None)
+    source_cmd.add_argument("--auto-time", default=None)
+    app.add_parser("auto", help="mise à jour planifiée (lancée par le minuteur seedbox-appliance)")
+    signer_cmd = app.add_parser("signer", help="clés publiques SSH qui signent les versions publiées (lues sur l'entrée standard)")
+    signer_cmd.add_argument("--set", action="store_true", help="remplace les clés par celles de l'entrée standard (vide : aucune)")
     p2p = commands.add_parser("p2p").add_subparsers(dest="action", required=True)
     p2p.add_parser("status")
     update = p2p.add_parser("update")
@@ -2709,6 +2853,102 @@ def main():
             values = {k: v for k, v in {"enabled": args.enabled, "days": args.days, "time": args.time,
                                          "keep": args.keep, "destination": args.destination}.items() if v is not None}
             locked(module.set_settings)(values)
+    elif args.command == "audit":
+        module = audit()
+        if args.action == "sync":
+            module.sync()
+        elif args.action == "verify":
+            result = module.verify()
+            print(json.dumps(result))
+            return 0 if result["ok"] else 1
+        elif args.action == "prune":
+            print(module.prune(), "événement(s) supprimé(s)")
+        elif args.action == "show":
+            for event in reversed(module.search(q=args.q, limit=args.limit)["events"]):
+                print(f"{time.strftime('%F %T', time.localtime(event['ts']))}  {event['source']:<10} {event['user']:<14} {event['ip']:<16} "
+                      f"{event['outcome']:<7} {event['action']} {event['detail']}")
+        elif args.action == "export":
+            print(module.export(args.format)[0], end="")
+        else:
+            for item in reversed(module.search_logs(args.query, args.since, regex=args.regex)["lines"]):
+                print(f"{time.strftime('%F %T', time.localtime(item['ts']))} [{item['source']}] {item['line']}")
+    elif args.command == "import":
+        module = importer()
+        if args.action == "scan":
+            locked(module.scan)()
+        elif args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "clear":
+            locked(module.clear)()
+        else:
+            pairs = []
+            for text in args.map:
+                if "=" not in text:
+                    raise SeedboxError("table des chemins : ANCIEN=NOUVEAU")
+                pairs.append(tuple(text.split("=", 1)))
+            locked(module.run)(args.ids, pairs, args.dry_run)
+    elif args.command == "guests":
+        module = guests()
+        if args.action == "list":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "create":
+            print(json.dumps(locked(module.create)(args.label, args.days, args.uses, json.loads(sys.stdin.read() or "{}"), args.by)))
+        elif args.action == "revoke":
+            locked(module.revoke)(args.id)
+        elif args.action == "redeem":
+            locked(module.redeem)(args.id, args.login, read_password(""))     # avertissements : dans le journal, le compte existe
+        elif args.action == "profile":
+            return report(locked(module.set_profile)(args.login, json.loads(sys.stdin.read() or "{}")))
+        elif args.action == "extend":
+            locked(module.extend)(args.login, args.days)
+        else:
+            locked(module.expire)()
+    elif args.command == "gpu":
+        module = gpu()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            locked(module.set_mode)(args.mode)
+        elif args.action == "apply":
+            locked(module.apply)()
+        else:
+            print(json.dumps(module.test()))
+    elif args.command == "cleanup":
+        module = cleanup()
+        if args.action == "scan":
+            locked(module.scan)()
+        elif args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "trash":
+            locked(module.trash)(args.ids)
+        elif args.action == "restore":
+            locked(module.restore)(args.ids)
+        elif args.action == "empty":
+            locked(module.empty)(args.days)
+        else:
+            locked(module.docker_prune)()
+    elif args.command == "metrics":
+        module = metrics()
+        if args.action == "collect":
+            module.collect()
+        elif args.action == "forecast":
+            print(json.dumps(module.forecast(), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(module.history(args.range), ensure_ascii=False))
+    elif args.command == "offsite":
+        module = offsite()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            locked(module.save)(json.loads(sys.stdin.read() or "{}"))
+        elif args.action == "connection":
+            print(json.dumps(locked(module.connection)()))
+        elif args.action == "push":
+            locked(module.push_latest)()
+        elif args.action == "restore-test":
+            print(json.dumps(locked(module.restore_test)("local" if args.local else None), ensure_ascii=False))
+        else:
+            locked(module.clear)()
     elif args.command == "auth":
         if args.action == "show":
             print(json.dumps(auth_overview(), indent=2, ensure_ascii=False))
@@ -2819,12 +3059,21 @@ def main():
             module.apply(args.ref or None, args.force)
         elif args.action == "rollback":
             module.rollback()
-        else:
-            current = module.config()
-            if args.repo or args.ref:
-                module.set_config(args.repo or current["repo"], args.ref or current["ref"])
+        elif args.action == "auto":
+            locked(module.auto)()
+        elif args.action == "signer":
+            if args.set:
+                print(json.dumps(module.set_signers(sys.stdin.read()), ensure_ascii=False))
             else:
-                print(json.dumps(current, ensure_ascii=False))
+                print(json.dumps(module.signer_fingerprints(), ensure_ascii=False))
+        else:
+            options = {"channel": args.channel, "guard": args.guard, "require_signed": args.require_signed,
+                       "auto_settings": {"enabled": args.auto_enabled, "days": args.auto_days, "time": args.auto_time}}
+            if args.repo or args.ref or args.channel or args.guard is not None or args.require_signed is not None \
+                    or any(v is not None for v in options["auto_settings"].values()):
+                module.set_config(args.repo, args.ref, **options)
+            else:
+                print(json.dumps(module.config(), ensure_ascii=False))
     elif args.command == "p2p":
         if args.action == "status":
             print(json.dumps(p2p_status(), indent=2, ensure_ascii=False))

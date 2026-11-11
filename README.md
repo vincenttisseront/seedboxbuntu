@@ -38,6 +38,7 @@ p2p/                  correctifs appliqués à p2p-aggregator → …/p2p
 assets/               logos et favicon (sources, non embarqués)
 catalog-exemple.json  exemple de catalogue d'applications personnalisé
 tests/                tests sans Docker ni root ; tests/run.sh les lance tous
+tools/                manifest.py : manifeste et signature d'une version publiée
 .github/workflows/    intégration continue (les mêmes tests)
 ```
 
@@ -60,7 +61,42 @@ Une fois les sources poussées sur GitHub (`vincenttisseront/seedboxbuntu`, dép
 
 Dépôt privé : enregistrez un jeton GitHub en lecture seule (le même que celui de P2P Aggregator, à étendre à ce dépôt) dans la page P2P Aggregator, dans « Source des mises à jour », ou dans le menu texte. Le jeton n'est envoyé qu'à `api.github.com`. Dépôt, branche ou étiquette se changent dans « Source des mises à jour ».
 
+### Canaux, planification, garde-fou et signature
+
+Dans **Paramètres > Mise à jour de l'appliance > Canal, contrôles et planification** :
+
+- **Canal** : *stable* suit la dernière version publiée sur GitHub (étiquette `v…`, avec ses notes) ; *développement* suit le dernier commit de la branche.
+- **Mise à jour automatique** : jours et heure au choix (`seedbox-appliance.timer`). Une version écartée par le garde-fou n'est pas réessayée seule.
+- **Garde-fou** : après l'installation, l'état des services est surveillé quelques minutes ; si l'un d'eux qui fonctionnait avant tombe, la version précédente est rétablie automatiquement, la version fautive est marquée « écartée » et une alerte critique part. « Réessayer quand même » force une nouvelle tentative.
+- **Versions signées** : une version publiée porte `manifest.json` (empreinte SHA-256 de chaque fichier, commit, étiquette) et `manifest.json.sig` (signature SSH, espace de noms `seedboxbuntu-release`). Enregistrez la clé publique de confiance dans la console ; avec « N'installer que des versions signées », seule une signature valide (ou un commit vérifié par GitHub) est acceptée. Un manifeste altéré ou qui ne correspond pas aux fichiers est toujours refusé.
+
+Publier une version :
+
+```
+git tag v1.5.0 && git push origin v1.5.0       # .github/workflows/release.yml teste, construit le manifeste et publie
+```
+
+Pour signer, créez une clé dédiée (`ssh-keygen -t ed25519 -f release_key -C seedboxbuntu`), placez la clé privée dans le secret GitHub `RELEASE_SIGNING_KEY` et collez `release_key.pub` dans la console. Manuellement : `tools/manifest.py build --tag v1.5.0 --commit <sha>`, `sign`, `verify`.
+
 La version installée devient « AAAA.MM.JJ-HHMM » de la date du commit (UTC). Une ISO plus récente remplace sans difficulté une mise à jour faite depuis la console ; une ISO plus ancienne est refusée comme d'habitude. L'ISO note le commit de ses sources (`SOURCE_COMMIT`) quand `build.sh` est lancé depuis un clone git, ou avec `SB_SOURCE_COMMIT="<sha> <date ISO>"`.
+
+## Exploitation : ce que la console ajoute
+
+| Fonction | Où | Ligne de commande |
+|---|---|---|
+| Copie des sauvegardes hors du serveur (SFTP, S3, WebDAV, B2, rclone) et test de restauration mensuel | Sauvegardes | `seedboxctl offsite show\|set\|push\|restore-test` |
+| Historique CPU, mémoire, réseau, disques ; prévision « disque plein dans N jours » (alerte) | Système | `seedboxctl metrics show\|forecast` |
+| Assistant de nettoyage avec corbeille (orphelins, partiels, doublons, dossiers vides, Docker) | Nettoyage | `seedboxctl cleanup scan\|trash\|restore\|empty` |
+| Transcodage matériel de Jellyfin (Intel/AMD VAAPI, QSV, NVIDIA NVENC) | Système | `seedboxctl gpu show\|set\|test` |
+| Invitations par lien, limites par compte (échéance, écrans, débit, quotas Seerr) | Invités | `seedboxctl guests list\|create\|revoke\|profile` |
+| Journal d'audit chaîné, recherche et export des journaux de tous les services | Journal | `seedboxctl audit show\|verify\|export\|logs` |
+| Import d'une autre seedbox (Radarr, Sonarr, Lidarr, Readarr, Prowlarr, torrents qBittorrent) | Sauvegardes | `seedboxctl import scan\|run\|clear` |
+
+Points d'attention :
+
+- **Invitations** : la page `/invite/<jeton>` est la seule route publique (sans connexion unique). Elle est limitée en débit par Traefik, par adresse dans la console, et ne donne jamais accès à l'administration ; seule l'empreinte du jeton est conservée.
+- **Journal d'audit** : aucun mot de passe, clé ni jeton n'y est écrit ; les empreintes chaînées font apparaître une modification maladroite, mais ne protègent pas d'un administrateur qui sait les refaire : exportez-le régulièrement.
+- **Import** : déposez les sauvegardes de l'ancienne seedbox dans `<stockage>/import`. Seule la base de données des applications est reprise (la clé d'API, le port et la connexion restent ceux de ce serveur), les chemins sont convertis d'après une table « ancien dossier → nouveau dossier », une sauvegarde complète est faite avant, et l'ancienne base est gardée. Les torrents sont ajoutés en pause.
 
 ## Tests
 
@@ -68,4 +104,4 @@ La version installée devient « AAAA.MM.JJ-HHMM » de la date du commit (UTC). 
 tests/run.sh
 ```
 
-Contrôles statiques (Python, JavaScript, shell, YAML/JSON, modules `lib/`, droits produits par `gen_rootfs`), sauvegarde/restauration, alertes, catalogue et versions, rôles et règles Authelia, mise à jour N-1 → N, mise à jour depuis GitHub (faux GitHub local : installation, retour arrière, archives refusées, échec en cours d'écriture), durcissement, migration. Nécessite `python3`, `pyyaml` et `node`. Les mêmes tests tournent sur GitHub (`.github/workflows/ci.yml`).
+Contrôles statiques (Python, JavaScript, shell, YAML/JSON, identifiants de l'interface, CSP, unités systemd, modules `lib/`, droits produits par `gen_rootfs`), sauvegarde/restauration, alertes, catalogue et versions, rôles et règles Authelia, mise à jour N-1 → N, mise à jour depuis GitHub (faux GitHub local : installation, retour arrière, archives refusées, échec en cours d'écriture), copie hors serveur, historique et prévision, nettoyage, GPU, invitations (route publique comprise), audit, import, durcissement, migration. Nécessite `python3`, `pyyaml` et `node`. Les mêmes tests tournent sur GitHub (`.github/workflows/ci.yml`).

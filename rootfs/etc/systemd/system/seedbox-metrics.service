@@ -1,0 +1,10 @@
+[Unit]
+Description=SeedBoxBuntu - mesure des ressources (historique)
+After=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl metrics collect
+Nice=15
+IOSchedulingClass=idle

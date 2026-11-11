@@ -8,7 +8,7 @@ function el(tag, attrs = {}, ...children) {
     if (key === 'onclick') node.addEventListener('click', value);
     else if (value !== undefined && value !== null) node.setAttribute(key, value);
   }
-  node.append(...children.filter((c) => c !== null && c !== undefined));
+  node.append(...children.flat().filter((c) => c !== null && c !== undefined));
   return node;
 }
 
@@ -389,7 +389,7 @@ async function loadAudit() {
 // --- Mise à jour de l'appliance depuis GitHub -------------------------------------------------------
 let applianceTimer = null;
 let applianceWasRunning = false;
-const APPLIANCE_STATE = { running: 'en cours', ok: 'terminée', partial: 'terminée, finalisation en arrière-plan', error: 'échec' };
+const APPLIANCE_STATE = { running: 'en cours', rolled_back: 'annulée automatiquement', ok: 'terminée', partial: 'terminée, finalisation en arrière-plan', error: 'échec' };
 
 function applianceDate(text) {
   const date = new Date(text);
@@ -402,7 +402,7 @@ function renderAppliance(data) {
   const rows = [
     el('dt', {}, 'Version installée'),
     el('dd', {}, `${installed.version}${installed.commit ? ` (commit ${installed.commit.slice(0, 7)}${installed.source === 'console' ? ', installé depuis la console' : ', installé par l’ISO'})` : ' (ISO)'}`),
-    el('dt', {}, 'Source'), el('dd', {}, `${config.repo} (${config.ref})${data.token ? '' : ' - sans jeton GitHub'}`),
+    el('dt', {}, 'Source'), el('dd', {}, `${config.repo} (${config.channel === 'stable' ? 'dernière version publiée' : config.ref})${data.token ? '' : ' - sans jeton GitHub'}`),
   ];
   if (check && check.error) rows.push(el('dt', {}, 'Dernier contrôle'), el('dd', {}, check.error));
   else if (check && check.remote) {
@@ -434,6 +434,7 @@ function renderAppliance(data) {
   const banner = $('appliance-banner');
   banner.classList.toggle('hidden', !(check && check.available));
   if (check && check.available) $('appliance-banner-text').textContent = `Mise à jour de l’appliance disponible (${check.remote ? check.remote.short : ''}).`;
+  renderApplianceExtras(data);
   return running;
 }
 
@@ -719,7 +720,8 @@ async function loadVersions() {
   $('versions-list').replaceChildren(...rows);
 }
 
-const VIEWS = { system: loadSystem, alerts: loadAlerts, backup: loadBackup, catalog: loadCatalog, settings: loadSettings, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null };
+const VIEWS = { system: async () => { await loadSystem(); loadHistory().catch(showError); loadGpu().catch(showError); }, alerts: loadAlerts, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: loadSettings, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
+  guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal() };
 
 function route() {
   const name = location.hash.slice(1) in VIEWS ? location.hash.slice(1) : 'apps';
@@ -728,6 +730,7 @@ function route() {
   for (const link of document.querySelectorAll('#nav a')) link.classList.toggle('active', link.hash === `#${name}`);
   clearInterval(viewTimer);
   clearInterval(containersTimer);
+  clearInterval(featureTimer);
   if (VIEWS[name]) VIEWS[name]().catch(showError);
 }
 
@@ -869,6 +872,7 @@ $('secrets-show').addEventListener('click', async () => {
   try { renderSecrets(await api('/api/credentials')); } catch (error) { showError(error); }
 });
 
+initFeatures();
 window.addEventListener('hashchange', route);
 api('/api/session').then((session) => {
   $('who').textContent = session.user;

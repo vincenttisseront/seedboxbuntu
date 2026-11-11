@@ -492,20 +492,33 @@ print("installée" if any(a["id"] == sys.argv[1] and a["installed"] for a in jso
 }
 
 menu_tools() {   # sauvegarde, versions des services, double authentification
-  local c id mode
+  local c id mode label
   while :; do
-    c=$(W --title "Sauvegarde, versions et sécurité" --ok-button "Valider" --cancel-button "Retour" --menu "Outils d'exploitation de l'appliance." 18 76 6 \
+    c=$(W --title "Sauvegarde, versions et sécurité" --ok-button "Valider" --cancel-button "Retour" --menu "Outils d'exploitation de l'appliance." 22 78 11 \
       backup "Créer une sauvegarde chiffrée maintenant" \
       versions "Mettre à jour un service ou revenir à sa version précédente" \
       steps "Réessayer les étapes de configuration en échec" \
       check "Contrôle de santé des applications" \
       twofa "Double authentification (aucune, administrateurs, tous)" \
-      auth "Codes de vérification en attente") || return 0
+      auth "Codes de vérification en attente" \
+      offsite "Envoyer la dernière sauvegarde hors du serveur (rclone)" \
+      restoretest "Tester une restauration (copie distante si configurée)" \
+      invite "Créer un lien d'invitation (7 jours, 1 utilisation)" \
+      cleanup "Analyser l'espace récupérable (rien n'est supprimé)" \
+      journal "Dernières actions et connexions (journal d'audit)") || return 0
     case $c in
       backup) ctl_box "Sauvegarde" seedboxctl backup create ;;
       steps)  ctl_box "Étapes" seedboxctl steps retry ;;
       check)  ctl_box "Contrôle de santé" seedboxctl check ;;
       auth)   seedboxctl auth code > "/run/seedbox-auth.$$" 2>&1; W --title "Codes de vérification" --scrolltext --textbox "/run/seedbox-auth.$$" 20 78; rm -f "/run/seedbox-auth.$$" ;;
+      offsite)     ctl_box "Copie hors du serveur" seedboxctl offsite push ;;
+      restoretest) ctl_box "Test de restauration" seedboxctl offsite restore-test ;;
+      invite)      label=$(input "Invitation" "Nom de l'invitation (pour vous y retrouver) :" "") || continue
+                   HOST_ADDR=$(hostname -I | awk '{print $1}') seedboxctl guests create --label "$label" --days 7 --uses 1 --by menu <<<"{}" 2>&1 | HOST_ADDR=$(hostname -I | awk '{print $1}') python3 -c 'import json,sys
+import os; d=json.load(sys.stdin); print("Lien (affiché une seule fois) :\n\nhttps://" + os.environ["HOST_ADDR"] + d["path"])' > "/run/seedbox-invite.$$" 2>&1
+                   W --title "Invitation" --textbox "/run/seedbox-invite.$$" 12 78; rm -f "/run/seedbox-invite.$$" ;;
+      cleanup)     ctl_box "Analyse" seedboxctl cleanup scan ;;
+      journal)     seedboxctl audit show --limit 40 > "/run/seedbox-audit.$$" 2>&1; W --title "Journal d'audit" --scrolltext --textbox "/run/seedbox-audit.$$" 22 110; rm -f "/run/seedbox-audit.$$" ;;
       twofa)  mode=$(W --title "Double authentification" --menu "Mode actuel : $(seedboxctl auth show 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])')" 12 76 3 \
                 none "Aucune" admins "Administrateurs seulement" all "Tous les comptes") || continue
               ctl_box "Double authentification" seedboxctl auth 2fa "$mode" ;;
@@ -522,7 +535,7 @@ for s in json.load(sys.stdin)["services"]:
 }
 
 menu_appliance() {
-  local c token repo ref
+  local c token repo ref mode
   while :; do
     c=$(W --title "Mise à jour de l'appliance" --ok-button "Valider" --cancel-button "Retour" --menu "$(seedboxctl appliance status 2>/dev/null | python3 -c 'import json,sys
 d=json.load(sys.stdin); i=d["installed"]; c=d.get("check") or {}
@@ -531,6 +544,7 @@ print("Version", i["version"], (i["commit"] or "")[:7], "-", ("mise à jour disp
       apply "Installer la dernière version (GitHub, sans ISO)" \
       rollback "Annuler la dernière mise à jour" \
       source "Dépôt et branche suivis" \
+      channel "Canal : versions publiées (stable) ou dernier commit (dev)" \
       token "Enregistrer le jeton GitHub (dépôt privé)") || return 0
     case $c in
       check) ctl_box "Recherche" seedboxctl appliance check ;;
@@ -539,6 +553,9 @@ print("Version", i["version"], (i["commit"] or "")[:7], "-", ("mise à jour disp
       source) repo=$(input "Dépôt" "Dépôt GitHub (propriétaire/dépôt) :" "$(seedboxctl appliance source | python3 -c 'import json,sys; print(json.load(sys.stdin)["repo"])')") || continue
               ref=$(input "Branche" "Branche ou étiquette :" "$(seedboxctl appliance source | python3 -c 'import json,sys; print(json.load(sys.stdin)["ref"])')") || continue
               seedboxctl appliance source --repo "$repo" --ref "$ref" && msg "Source" "Source enregistrée." 8 ;;
+      channel) mode=$(W --title "Canal" --menu "Canal actuel : $(seedboxctl appliance source | python3 -c 'import json,sys; print(json.load(sys.stdin)["channel"])')" 12 76 2 \
+                 stable "Versions publiées (étiquettes v…) : recommandé" dev "Dernier commit de la branche suivie") || continue
+               seedboxctl appliance source --channel "$mode" && msg "Canal" "Canal enregistré : $mode." 8 ;;
       token) token=$(pass "Jeton GitHub" "Jeton GitHub en lecture seule :") || continue
              printf '%s\n' "$token" | seedboxctl p2p token && msg "Jeton" "Jeton enregistré." 8 ;;
     esac

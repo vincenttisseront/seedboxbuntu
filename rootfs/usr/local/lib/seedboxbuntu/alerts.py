@@ -26,7 +26,7 @@ STATE_FILE = ctl.STATE / "alerts-state.json"
 MASK = "********"
 SECRET_FIELDS = {"ntfy": ("token",), "discord": ("webhook",), "webhook": ("url", "secret"), "email": ("password",)}
 DEFAULTS = {
-    "enabled": True, "disk_percent": 85, "repeat_hours": 6,
+    "enabled": True, "disk_percent": 85, "repeat_hours": 6, "forecast_days": 14,
     "ntfy": {"url": "https://ntfy.sh", "topic": "", "token": ""},
     "discord": {"webhook": ""},
     "webhook": {"url": "", "secret": ""},
@@ -75,7 +75,7 @@ def validate(values):
     cfg = settings()
     if "enabled" in values:
         cfg["enabled"] = bool(values["enabled"])
-    for key, low, high in (("disk_percent", 50, 99), ("repeat_hours", 1, 168)):
+    for key, low, high in (("disk_percent", 50, 99), ("repeat_hours", 1, 168), ("forecast_days", 0, 90)):
         if key in values:
             try:
                 cfg[key] = max(low, min(int(values[key]), high))
@@ -246,6 +246,16 @@ def findings(cfg=None):
         percent = round(100 * (total - free) / total) if total else 0
         if percent >= cfg["disk_percent"]:
             found[f"disque:{path}"] = (f"Disque presque plein : {label}", f"{percent} % utilisés, {free // (1 << 30)} Go libres ({path}).", "critical" if percent >= 95 else "warning")
+    if cfg["forecast_days"]:
+        try:
+            for item in ctl.metrics().risky(cfg["forecast_days"]):
+                found[f"prevision:{item['path']}"] = (
+                    f"Disque plein dans environ {max(1, round(item['days']))} jour(s) : {item['path']}",
+                    f"Le disque se remplit de {item['per_day'] / (1 << 30):.1f} Go par jour ; il serait plein vers le {item['full_on']} "
+                    f"({(item['total'] - item['used']) // (1 << 30)} Go libres). Voir Système > Historique, ou lancez l'assistant de nettoyage.",
+                    "critical" if item["days"] < 3 else "warning")
+        except (ctl.SeedboxError, OSError, ValueError, KeyError):
+            pass
     pending = ctl.STATE / "upgrade-pending"
     if pending.exists() and time.time() - pending.stat().st_mtime > 900:
         found["mise-a-jour"] = ("Mise à jour de l'appliance bloquée", "Elle échoue depuis plus de 15 minutes : voir Applications > Configuration et mises à jour.", "warning")

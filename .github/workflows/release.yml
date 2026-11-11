@@ -1,0 +1,46 @@
+# Publie une version : étiquette « vAAAA.MM.JJ » ou « vX.Y.Z » poussée -> manifeste signé joint à la release.
+# Les serveurs du canal « stable » installent la dernière release ; avec une clé de confiance enregistrée,
+# ils vérifient la signature et l'empreinte de chaque fichier avant d'installer.
+#
+# Secret du dépôt (facultatif mais conseillé) : RELEASE_SIGNING_KEY = clé privée SSH ed25519 dédiée
+#   ssh-keygen -t ed25519 -f seedboxbuntu-release -C "release" -N ""
+# Clé publique (seedboxbuntu-release.pub) à enregistrer dans la console de chaque serveur.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: pip install pyyaml
+      - name: Tests
+        run: tests/run.sh
+      - name: Manifeste
+        run: python3 tools/manifest.py build --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" > manifest.json
+      - name: Signature
+        env:
+          KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            umask 077; printf '%s\n' "$KEY" > "$RUNNER_TEMP/release.key"
+            python3 tools/manifest.py sign manifest.json --key "$RUNNER_TEMP/release.key"
+            rm -f "$RUNNER_TEMP/release.key"
+          else
+            echo "RELEASE_SIGNING_KEY absent : version publiée sans signature"
+          fi
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=(manifest.json); [ -f manifest.json.sig ] && files+=(manifest.json.sig)
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes --title "$GITHUB_REF_NAME"
