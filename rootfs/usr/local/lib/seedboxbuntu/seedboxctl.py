@@ -53,6 +53,15 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl linkcheck                       contrôle des liens entre les applications de la pile
   seedboxctl peoplereport show|set|send      bilan du mois par personne
   seedboxctl titleshare list|create|revoke|tick   partager un seul titre, pour une durée limitée
+  seedboxctl libscan show|scan                relevé des bibliothèques Radarr et Sonarr, par partage
+  seedboxctl libmap show                      carte des bibliothèques et versions multiples
+  seedboxctl copyaudit show|scan|relink       copies cachées entre téléchargements et médiathèque
+  seedboxctl replacer show|search|apply|...   remplacer un média par une meilleure version, sous budget d'espace
+  seedboxctl mediaslim show|add|run|...       recompression x265 et retrait des pistes inutiles
+  seedboxctl shareprofile show|set|apply      un profil de qualité par partage
+  seedboxctl relocate show|move               déplacer les titres inactifs entre partages
+  seedboxctl seedopt show|rule|retire|...     optimisation des seeds, analyse par tracker
+  seedboxctl llm show|set|test|explain        connecteur vers un serveur Ollama externe
   seedboxctl vpnwatch show|set|tick          surveillance du VPN (fuite, changement d'adresse)
   seedboxctl house                           état d'ensemble pour l'écran « maison »
 """
@@ -395,6 +404,42 @@ def vpnwatch():
 
 def house():
     return _lazy("house")
+
+
+def libscan():
+    return _lazy("libscan")
+
+
+def libmap():
+    return _lazy("libmap")
+
+
+def copyaudit():
+    return _lazy("copyaudit")
+
+
+def replacer():
+    return _lazy("replacer")
+
+
+def mediaslim():
+    return _lazy("mediaslim")
+
+
+def shareprofile():
+    return _lazy("shareprofile")
+
+
+def relocate():
+    return _lazy("relocate")
+
+
+def seedopt():
+    return _lazy("seedopt")
+
+
+def llm():
+    return _lazy("llm")
 
 
 def backupdiff():
@@ -2687,6 +2732,14 @@ def restart():
     return errors
 
 
+def _cli_value(text):
+    """Valeur de ligne de commande : nombre, booléen ou liste JSON si elle y ressemble, sinon le texte."""
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
 def locked(function):
     def wrapper(*args, **kwargs):
         STATE.mkdir(parents=True, exist_ok=True)
@@ -2865,6 +2918,70 @@ def main():
     vw_set.add_argument("--auto-stop", dest="auto_stop", action="store_true")
     vw_set.add_argument("--no-auto-stop", dest="no_auto_stop", action="store_true")
     commands.add_parser("house", help="état d'ensemble pour l'écran maison")
+    ls = commands.add_parser("libscan", help="relevé des bibliothèques").add_subparsers(dest="action", required=True)
+    for name in ("show", "scan"):
+        ls.add_parser(name)
+    commands.add_parser("libmap", help="carte des bibliothèques").add_subparsers(dest="action", required=True).add_parser("show")
+    ca = commands.add_parser("copyaudit", help="copies cachées").add_subparsers(dest="action", required=True)
+    for name in ("show", "scan"):
+        ca.add_parser(name)
+    ca.add_parser("relink").add_argument("paths", nargs="+")
+    rp = commands.add_parser("replacer", help="remplacements sous budget").add_subparsers(dest="action", required=True)
+    rp.add_parser("show")
+    rp.add_parser("search").add_argument("count", nargs="?", type=int, default=None)
+    rp.add_parser("apply").add_argument("ids", nargs="+")
+    rp.add_parser("safety-on").add_argument("days", nargs="?", type=int, default=None)
+    rp_set = rp.add_parser("set")
+    rp_set.add_argument("key")
+    rp_set.add_argument("value")
+    ms = commands.add_parser("mediaslim", help="alléger les fichiers").add_subparsers(dest="action", required=True)
+    for name in ("show", "run", "clear"):
+        ms.add_parser(name)
+    ms_add = ms.add_parser("add")
+    ms_add.add_argument("kind", choices=("recompress", "tracks"))
+    ms_add.add_argument("paths", nargs="+")
+    ms.add_parser("remove").add_argument("id")
+    ms_set = ms.add_parser("set")
+    ms_set.add_argument("key")
+    ms_set.add_argument("value")
+    sp = commands.add_parser("shareprofile", help="profil de qualité par partage").add_subparsers(dest="action", required=True)
+    sp.add_parser("show")
+    sp_set = sp.add_parser("set")
+    sp_set.add_argument("app")
+    sp_set.add_argument("volume")
+    sp_set.add_argument("profile", type=int)
+    sp_unset = sp.add_parser("unset")
+    sp_unset.add_argument("app")
+    sp_unset.add_argument("volume")
+    sp.add_parser("auto").add_argument("mode", choices=("on", "off"))
+    sp.add_parser("apply").add_argument("app", nargs="?", default=None)
+    rl = commands.add_parser("relocate", help="déplacer les titres inactifs").add_subparsers(dest="action", required=True)
+    rl.add_parser("show").add_argument("volume", nargs="?", default=None)
+    rl_move = rl.add_parser("move")
+    rl_move.add_argument("app")
+    rl_move.add_argument("volume_from")
+    rl_move.add_argument("volume_to")
+    rl_move.add_argument("ids", nargs="+", type=int)
+    so = commands.add_parser("seedopt", help="optimisation des seeds").add_subparsers(dest="action", required=True)
+    so.add_parser("show").add_argument("--tracker", default=None)
+    for name in ("rules", "sample"):
+        so.add_parser(name)
+    so_rule = so.add_parser("rule")
+    so_rule.add_argument("tracker")
+    so_rule.add_argument("ratio", type=float)
+    so_rule.add_argument("hours", type=int)
+    so.add_parser("unrule").add_argument("tracker")
+    so.add_parser("reannounce").add_argument("hashes", nargs="+")
+    so_retire = so.add_parser("retire")
+    so_retire.add_argument("hashes", nargs="+")
+    so_retire.add_argument("--delete-files", dest="delete_files", action="store_true")
+    lm = commands.add_parser("llm", help="connecteur Ollama").add_subparsers(dest="action", required=True)
+    for name in ("show", "test"):
+        lm.add_parser(name)
+    lm_set = lm.add_parser("set")
+    lm_set.add_argument("key")
+    lm_set.add_argument("value")
+    lm.add_parser("explain").add_argument("topic", choices=("seeds", "library"))
     cfg_cmd = commands.add_parser("config", help="export et import des réglages de la console").add_subparsers(dest="action", required=True)
     cfg_export = cfg_cmd.add_parser("export")
     cfg_export.add_argument("--secrets", action="store_true", help="inclut les secrets des canaux d'alerte")
@@ -3446,6 +3563,93 @@ def main():
             module.save(values)
     elif args.command == "house":
         print(json.dumps(house().overview(), indent=2, ensure_ascii=False))
+    elif args.command == "libscan":
+        module = libscan()
+        if args.action == "show":
+            data = module.load()
+            print(json.dumps({"at": data.get("at"), "files": len(data["records"]), "errors": data.get("errors")}, ensure_ascii=False))
+        else:
+            module.scan()
+    elif args.command == "libmap":
+        print(json.dumps(libmap().overview(), indent=2, ensure_ascii=False))
+    elif args.command == "copyaudit":
+        module = copyaudit()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "scan":
+            module.scan()
+        else:
+            print(json.dumps(locked(module.relink)(args.paths), ensure_ascii=False))
+    elif args.command == "replacer":
+        module = replacer()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "search":
+            module.search(args.count)
+        elif args.action == "apply":
+            print(json.dumps(locked(module.apply)(args.ids), ensure_ascii=False))
+        elif args.action == "safety-on":
+            print(json.dumps(locked(module.enable_safety)(args.days), ensure_ascii=False))
+        else:
+            module.save({args.key: _cli_value(args.value)})
+    elif args.command == "mediaslim":
+        module = mediaslim()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "add":
+            print(json.dumps(module.add(args.kind, args.paths), ensure_ascii=False))
+        elif args.action == "remove":
+            module.remove(args.id)
+        elif args.action == "clear":
+            module.clear()
+        elif args.action == "set":
+            module.save({args.key: _cli_value(args.value)})
+        else:
+            module.run()
+    elif args.command == "shareprofile":
+        module = shareprofile()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            module.set_profile(args.app, args.volume, args.profile)
+        elif args.action == "unset":
+            module.unset_profile(args.app, args.volume)
+        elif args.action == "auto":
+            module.set_auto(args.mode == "on")
+        else:
+            print(json.dumps(locked(module.apply)(args.app), ensure_ascii=False))
+    elif args.command == "relocate":
+        module = relocate()
+        if args.action == "show":
+            print(json.dumps(module.overview(args.volume), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(locked(module.move)(args.app, args.volume_to, args.ids, volume_from=args.volume_from), ensure_ascii=False))
+    elif args.command == "seedopt":
+        module = seedopt()
+        if args.action == "show":
+            print(json.dumps(module.overview(args.tracker), indent=2, ensure_ascii=False))
+        elif args.action == "rules":
+            print(json.dumps(module.settings(), indent=2, ensure_ascii=False))
+        elif args.action == "rule":
+            module.set_rule(args.tracker, args.ratio, args.hours)
+        elif args.action == "unrule":
+            module.unset_rule(args.tracker)
+        elif args.action == "reannounce":
+            module.reannounce(args.hashes)
+        elif args.action == "retire":
+            module.retire(args.hashes, args.delete_files)
+        else:
+            print(module.sample(force=True))
+    elif args.command == "llm":
+        module = llm()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            module.save({args.key: _cli_value(args.value)})
+        elif args.action == "test":
+            print(json.dumps(module.test(), indent=2, ensure_ascii=False))
+        else:
+            print(module.explain(args.topic)["text"])
     elif args.command == "netcheck":
         netcheck().show()
     elif args.command == "vacation":

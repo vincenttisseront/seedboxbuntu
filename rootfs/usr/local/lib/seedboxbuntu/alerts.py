@@ -304,7 +304,8 @@ def load_state():
 
 def housekeeping():
     """Tâches du passage de 5 minutes qui ne dépendent pas des alertes : fin du mode vacances, tâches reportées par la fenêtre de maintenance."""
-    for loader in (ctl.vacation, ctl.maintwindow, ctl.bandwidth, ctl.catalogexport, ctl.changelog, ctl.diskusage, ctl.peoplereport, ctl.titleshare, ctl.vpnwatch):
+    for loader in (ctl.vacation, ctl.maintwindow, ctl.bandwidth, ctl.catalogexport, ctl.changelog, ctl.diskusage, ctl.peoplereport, ctl.titleshare, ctl.vpnwatch,
+                   ctl.libscan, ctl.mediaslim, ctl.shareprofile, ctl.seedopt):
         try:
             loader().tick()
         except Exception as error:  # noqa: BLE001 - une tâche en échec ne doit pas empêcher la surveillance

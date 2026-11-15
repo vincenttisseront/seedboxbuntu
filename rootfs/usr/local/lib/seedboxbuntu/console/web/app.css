@@ -385,3 +385,4 @@ body.kiosk .tiles{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1
 .spark{width:90px;height:24px;display:block}
 .spark .line{fill:none;stroke:var(--c0);stroke-width:1.5;stroke-linejoin:round}
 #vacation-banner{margin:0;border-radius:0;justify-content:center}
+.pre-wrap{white-space:pre-wrap}

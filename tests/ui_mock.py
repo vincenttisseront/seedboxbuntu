@@ -129,6 +129,66 @@ def route(p, q, role="admin", PREFS=None):
     if p == "/api/titleshare/search": return {"results": [{"id": 12, "title": "Dune", "year": 2021}, {"id": 13, "title": "Dune : deuxième partie", "year": 2024}]}
     if p == "/api/vpnwatch": return {"settings": {"enabled": True, "auto_stop": False}, "mode": "vpn", "checked": now - 120, "exit": "203.0.113.5", "leak": False, "stopped": False,
         "history": [{"at": now - 86400, "title": "Adresse de sortie du VPN changée", "detail": "203.0.113.4 → 203.0.113.5"}]}
+    if p == "/api/library": return {"at": now - 3600, "files": 412, "errors": {}, "scanning": False, "volumes": [
+        {"volume": "local", "files": 300, "titles": 180, "size": 2.1e12, "mb_per_min": 58.2, "total": 4e12, "free": 1.1e12,
+         "resolutions": [{"label": "1080p", "files": 200, "size": 1.4e12}, {"label": "4K", "files": 20, "size": 5e11}, {"label": "720p", "files": 80, "size": 2e11}],
+         "codecs": [{"label": "x264 (AVC)", "files": 240, "size": 1.6e12}, {"label": "x265 (HEVC)", "files": 60, "size": 5e11}]},
+        {"volume": "nas", "files": 112, "titles": 64, "size": 9e11, "mb_per_min": 31.5, "total": 2e13, "free": 1.6e13,
+         "resolutions": [{"label": "720p", "files": 90, "size": 6e11}, {"label": "1080p", "files": 22, "size": 3e11}], "codecs": [{"label": "x265 (HEVC)", "files": 112, "size": 9e11}]}],
+        "versions": [{"kind": "film", "title": "Dune", "year": 2021, "saving": 4e9, "files": [
+            {"path": "/data/media/films/Dune/dune.mkv", "size": 9e9, "quality": "Bluray-1080p", "volume": "local", "app": "radarr"},
+            {"path": "/data/media/films/Dune (2)/dune.mkv", "size": 5e9, "quality": "WEBDL-1080p", "volume": "local", "app": "radarr"}]}], "versions_total": 1, "versions_saving": 4e9}
+    if p == "/api/copyaudit": return {"at": now - 7200, "walked": 1200, "total": 2, "saving": 9e9, "blocked": 3e9, "items": [
+        {"download": "/mnt/storage/downloads/Dune.2021.1080p.mkv", "media": "/mnt/storage/media/films/Dune/dune.mkv", "size": 9e9, "title": "Dune", "same_disk": True},
+        {"download": "/mnt/storage/downloads/Alien.mkv", "media": "/mnt/shares/nas/Films/Alien/alien.mkv", "size": 3e9, "title": "Alien", "same_disk": False}]}
+    if p == "/api/shareprofile": return {"settings": {"mapping": {"radarr": {"nas": 2}, "sonarr": {}}, "auto": False}, "errors": {},
+        "profiles": {"radarr": [{"id": 1, "name": "HD-1080p"}, {"id": 2, "name": "Archive 720p"}], "sonarr": [{"id": 1, "name": "HD-1080p"}]},
+        "volumes": {"radarr": {"local": {"titles": 180, "wrong": 0, "wanted": None, "profiles": {"HD-1080p": 180}},
+                               "nas": {"titles": 64, "wrong": 12, "wanted": 2, "profiles": {"HD-1080p": 12, "Archive 720p": 52}}},
+                    "sonarr": {"nas": {"titles": 20, "wrong": 0, "wanted": None, "profiles": {"HD-1080p": 20}}}}}
+    if p == "/api/relocate": return {"settings": {"idle_days": 365, "min_free_gb": 100}, "volumes": ["local", "nas"], "volume": "local", "history": True, "reliable": True,
+        "total": 2, "reclaim": 5e9, "roots": {"local": ["radarr", "sonarr"], "nas": ["radarr"]}, "candidates": [
+        {"app": "radarr", "id": 3, "title": "Metropolis", "size": 5e9, "reclaim": 5e9, "files": 1, "last_played": 0, "added": "2019-05-05"},
+        {"app": "radarr", "id": 9, "title": "Nosferatu", "size": 3e9, "reclaim": 0, "files": 1, "last_played": now - 500 * 86400, "added": "2020-01-01"}]}
+    if p == "/api/replacer":
+        proposal = {"id": "radarr:2", "app": "radarr", "cid": 2, "title": "Alien", "volume": "nas", "reason": "sous le seuil", "gain": 130, "why": "résolution 720 → 1080 ; encodage plus récent (x265)",
+                    "delta": 1e8, "cur": {"size": 2e9, "quality": "HDTV-720p", "resolution": 720, "codec": "h264", "path": "/shares/nas/Films/Alien/alien.mkv"},
+                    "release": {"guid": "g1", "indexer_id": 3, "indexer": "Indexeur A", "title": "Alien.1979.1080p.BluRay.x265", "size": 2.1e9, "quality": "Bluray-1080p",
+                                "resolution": 1080, "seeders": 14, "age": 3, "protocol": "torrent", "codec": "x265", "rejections": []}}
+        late = dict(proposal, id="radarr:5", title="Heat", delta=4e9, volume="local", defer="budget de croissance dépassé", release=dict(proposal["release"], size=6e9))
+        return {"settings": {"max_growth_pct": 10, "min_seeders": 2, "per_run": 10, "budget_gb": 50, "keep_free_gb": 100, "recycle_days": 14, "recycle_path": "/data/corbeille-medias", "budgets": {"nas": 200}},
+                "at": now - 1800, "searched": 10, "errors": [], "free": {"local": 1.1e12, "nas": 1.6e13},
+                "plan": {"selected": [proposal], "deferred": [late], "growth": 1e8, "peak": 2.1e9, "final": 1e8},
+                "safety": {"apps": {"radarr": {"path": "/data/corbeille-medias", "days": 14, "ok": True}, "sonarr": {"path": "/data/corbeille-medias", "days": 14, "ok": True}}, "ok": True, "size": 2.5e9}}
+    if p == "/api/mediaslim": return {"settings": {"window_start": 1, "window_end": 7, "keep_audio": ["fra", "eng"], "keep_subs": ["fra", "eng"], "crf": 24, "preset": "medium", "trash_days": 14, "include_linked": False},
+        "running": False, "saved": 4e9, "queue": [
+            {"id": "a1", "kind": "recompress", "path": "/data/media/films/Heat/heat.mkv", "title": "Heat", "state": "attente", "size": 12e9, "added": now - 3600},
+            {"id": "a2", "kind": "tracks", "path": "/data/media/films/Dune/dune.mkv", "title": "Dune", "state": "fait", "size": 9e9, "saved": 4e9, "detail": "9100 Mo -> 5100 Mo", "finished": now - 86400}],
+        "candidates": [{"kind": "recompress", "path": "/data/media/films/Gladiator/g.mkv", "title": "Gladiator", "volume": "local", "size": 11e9, "codec": "h264", "linked": False, "queued": False,
+                        "estimate": 3.8e9, "potential": 3.8e9, "why": "Bluray-1080p en x264 : environ 3 Go de moins en x265"},
+                       {"kind": "tracks", "path": "/data/media/films/Ran/r.mkv", "title": "Ran", "volume": "nas", "size": 6e9, "codec": "h264", "linked": True, "queued": False,
+                        "estimate": 0, "potential": 5e8, "why": "5 pistes audio, dont 2 dans des langues non gardées"}]}
+    if p == "/api/seedopt":
+        row = lambda n, cls, **k: dict({"hash": f"{n:040x}", "name": f"Sample.Torrent.{n}.1080p", "tracker": "prive.exemple", "size": 12e9, "up7": 2e9, "up30": 9e9, "covered": 12, "class": cls, "age": 40.0,
+                                        "seeds": 14, "leechers": 2, "ratio": 1.6, "state": "stalledUP", "category": "films", "protected": cls == "protégé"}, **k)
+        private = {"tracker": "prive.exemple", "torrents": 120, "size": 1.2e12, "uploaded": 1.4e12, "downloaded": 1.0e12, "up7": 8e10, "up30": 2.9e11, "covered": 12, "ratio": 1.4, "goal": 1.0,
+                   "efficiency": .241, "eta_days": 0, "covered_ok": True, "rule": {"min_ratio": 1.0, "min_hours": 72},
+                   "classes": [{"class": "utile", "torrents": 70, "size": 8e11}, {"class": "rare", "torrents": 6, "size": 6e10}, {"class": "attendu mais muet", "torrents": 3, "size": 3e10},
+                               {"class": "sans valeur", "torrents": 4, "size": 4e10}, {"class": "protégé", "torrents": 8, "size": 9e10}],
+                   "buckets": [{"label": "moins de 7 jours", "torrents": 8, "size": 9e10, "up30": 4e10}, {"label": "7 à 30 jours", "torrents": 30, "size": 3e11, "up30": 1.5e11},
+                               {"label": "1 à 3 mois", "torrents": 50, "size": 5e11, "up30": 8e10}, {"label": "plus de 3 mois", "torrents": 32, "size": 3e11, "up30": 2e10}],
+                   "top": [row(1, "utile", up30=3e10), row(2, "rare", up30=2e10, seeds=1, leechers=4)],
+                   "advice": ["3 torrent(s) ont des demandeurs dans l'essaim mais n'envoient rien : une réannonce peut les relancer.", "4 torrent(s) n'ont rien envoyé depuis la période d'inactivité et n'ont aucun demandeur : 40 Go de partage inutile, retirables sans risque pour les règles du tracker."]}
+        public = dict(private, tracker="public.exemple", torrents=28, size=2e11, up7=1e9, up30=5e9, ratio=0.3, goal=None, eta_days=None, rule=None, efficiency=.023, classes=[{"class": "normal", "torrents": 28, "size": 2e11}],
+                      top=[row(7, "normal", tracker="public.exemple", up30=1e9)], advice=["Rien à signaler."])
+        return {"available": True, "torrents": 148, "history_days": 12, "settings": {"rules": {"prive.exemple": {"min_ratio": 1.0, "min_hours": 72}}, "idle_days": 30, "idle_pct": 1.0},
+                "trackers": [private, public], "retirable_total": 4, "retirable_size": 4e10, "retirable_unique": 0,
+                "retirable": [row(4, "sans valeur", up30=0, up7=0, all_linked=True, unique=0, age=120.0), row(5, "sans valeur", up30=0, up7=0, all_linked=False, unique=1.2e10, age=90.0)],
+                "silent": [row(3, "attendu mais muet", up30=0, leechers=5)]}
+    if p == "/api/llm": return {"settings": {"enabled": True, "url": "http://192.168.1.50:11434", "model": "llama3.1:8b", "timeout": 180, "send_titles": False, "send_trackers": False,
+                                              "verify_tls": True, "temperature": 0.2, "has_token": False},
+                                "last": {"topic": "seeds", "at": now - 600, "model": "llama3.1:8b", "prompt_chars": 900,
+                                         "text": "Le tracker A rapporte le plus : 70 torrents utiles pour 290 Go envoyés en 30 jours. Trois torrents attendus mais muets méritent une réannonce."}}
     if p == "/api/vacation": return {"active": False, "until": 0, "started": 0, "by": "", "paused": 0, "max_days": 120, "qbittorrent": True}
     if p == "/api/push": return {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 2}
     if p == "/api/messages-language": return {"notify": "fr", "choices": ["fr", "en"]}
@@ -275,6 +335,18 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith(("/api/bandwidth/settings", "/api/ratio/settings", "/api/catalogexport/settings")): return self.send(200, {"settings": body})
         if self.path.endswith("/api/push/unsubscribe"): return self.send(200, {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 1})
         if self.path.endswith("/guests/invite"): return self.send(200, {"id": "ab12", "token": "T" * 32, "path": "/invite/" + "T" * 32, "expires": now + 86400 * 7})
+        if self.path.endswith("/api/copyaudit/relink"): return self.send(200, {"done": 1, "saved": 9e9, "skipped": []})
+        if self.path.endswith("/api/replacer/apply"): return self.send(200, {"done": 1, "skipped": []})
+        if self.path.endswith("/api/replacer/safety"): return self.send(200, {"ok": True})
+        if self.path.endswith("/api/mediaslim/add"): return self.send(200, {"added": 1})
+        if self.path.endswith(("/api/mediaslim/remove", "/api/mediaslim/clear")): return self.send(200, {"removed": 1})
+        if self.path.endswith("/api/shareprofile/apply"): return self.send(200, {"changed": {"radarr": 12, "sonarr": 0}})
+        if self.path.endswith("/api/relocate/move"): return self.send(200, {"moved": 1, "bytes": 5e9, "root": "/shares/nas/Films"})
+        if self.path.endswith("/api/seedopt/reannounce"): return self.send(200, {"done": 1})
+        if self.path.endswith("/api/seedopt/retire"): return self.send(200, {"done": 1, "bytes": 1e10})
+        if self.path.endswith("/api/llm/test"): return self.send(200, {"ok": True, "version": "0.5.1", "models": [{"name": "llama3.1:8b", "size": 4e9}, {"name": "mistral:latest", "size": 3e9}], "model_ok": True, "ms": 120})
+        if self.path.endswith(("/api/replacer/settings", "/api/mediaslim/settings", "/api/shareprofile/set", "/api/shareprofile/unset", "/api/shareprofile/auto", "/api/relocate/settings",
+                               "/api/seedopt/rule", "/api/seedopt/unrule", "/api/seedopt/thresholds", "/api/llm/settings")): return self.send(200, {"settings": body})
         if "/jobs/" in self.path: return self.send(200, {})
         self.send(200, {"job": "j1"})
 def serve(port=8766, background=False, role="admin", prefs=None):

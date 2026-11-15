@@ -718,6 +718,177 @@
     </div>
   </section>
 
+  <section id="view-library" class="view hidden">
+    <header class="page-head"><div><h1>Bibliothèques</h1><p class="sub">Où part l’espace, partage par partage : volumes, résolutions, encodages, versions multiples et copies cachées ; un profil de qualité par partage ; le déplacement des titres que personne ne regarde plus. Tout vient d’un relevé de Radarr et Sonarr, refait chaque nuit.</p></div><div class="actions"><button id="library-ai" class="btn" type="button">Demander un avis à l’IA</button><button id="library-scan" class="btn" type="button">Analyser les bibliothèques</button></div></header>
+    <div id="library-state" class="notice info"></div>
+    <div id="library-avis" class="notice info hidden">
+      <p class="small muted">Avis indicatif d’un modèle externe, d’après des chiffres seulement : il ne remplace pas les tableaux ci-dessous.</p>
+      <p id="library-avis-texte" class="pre-wrap no-i18n"></p>
+    </div>
+    <div class="card" id="library-map-card">
+      <h2>Carte par partage</h2>
+      <p class="muted small">Le disque local et chaque partage réseau : combien de titres, combien d’espace, quelle résolution, quel encodage. Le débit moyen (Mo par minute de vidéo) repère les volumes remplis de fichiers très lourds ou très compressés.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Volumes de bibliothèque"><table>
+        <thead><tr><th>Volume</th><th>Titres</th><th>Espace pris</th><th>Libre</th><th>Mo par minute</th><th>Résolutions</th><th>Encodages</th></tr></thead>
+        <tbody id="library-volumes"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="multiver-card">
+      <h2>Versions multiples</h2>
+      <p id="versions-summary" class="muted small"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Titres en plusieurs versions"><table>
+        <thead><tr><th>Titre</th><th>Versions</th><th>Espace récupérable</th></tr></thead>
+        <tbody id="multiver-list"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="copyaudit-card">
+      <div class="card-head"><h2>Copies cachées</h2><div class="row"><button id="copyaudit-scan" class="btn" type="button">Analyser</button><button id="copyaudit-relink" class="btn primary" type="button">Relier la sélection</button></div></div>
+      <p class="muted small">Un fichier présent deux fois, dans les téléchargements et dans la médiathèque, alors qu’un lien dur suffirait. « Relier » remplace la copie des téléchargements par un lien vers le fichier de la médiathèque, après comparaison octet par octet : le torrent continue de partager, l’espace de la copie est récupéré, le fichier de la médiathèque n’est jamais touché.</p>
+      <p id="copyaudit-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Copies cachées"><table>
+        <thead><tr><th></th><th>Fichier des téléchargements</th><th>Titre</th><th>Taille</th><th>Lien possible</th></tr></thead>
+        <tbody id="copyaudit-list"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="shareprofile-card">
+      <div class="card-head"><h2>Profil de qualité par partage</h2><button id="shareprofile-apply" class="btn primary" type="button">Appliquer</button></div>
+      <p class="muted small">Radarr et Sonarr rattachent un profil à chaque titre. Ici, vous choisissez le profil de chaque volume (un partage « enfants » plafonné, un partage « archive » léger) : « Appliquer » met les titres existants au profil voulu. Aucun fichier n’est téléchargé ni supprimé ; ce que les applications chercheront ensuite change.</p>
+      <label class="check"><input id="shareprofile-auto" type="checkbox">Appliquer aussi aux nouveaux titres, chaque heure</label>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Profils par volume"><table>
+        <thead><tr><th>Application</th><th>Volume</th><th>Titres</th><th>Profils actuels</th><th>Profil voulu</th><th>À corriger</th></tr></thead>
+        <tbody id="shareprofile-list"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="relocate-card">
+      <div class="card-head"><h2>Déplacer les titres inactifs</h2><button id="relocate-move" class="btn primary" type="button">Déplacer la sélection</button></div>
+      <p class="muted small">Les titres que personne n’a lus depuis longtemps n’ont pas besoin du disque rapide. Radarr ou Sonarr déplacent eux-mêmes le titre vers un dossier racine du volume d’arrivée. L’espace libéré annoncé ne compte que les fichiers sans lien avec un torrent encore partagé. L’historique est celui de Jellyfin ; une copie entre deux disques est longue.</p>
+      <div class="split">
+        <label>Volume de départ<select id="relocate-volume"></select></label>
+        <label>Volume d’arrivée<select id="relocate-target"></select></label>
+      </div>
+      <form id="relocate-form" class="row">
+        <label>Inactif depuis (jours)<input name="idle_days" type="number" min="30" max="3650"></label>
+        <button class="btn" type="submit">Enregistrer</button>
+      </form>
+      <p id="relocate-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Titres inactifs"><table>
+        <thead><tr><th></th><th>Titre</th><th>Espace</th><th>Libéré réellement</th><th>Dernière lecture</th></tr></thead>
+        <tbody id="relocate-list"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="view-upgrades" class="view hidden">
+    <header class="page-head"><div><h1>Remplacements et allègement</h1><p class="sub">Remplacer un média par une meilleure version sans faire exploser l’espace : recherche, budget par volume, corbeille. Alléger les fichiers existants : recompression en x265 et retrait des pistes inutiles, la nuit.</p></div><div class="actions"><button id="replacer-search" class="btn primary" type="button">Rechercher des remplacements</button></div></header>
+    <div class="card" id="replacer-safety-card">
+      <div class="card-head"><h2>Filet : corbeille de Radarr et Sonarr</h2><button id="replacer-safety-on" class="btn" type="button">Activer la corbeille</button></div>
+      <p class="muted small">Aucune version n’est téléchargée sans corbeille active : l’ancien fichier y est déplacé au lieu d’être effacé, et reste récupérable pendant le délai choisi.</p>
+      <p id="replacer-safety" class="notice info"></p>
+    </div>
+    <form id="replacer-form" class="card form">
+      <h2>Règles et budget</h2>
+      <div class="split">
+        <label>Croissance admise (%) à résolution égale<input name="max_growth_pct" type="number" min="0" max="200"></label>
+        <label>Sources minimales (seeders)<input name="min_seeders" type="number" min="0" max="1000"></label>
+      </div>
+      <div class="split">
+        <label>Titres examinés par recherche<input name="per_run" type="number" min="1" max="40"></label>
+        <label>Conservation de la corbeille (jours)<input name="recycle_days" type="number" min="1" max="365"></label>
+      </div>
+      <div class="split">
+        <label>Budget de croissance par défaut (Go)<input name="budget_gb" type="number" min="0" max="100000"></label>
+        <label>Espace libre à préserver (Go)<input name="keep_free_gb" type="number" min="0" max="100000"></label>
+      </div>
+      <label>Budget par volume (Go), par exemple <code>nas=200 local=50</code><input name="budgets" maxlength="200" autocomplete="off"></label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+    <div class="card" id="replacer-card">
+      <div class="card-head"><h2>Propositions</h2><button id="replacer-apply" class="btn primary" type="button">Lancer le remplacement</button></div>
+      <p id="replacer-state" class="notice info"></p>
+      <p id="replacer-sim" class="small"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Propositions de remplacement"><table>
+        <thead><tr><th></th><th>Titre</th><th>Volume</th><th>Actuel</th><th>Proposé</th><th>Écart</th><th>Gain</th><th>Budget</th></tr></thead>
+        <tbody id="replacer-list"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="mediaslim-card">
+      <div class="card-head"><h2>Alléger les fichiers existants</h2><button id="mediaslim-add" class="btn primary" type="button">Ajouter à la file</button></div>
+      <p class="muted small">Recompression d’un film x264 en x265 (plusieurs heures de calcul par film) ou retrait, sans réencodage, des pistes audio et sous-titres dans des langues non voulues. Le traitement a lieu la nuit, un fichier à la fois ; l’original est mis dans une corbeille du même volume, jamais effacé. Un fichier encore lié à un torrent ne libère rien : il n’est pas proposé.</p>
+      <p id="mediaslim-state" class="notice info"></p>
+      <form id="mediaslim-form" class="form">
+        <div class="split">
+          <label>Début de la nuit (heure)<input name="window_start" type="number" min="0" max="23"></label>
+          <label>Fin de la nuit (heure)<input name="window_end" type="number" min="0" max="23"></label>
+        </div>
+        <div class="split">
+          <label>Langues audio gardées<input name="keep_audio" maxlength="60" placeholder="fra eng" autocomplete="off"></label>
+          <label>Langues de sous-titres gardées<input name="keep_subs" maxlength="60" placeholder="fra eng" autocomplete="off"></label>
+        </div>
+        <div class="split">
+          <label>Qualité x265 (CRF, 18 à 30)<input name="crf" type="number" min="18" max="30"></label>
+          <label>Conservation de la corbeille (jours)<input name="trash_days" type="number" min="1" max="365"></label>
+        </div>
+        <button class="btn" type="submit">Enregistrer</button>
+      </form>
+      <h3>Candidats</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Fichiers à alléger"><table>
+        <thead><tr><th></th><th>Titre</th><th>Travail</th><th>Taille</th><th>Gain réel estimé</th></tr></thead>
+        <tbody id="mediaslim-candidates"></tbody>
+      </table></div>
+      <h3>File d’attente</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="File d’allègement"><table>
+        <thead><tr><th>Titre</th><th>Travail</th><th>État</th><th>Gain</th><th></th></tr></thead>
+        <tbody id="mediaslim-queue"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="view-seeds" class="view hidden">
+    <header class="page-head"><div><h1>Optimisation des seeds</h1><p class="sub">Ce que chaque torrent apporte vraiment à chaque tracker : envoyé sur 7 et 30 jours, envoyé par Go stocké, torrents rares, attendus mais muets, sans valeur. Les règles de vos trackers (ratio, durée de partage) protègent ce qui ne doit pas être retiré.</p></div><div class="actions"><button id="seeds-ai" class="btn" type="button">Demander un avis à l’IA</button><button id="seeds-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <div id="seeds-state" class="notice info"></div>
+    <div id="seeds-avis" class="notice info hidden">
+      <p class="small muted">Avis indicatif d’un modèle externe, d’après des chiffres anonymisés : il ne remplace pas les tableaux ci-dessous.</p>
+      <p id="seeds-avis-texte" class="pre-wrap no-i18n"></p>
+    </div>
+    <div class="card" id="seedrules-card">
+      <h2>Règles de vos trackers</h2>
+      <p class="muted small">Indiquez ce que chaque tracker exige : ratio minimal et durée de partage minimale (0 et 0 pour un tracker public). Sans règle déclarée, un tracker n’est jamais proposé au retrait : la console ne devine pas ce que votre tracker exige. Le ratio et les règles du tracker font foi, pas ceux d’ici.</p>
+      <form id="seedrules-form" class="row">
+        <label>Tracker<input name="tracker" maxlength="100" placeholder="tracker.exemple" autocomplete="off" required></label>
+        <label>Ratio minimal<input name="ratio" type="number" min="0" max="100" step="0.1" value="1" required></label>
+        <label>Partage minimal (heures)<input name="hours" type="number" min="0" max="8760" value="72" required></label>
+        <button class="btn primary" type="submit">Ajouter</button>
+      </form>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Règles des trackers"><table>
+        <thead><tr><th>Tracker</th><th>Ratio minimal</th><th>Partage minimal</th><th></th></tr></thead>
+        <tbody id="seedrules-list"></tbody>
+      </table></div>
+      <form id="seedthresholds-form" class="row">
+        <label>Sans valeur après (jours sans envoi)<input name="idle_days" type="number" min="7" max="180"></label>
+        <label>Seuil d’envoi (% de la taille sur la période)<input name="idle_pct" type="number" min="0" max="50" step="0.5"></label>
+        <button class="btn" type="submit">Enregistrer</button>
+      </form>
+    </div>
+    <div id="seeds-trackers"></div>
+    <div class="card" id="seeds-silent-card">
+      <div class="card-head"><h2>Attendus mais muets</h2><button id="seeds-reannounce" class="btn" type="button">Réannoncer la sélection</button></div>
+      <p class="muted small">Des demandeurs attendent dans l’essaim, mais rien n’est envoyé. Une réannonce suffit souvent à relancer le torrent ; elle ne change rien d’autre.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Torrents attendus mais muets"><table>
+        <thead><tr><th></th><th>Torrent</th><th>Tracker</th><th>Taille</th><th>Demandeurs</th></tr></thead>
+        <tbody id="seeds-silent"></tbody>
+      </table></div>
+    </div>
+    <div class="card" id="seeds-retire-card">
+      <div class="card-head"><h2>Sans valeur : retirables</h2><button id="seeds-retire" class="btn danger" type="button">Retirer la sélection</button></div>
+      <p id="seeds-retire-summary" class="muted small"></p>
+      <label class="check"><input id="seeds-delete-files" type="checkbox">Supprimer aussi les fichiers (seulement quand chacun a un autre lien, par exemple dans la médiathèque)</label>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Torrents sans valeur"><table>
+        <thead><tr><th></th><th>Torrent</th><th>Tracker</th><th>Taille</th><th>Espace libéré</th><th>Âge</th></tr></thead>
+        <tbody id="seeds-retire-list"></tbody>
+      </table></div>
+    </div>
+  </section>
+
   <section id="view-settings" class="view hidden">
     <header class="page-head"><div><h1>Paramètres</h1><p class="sub">Mises à jour, double authentification, sécurité de l'hôte et ports.</p></div></header>
     <div id="reboot-notice" class="notice hidden"></div>
@@ -839,6 +1010,25 @@
       <label>Ports supplémentaires<input name="ports" id="ports-extra" placeholder="8080, 51413/udp" autocomplete="off"></label>
       <p class="muted small">Seuls ces ports sont joignables depuis le réseau. Les applications ajoutées dans Dockge qui publient un port doivent y figurer, sinon le garde de l'appliance bloque ce port. En accès direct, le port de partage de qBittorrent (6881) est ouvert automatiquement ; en mode VPN, le trafic torrent passe dans le tunnel et aucun port P2P n'est à ouvrir.</p>
       <button class="btn primary" type="submit">Appliquer</button>
+    </form>
+    <form id="llm-card" class="card form">
+      <h2>Assistant IA externe (Ollama)</h2>
+      <p class="muted small">Un serveur Ollama sur une autre machine donne un second avis, en français, sur les chiffres de la page Seeds et de la page Bibliothèques. Seuls des chiffres partent : jamais le nom d’un torrent, d’un film ou d’une personne ; les trackers sont renommés « tracker A », « tracker B ». Le modèle ne commande rien et peut se tromper : ses phrases ne remplacent pas les tableaux. Un serveur en http expose le résumé sur votre réseau local.</p>
+      <p id="llm-state" class="notice info"></p>
+      <label class="check"><input name="enabled" type="checkbox">Activer le connecteur</label>
+      <label>Adresse du serveur<input name="url" maxlength="200" placeholder="http://192.168.1.50:11434" autocomplete="off"></label>
+      <div class="split">
+        <label>Modèle<input name="model" maxlength="100" placeholder="llama3.1:8b" list="llm-models" autocomplete="off"></label>
+        <label>Jeton d’un proxy (facultatif)<input name="token" type="password" maxlength="500" autocomplete="new-password" placeholder="inchangé si vide"></label>
+      </div>
+      <datalist id="llm-models"></datalist>
+      <div class="split">
+        <label>Délai de réponse (secondes)<input name="timeout" type="number" min="10" max="900"></label>
+        <label class="check"><input name="verify_tls" type="checkbox">Vérifier le certificat HTTPS</label>
+      </div>
+      <label class="check"><input name="send_trackers" type="checkbox">Envoyer les vrais noms de trackers (sensible pour un tracker privé)</label>
+      <label class="check"><input name="send_titles" type="checkbox">Inclure quelques titres de films dans l’analyse de bibliothèque</label>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button id="llm-test" class="btn" type="button">Tester</button><button id="llm-token-clear" class="btn danger" type="button">Retirer le jeton</button></div>
     </form>
   </section>
   <section id="view-setup" class="view hidden">
@@ -1144,6 +1334,7 @@
 <script src="ops.js"></script>
 <script src="ops2.js"></script>
 <script src="ops3.js"></script>
+<script src="ops4.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -388,6 +388,83 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(300)
     if not page.evaluate("document.body.classList.contains('kiosk')") or page.locator("#maison-tiles .tile").count() != 6:
         fail("parcours : la page maison doit s'ouvrir en mode kiosque avec 6 tuiles")
+    # --- bibliothèques par partage, remplacements, seeds, connecteur Ollama ---
+    page.goto(base + "#library")
+    settle(page, "library")
+    page.wait_for_timeout(500)
+    if "nas" not in page.inner_text("#library-volumes") or "Dune" not in page.inner_text("#multiver-list"):
+        fail("parcours : la carte des bibliothèques n'affiche pas les volumes et les versions multiples")
+    ui_mock.CALLS.clear()
+    page.check('input[aria-label="Relier Dune"]')
+    page.click("#copyaudit-relink")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/copyaudit/relink") and body.get("paths")]:
+        fail("parcours : « Relier la sélection » n'envoie pas les copies cochées")
+    if not page.is_disabled('input[aria-label="Relier Alien"]'):
+        fail("parcours : une copie sur deux disques ne doit pas pouvoir être reliée")
+    ui_mock.CALLS.clear()
+    page.check('input[aria-label="Déplacer Metropolis"]')
+    page.click("#relocate-move")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/relocate/move") and body.get("app") == "radarr" and body.get("ids") == [3] and body.get("to") == "nas"]:
+        fail("parcours : le déplacement n'envoie pas le titre coché vers le volume d'arrivée")
+    page.goto(base + "#upgrades")
+    settle(page, "upgrades")
+    page.wait_for_timeout(500)
+    if "Alien" not in page.inner_text("#replacer-list") or not page.is_disabled('input[aria-label="Remplacer Heat"]'):
+        fail("parcours : un remplacement hors budget doit être listé mais non cochable")
+    if "Simulation" not in page.inner_text("#replacer-sim"):
+        fail("parcours : la simulation d'espace n'est pas affichée")
+    ui_mock.CALLS.clear()
+    page.click("#replacer-apply")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/replacer/apply") and body.get("ids") == ["radarr:2"]]:
+        fail("parcours : le remplacement n'envoie que les propositions cochées")
+    ui_mock.CALLS.clear()
+    page.check('input[aria-label="Alléger Gladiator"]')
+    page.click("#mediaslim-add")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/mediaslim/add") and body.get("kind") == "recompress" and len(body.get("paths", [])) == 1]:
+        fail("parcours : l'ajout à la file d'allègement n'envoie pas le fichier coché")
+    page.goto(base + "#seeds")
+    settle(page, "seeds")
+    page.wait_for_timeout(500)
+    trackers_text = page.inner_text("#seeds-trackers").lower()      # les titres de carte sont mis en capitales par la feuille de style
+    if "prive.exemple" not in trackers_text or "public.exemple" not in trackers_text:
+        fail("parcours : l'analyse des seeds n'affiche pas une carte par tracker")
+    ui_mock.CALLS.clear()
+    page.check('input[aria-label^="Réannoncer"]')
+    page.click("#seeds-reannounce")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/seedopt/reannounce") and len(body.get("hashes", [])) == 1]:
+        fail("parcours : la réannonce n'envoie pas le torrent coché")
+    ui_mock.CALLS.clear()
+    page.check('input[aria-label^="Retirer Sample.Torrent.5"]')
+    page.click("#seeds-retire")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/seedopt/retire") and len(body.get("hashes", [])) == 1 and body.get("delete_files") is False]:
+        fail("parcours : le retrait n'envoie pas le torrent coché sans suppression de fichiers par défaut")
+    ui_mock.CALLS.clear()
+    page.click("#seeds-ai")
+    page.wait_for_timeout(500)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/llm/explain") and body.get("topic") == "seeds"]:
+        fail("parcours : le bouton d'avis de l'IA n'envoie pas le sujet « seeds »")
+    page.goto(base + "#settings")
+    settle(page, "settings")
+    page.wait_for_timeout(400)
+    ui_mock.CALLS.clear()
+    page.click("#llm-test")
+    page.wait_for_timeout(500)
+    if not [1 for path, _ in ui_mock.CALLS if path.endswith("/api/llm/test")]:
+        fail("parcours : « Tester » ne contacte pas le serveur Ollama")
 
 
 def observer_run(browser):

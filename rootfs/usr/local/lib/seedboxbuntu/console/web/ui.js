@@ -344,11 +344,12 @@ const NAV = [
   { id: 'services', label: 'Services', icon: 'layers', items: [
     { view: 'apps', label: 'Applications', icon: 'apps' }, { view: 'catalog', label: 'Catalogue', icon: 'package' },
     { view: 'trackers', label: 'Trackers', icon: 'target' }, { view: 'p2p', label: 'P2P Aggregator', icon: 'share' },
-    { view: 'quality', label: 'Qualité des médias', icon: 'check-circle' }] },
+    { view: 'quality', label: 'Qualité des médias', icon: 'check-circle' }, { view: 'upgrades', label: 'Remplacements', icon: 'upload' },
+    { view: 'seeds', label: 'Optimisation des seeds', icon: 'activity' }] },
   { id: 'storage', label: 'Stockage', icon: 'disk', items: [
     { view: 'shares', label: 'Partages', icon: 'folder' }, { view: 'backup', label: 'Sauvegardes', icon: 'download' },
     { view: 'cleanup', label: 'Nettoyage', icon: 'trash' }, { view: 'disks', label: 'Santé des disques', icon: 'disk' },
-    { view: 'medialist', label: 'Liste des médias', icon: 'file' }] },
+    { view: 'medialist', label: 'Liste des médias', icon: 'file' }, { view: 'library', label: 'Bibliothèques', icon: 'layers' }] },
   { id: 'network', label: 'Réseau', icon: 'globe', items: [
     { view: 'vpn', label: 'VPN', icon: 'shield' }, { view: 'domain', label: 'Adresse', icon: 'globe' }, { view: 'netcheck', label: 'Diagnostic', icon: 'check-circle' }, { view: 'bandwidth', label: 'Débit', icon: 'activity' }] },
   { id: 'security', label: 'Sécurité', icon: 'lock', items: [

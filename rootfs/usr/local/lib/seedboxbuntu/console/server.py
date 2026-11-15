@@ -493,6 +493,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json({"results": ctl.titleshare().search(query.get("kind", [""])[0], query.get("q", [""])[0])})
         if path == "/api/vpnwatch":
             return self.send_json(ctl.vpnwatch().overview())
+        if path in ("/api/library", "/api/copyaudit", "/api/replacer", "/api/mediaslim", "/api/shareprofile", "/api/relocate", "/api/seedopt", "/api/llm"):
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            if path == "/api/library":
+                return self.send_json(dict(ctl.libmap().overview(), scanning=ctl.libscan().running()))
+            if path == "/api/relocate":
+                return self.send_json(ctl.relocate().overview(query.get("volume", [""])[0] or None))
+            if path == "/api/seedopt":
+                return self.send_json(ctl.seedopt().overview(query.get("tracker", [""])[0] or None))
+            return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
         if path == "/api/push":
             return self.send_json(ctl.webpush().status(self.headers.get("Remote-User", "")))
         if path == "/api/messages-language":
@@ -668,6 +677,65 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.titleshare().remove(str(data.get("id", ""))))
         if path == "/api/vpnwatch/settings":
             return self.send_json({"settings": ctl.vpnwatch().save(data)})
+        if path.startswith(("/api/library/", "/api/copyaudit/", "/api/replacer/", "/api/mediaslim/", "/api/shareprofile/", "/api/relocate/", "/api/seedopt/", "/api/llm/")):
+            who = self.headers.get("Remote-User", "")[:30] or "console"
+            ids = [str(x) for x in data.get("ids", [])] if isinstance(data.get("ids"), list) else []
+            if path == "/api/library/scan":
+                return self.send_json({"job": start_job("Relevé des bibliothèques", ["libscan", "scan"])})
+            if path == "/api/copyaudit/scan":
+                return self.send_json({"job": start_job("Recherche des copies cachées", ["copyaudit", "scan"])})
+            if path == "/api/copyaudit/relink":
+                return self.send_json(ctl.copyaudit().relink([str(x) for x in data.get("paths", [])][:200], by=who))
+            if path == "/api/replacer/search":
+                count = int(data.get("count") or 0)
+                return self.send_json({"job": start_job("Recherche de meilleures versions", ["replacer", "search"] + ([str(count)] if count else []))})
+            if path == "/api/replacer/apply":
+                return self.send_json(ctl.replacer().apply(ids, by=who))
+            if path == "/api/replacer/settings":
+                return self.send_json({"settings": ctl.replacer().save(data)})
+            if path == "/api/replacer/safety":
+                return self.send_json(ctl.replacer().enable_safety(data.get("days")))
+            if path == "/api/mediaslim/add":
+                return self.send_json(ctl.mediaslim().add(str(data.get("kind", "")), [str(x) for x in data.get("paths", [])][:50], by=who))
+            if path == "/api/mediaslim/remove":
+                return self.send_json(ctl.mediaslim().remove(str(data.get("id", ""))))
+            if path == "/api/mediaslim/clear":
+                return self.send_json(ctl.mediaslim().clear())
+            if path == "/api/mediaslim/settings":
+                return self.send_json({"settings": ctl.mediaslim().save(data)})
+            if path == "/api/shareprofile/set":
+                return self.send_json({"settings": ctl.shareprofile().set_profile(str(data.get("app", "")), str(data.get("volume", "")), data.get("profile"))})
+            if path == "/api/shareprofile/unset":
+                return self.send_json({"settings": ctl.shareprofile().unset_profile(str(data.get("app", "")), str(data.get("volume", "")))})
+            if path == "/api/shareprofile/auto":
+                return self.send_json({"settings": ctl.shareprofile().set_auto(bool(data.get("on")))})
+            if path == "/api/shareprofile/apply":
+                return self.send_json({"changed": ctl.shareprofile().apply(str(data.get("app", "")) or None, by=who)})
+            if path == "/api/relocate/move":
+                return self.send_json(ctl.relocate().move(str(data.get("app", "")), str(data.get("to", "")), data.get("ids", []), volume_from=str(data.get("from", "")), by=who))
+            if path == "/api/relocate/settings":
+                return self.send_json({"settings": ctl.relocate().save(data)})
+            if path == "/api/seedopt/rule":
+                return self.send_json({"settings": ctl.seedopt().set_rule(str(data.get("tracker", "")), data.get("ratio"), data.get("hours"))})
+            if path == "/api/seedopt/unrule":
+                return self.send_json({"settings": ctl.seedopt().unset_rule(str(data.get("tracker", "")))})
+            if path == "/api/seedopt/thresholds":
+                return self.send_json({"settings": ctl.seedopt().set_thresholds(data.get("idle_days"), data.get("idle_pct"))})
+            if path == "/api/seedopt/reannounce":
+                return self.send_json(ctl.seedopt().reannounce([str(x) for x in data.get("hashes", [])], by=who))
+            if path == "/api/seedopt/retire":
+                return self.send_json(ctl.seedopt().retire([str(x) for x in data.get("hashes", [])], bool(data.get("delete_files")), by=who))
+            if path == "/api/seedopt/check":
+                return self.send_json({"results": ctl.seedopt().check_trackers([str(x) for x in data.get("hashes", [])])})
+            if path == "/api/llm/settings":
+                return self.send_json({"settings": ctl.llm().save(data)})
+            if path == "/api/llm/test":
+                return self.send_json(ctl.llm().test())
+            if path == "/api/llm/explain":
+                topic = str(data.get("topic", ""))
+                if topic not in ("seeds", "library"):
+                    raise ctl.SeedboxError("sujet inconnu")
+                return self.send_json({"job": start_job("Avis de l'IA : " + ("seeds" if topic == "seeds" else "bibliothèque"), ["llm", "explain", topic])})
         if path == "/api/remote-control/pause":
             return self.send_json({"paused": ctl.telecommande().pause()})
         if path == "/api/remote-control/resume":
