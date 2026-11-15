@@ -168,6 +168,10 @@ def move(app, volume_to, ids, volume_from=None, api=None, records=None, played=N
         ctl.audit().record(by, "", "Titres déplacés entre volumes", f"{len(ids)} titre(s) vers {volume_to}", "console", "ok")
     except Exception:  # noqa: BLE001
         pass
+    try:
+        ctl.libreport().record("move", len(ids), need)
+    except Exception:  # noqa: BLE001
+        pass
     say(f"déplacement lancé : {len(ids)} titre(s) vers {volume_to}")
     return {"moved": len(ids), "bytes": need, "root": roots[0]}
 

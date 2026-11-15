@@ -35,7 +35,7 @@ SSH_PORT = 22
 # fonctionnent pas dans un sous-chemin (Seerr, Dockge, p2p-aggregator)
 APP_PORTS = [80, 443, 5055, 5001, 3000]
 CONSOLE_RULE = ("allow", "in", "on", "br-seedbox", "to", "172.30.0.1", "port", "8090", "proto", "tcp")
-PACKAGES = ["ufw", "fail2ban", "unattended-upgrades", "smartmontools"]
+PACKAGES = ["ufw", "fail2ban", "unattended-upgrades", "smartmontools", "hdparm"]
 # Services inutiles sur un serveur : apport (rapports d'erreur), annonces du jour d'Ubuntu
 DISABLE = ["apport.service", "motd-news.timer", "ModemManager.service"]
 

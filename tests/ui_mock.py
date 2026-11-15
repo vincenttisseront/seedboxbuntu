@@ -189,6 +189,30 @@ def route(p, q, role="admin", PREFS=None):
                                               "verify_tls": True, "temperature": 0.2, "has_token": False},
                                 "last": {"topic": "seeds", "at": now - 600, "model": "llama3.1:8b", "prompt_chars": 900,
                                          "text": "Le tracker A rapporte le plus : 70 torrents utiles pour 290 Go envoyés en 30 jours. Trois torrents attendus mais muets méritent une réannonce."}}
+    if p == "/api/spacefore": return {"settings": {"warn_days": 30, "alert": True}, "volumes": [
+        {"volume": "local", "free": 4.2e11, "total": 2e12, "points": 12, "slope_day": -1.5e10, "days_left": 28.0, "date": now + 86400 * 28, "level": "warn"},
+        {"volume": "nas", "free": 3.1e12, "total": 8e12, "points": 12, "slope_day": 2e9, "days_left": None, "date": 0, "level": "ok"}]}
+    if p == "/api/libreport": return {"settings": {"enabled": True, "day": 0, "hour": 8}, "week": {}, "preview": "Bibliothèque : 412 fichiers, 3 ajouts cette semaine, 1 titre douteux."}
+    if p == "/api/dormant": return {"settings": {"unplayed_days": 180, "abandon_days": 365}, "at": now - 7200, "reliable": True, "errors": [], "unplayed_total": 2, "unplayed_size": 4.4e10,
+        "unplayed": [{"app": "radarr", "id": 1, "title": "Alpha", "size": 3e10, "added": "2025-12-01"}, {"app": "sonarr", "id": 2, "title": "Bravo", "size": 1.4e10, "added": "2025-11-02"}],
+        "abandoned_total": 1, "abandoned_size": 2e10,
+        "abandoned": [{"app": "sonarr", "id": 3, "title": "Charlie", "ended": True, "have": 3, "total": 10, "size": 2e10, "last_added": "2024-05-01"}]}
+    if p == "/api/integrity": return {"settings": {"enabled": True, "per_night": 50}, "running": False, "last_run": now - 86400, "checked": 300, "pending": 112, "total": 412, "unknown": 0,
+        "problems": [{"app": "radarr", "id": 7, "file_id": 70, "title": "Delta", "reason": "durée tronquée", "at": now - 86400, "file": "/data/Films/Delta.mkv"}]}
+    if p == "/api/renamer": return {"at": now - 3600, "total": 412, "complete": True, "cursor": 412, "titles_total": 1, "files_total": 2,
+        "titles": [{"app": "sonarr", "id": 9, "title": "Echo", "files": [], "count": 2, "example": {"before": "echo s01e01.mkv", "after": "Echo - S01E01 - Pilote.mkv"}}]}
+    if p == "/api/subsgap": return {"settings": {"langs": ["fra", "eng"]}, "total": 1, "analysed": 400, "files": 412,
+        "titles": [{"app": "radarr", "id": 11, "title": "Foxtrot", "size": 8e9, "audio": ["jpn"], "subs": [], "missing": ["fra", "eng"]}]}
+    if p == "/api/guestquota": return {"settings": {"default": 10, "enforce": True}, "available": True, "days": 7, "users": [
+        {"name": "invite-a", "played": 12, "quota": 10, "own_quota": False, "over": True, "suspended": False, "blocked": False},
+        {"name": "invite-b", "played": 3, "quota": 5, "own_quota": True, "over": False, "suspended": True, "blocked": False}]}
+    if p == "/api/energy": return {"settings": {"watts_hdd": 6.0, "watts_ssd": 2.0, "watts_standby": 1.0, "price_kwh": 0.2}, "hdparm": True, "system_device": "sda", "volumes": [
+        {"volume": "local", "device": "sda", "rotational": False, "total": 2e12, "free": 4.2e11, "used": 1.58e12, "idle": 0.7, "read": 3e9, "read_share": 0.1, "standby": 0, "watts": 2.0, "kwh_year": 17.5, "eur_year": 3.5, "eur_tb_year": 1.75, "eur_tb_used_year": 2.2},
+        {"volume": "nas", "device": "sdb", "rotational": True, "total": 8e12, "free": 3.1e12, "used": 4.9e12, "idle": 0.8, "read": 1e9, "read_share": 0.05, "standby": 20, "watts": 3.0, "kwh_year": 26.0, "eur_year": 5.2, "eur_tb_year": 0.65, "eur_tb_used_year": 1.06}]}
+    if p == "/api/trackerstats": return {"settings": {"aliases": {"c411.org": "c411"}, "alert": True}, "at": now - 900, "available": True,
+        "session": {"state": "ready", "reachable": True, "healthy": True, "latency_ms": 42, "message": "", "trackers": 4, "service": "tracker-session"},
+        "trackers": [{"name": "c411", "key": "c411", "host": "c411.org", "enabled": True, "id": 1, "ratio": 1.8, "required": 1.0, "up": 5e11, "down": 2.8e11, "unread": 0, "fetched_at": now - 900, "error": "", "supported": True, "danger": False, "trend": {"up": 2e10, "days": 7}},
+                     {"name": "torr9", "key": "torr9", "host": "torr9.net", "enabled": True, "id": 2, "ratio": 0.7, "required": 1.0, "up": 1e11, "down": 1.4e11, "unread": 0, "fetched_at": now - 900, "error": "", "supported": True, "danger": True, "trend": None}]}
     if p == "/api/vacation": return {"active": False, "until": 0, "started": 0, "by": "", "paused": 0, "max_days": 120, "qbittorrent": True}
     if p == "/api/push": return {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 2}
     if p == "/api/messages-language": return {"notify": "fr", "choices": ["fr", "en"]}
@@ -347,6 +371,11 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith("/api/llm/test"): return self.send(200, {"ok": True, "version": "0.5.1", "models": [{"name": "llama3.1:8b", "size": 4e9}, {"name": "mistral:latest", "size": 3e9}], "model_ok": True, "ms": 120})
         if self.path.endswith(("/api/replacer/settings", "/api/mediaslim/settings", "/api/shareprofile/set", "/api/shareprofile/unset", "/api/shareprofile/auto", "/api/relocate/settings",
                                "/api/seedopt/rule", "/api/seedopt/unrule", "/api/seedopt/thresholds", "/api/llm/settings")): return self.send(200, {"settings": body})
+        if self.path.endswith(("/api/spacefore/settings", "/api/libreport/settings", "/api/dormant/settings", "/api/integrity/settings", "/api/subsgap/settings", "/api/guestquota/settings",
+                               "/api/energy/settings", "/api/trackerstats/settings", "/api/trackerstats/alias")): return self.send(200, {"settings": body})
+        if self.path.endswith("/api/libreport/send"): return self.send(200, {"sent": True})
+        if self.path.endswith(("/api/dormant/unmonitor", "/api/renamer/apply")): return self.send(200, {"done": 1})
+        if self.path.endswith(("/api/integrity/research", "/api/energy/standby", "/api/guestquota/quota", "/api/guestquota/resume")): return self.send(200, {"ok": True})
         if "/jobs/" in self.path: return self.send(200, {})
         self.send(200, {"job": "j1"})
 def serve(port=8766, background=False, role="admin", prefs=None):

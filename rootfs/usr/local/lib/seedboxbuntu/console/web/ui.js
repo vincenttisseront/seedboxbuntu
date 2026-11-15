@@ -349,7 +349,7 @@ const NAV = [
   { id: 'storage', label: 'Stockage', icon: 'disk', items: [
     { view: 'shares', label: 'Partages', icon: 'folder' }, { view: 'backup', label: 'Sauvegardes', icon: 'download' },
     { view: 'cleanup', label: 'Nettoyage', icon: 'trash' }, { view: 'disks', label: 'Santé des disques', icon: 'disk' },
-    { view: 'medialist', label: 'Liste des médias', icon: 'file' }, { view: 'library', label: 'Bibliothèques', icon: 'layers' }] },
+    { view: 'medialist', label: 'Liste des médias', icon: 'file' }, { view: 'library', label: 'Bibliothèques', icon: 'layers' }, { view: 'care', label: 'Entretien des médias', icon: 'sliders' }] },
   { id: 'network', label: 'Réseau', icon: 'globe', items: [
     { view: 'vpn', label: 'VPN', icon: 'shield' }, { view: 'domain', label: 'Adresse', icon: 'globe' }, { view: 'netcheck', label: 'Diagnostic', icon: 'check-circle' }, { view: 'bandwidth', label: 'Débit', icon: 'activity' }] },
   { id: 'security', label: 'Sécurité', icon: 'lock', items: [

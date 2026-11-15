@@ -324,6 +324,10 @@ def apply(ids, api=None, by="console", free=None):
         ctl.audit().record(by, "", "Remplacements de médias lancés", f"{done} version(s)", "console", "ok")
     except Exception:  # noqa: BLE001
         pass
+    try:
+        ctl.libreport().record("replace", done)
+    except Exception:  # noqa: BLE001
+        pass
     say(f"remplacements lancés : {done}, écartés : {len(skipped)}")
     return {"done": done, "skipped": skipped}
 

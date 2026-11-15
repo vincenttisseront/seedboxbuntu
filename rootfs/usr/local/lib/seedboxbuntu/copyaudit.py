@@ -152,8 +152,16 @@ def relink(paths, records=None, root=None, by="console"):
         ctl.audit().record(by, "", "Copies reliées par un lien dur", f"{done} fichier(s)", "console", "ok")
     except Exception:  # noqa: BLE001
         pass
+    _journal("relink", done, saved)
     say(f"copies reliées : {done} fichier(s), {saved} octets récupérés")
     return {"done": done, "saved": saved, "skipped": [{"path": p, "reason": r} for p, r in skipped]}
+
+
+def _journal(kind, count, size=0):
+    try:
+        ctl.libreport().record(kind, count, size)
+    except Exception:  # noqa: BLE001 - le rapport ne doit jamais gêner l'action
+        pass
 
 
 def scan(records=None, root=None):

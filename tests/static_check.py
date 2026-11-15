@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # --- interface : identifiants, CSP, ressources ---------------------------------------------------------------------------
 index = (web / "index.html").read_text()
 ids_html = set(re.findall(r'\bid="([^"]+)"', index))
-SCRIPTS = ("app.js", "ui.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js")
+SCRIPTS = ("app.js", "ui.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js", "ops5.js")
 used = set()
 for script in SCRIPTS:
     text = (web / script).read_text()
@@ -142,7 +142,7 @@ def color_lines(path, skip=()):
             out.append(f"{path.name}:{number}")
     return out
 literal = []
-for name in ("app.css", "index.html", "invite.html", "error.html", "app.js", "ui.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js", "invite.js", "me.html", "me.js"):
+for name in ("app.css", "index.html", "invite.html", "error.html", "app.js", "ui.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js", "ops5.js", "invite.js", "me.html", "me.js"):
     literal += color_lines(web / name, skip=("theme-color", "@font-face"))
 literal += color_lines(web / "display.js", skip=("THEME_COLOR",))
 check("couleurs : aucune valeur en dur hors de tokens.css", not literal, literal[:8])
@@ -169,7 +169,7 @@ def class_problems(text, source):
             problems.append(f"{source}: {call[:60]!r}")
     return problems
 problems = []
-for name in ("index.html", "invite.html", "error.html", "me.html", "app.js", "ui.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js", "invite.js", "me.js"):
+for name in ("index.html", "invite.html", "error.html", "me.html", "app.js", "ui.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js", "ops5.js", "invite.js", "me.js"):
     problems += class_problems((web / name).read_text(), name)
 check("boutons : uniquement les classes btn, tab, seg, icon-btn, tabbar-item et leurs variantes", not problems, problems[:6])
 
@@ -195,7 +195,7 @@ check("libellés de boutons : aucun synonyme interdit (voir docs/GLOSSAIRE.md)",
 saving = [l for l in labels if l.strip().startswith("Sauvegarder") and "maintenant" not in l]
 check("libellés : « Sauvegarder » réservé aux sauvegardes du serveur", not saving, saving)
 raw_format = []
-for name in ("app.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js", "invite.js", "me.js"):
+for name in ("app.js", "features.js", "pages.js", "ops.js", "ops2.js", "ops3.js", "ops4.js", "ops5.js", "invite.js", "me.js"):
     for number, line in enumerate((web / name).read_text().splitlines(), 1):
         if re.search(r"toLocale\w*String\(|toLocaleDateString\(|toLocaleTimeString\(|new Intl\.|\.toFixed\(", line) and "x(t).toFixed(1)" not in line:
             raw_format.append(f"{name}:{number}")

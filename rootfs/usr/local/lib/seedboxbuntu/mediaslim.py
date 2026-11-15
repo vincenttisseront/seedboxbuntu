@@ -358,6 +358,11 @@ def run(now=None, runner=None, once=False):
                 if q["id"] == todo["id"]:
                     q.update(state=state, detail=detail, saved=saved, finished=int(time.time()))
             store_queue(queue)
+            if state == "fait" and saved:
+                try:
+                    ctl.libreport().record("slim", 1, saved)
+                except Exception:  # noqa: BLE001
+                    pass
             say(f"allègement : {todo['title']} -> {state} ({detail})")
             done += 1
             if once:

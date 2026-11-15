@@ -229,7 +229,7 @@ def classify(t, rule, cfg, up30, covered, now):
     return "utile" if up30 >= size * 0.05 else "normal"
 
 
-def analyse(torrents, history=None, cfg=None, now=None, goals=None):
+def analyse(torrents, history=None, cfg=None, now=None, goals=None, site=None):
     """Analyse par tracker. torrents : liste qBittorrent ; renvoie {trackers, torrents, summary}."""
     cfg = cfg or settings()
     history = load_history() if history is None else history
@@ -243,6 +243,8 @@ def analyse(torrents, history=None, cfg=None, now=None, goals=None):
         up30, cov30 = sent(history, h, t.get("uploaded", 0), 30, now)
         rule = cfg["rules"].get(host)
         kind = classify(t, rule, cfg, up30, cov30, now)
+        if kind not in ("en cours", "protégé") and (site or {}).get(host, {}).get("danger"):
+            kind = "protégé"                                   # le ratio du site est sous le minimum exigé : on ne retire rien
         age = max(0, (now - (t.get("completion_on") or t.get("added_on") or now)) / DAY)
         row = {"hash": h, "name": str(t.get("name", ""))[:160], "tracker": host, "size": int(t.get("size", 0)), "up7": up7, "up30": up30,
                "covered": cov30, "class": kind, "age": round(age, 1), "seeds": int(t.get("num_complete", 0) or 0), "leechers": int(t.get("num_incomplete", 0) or 0),
@@ -281,7 +283,12 @@ def analyse(torrents, history=None, cfg=None, now=None, goals=None):
                  efficiency=round(d["up30"] / (1 << 30) / gib, 3), goal=goal, eta_days=eta, buckets=[{"label": k, **v} for k, v in d["buckets"].items()],
                  classes=[{"class": k, **v} for k, v in sorted(d["classes"].items())], covered_ok=d["covered"] >= 7,
                  top=sorted([r for r in rows if r["tracker"] == host], key=lambda r: -r["up30"])[:SHOWN])
+        d["site"] = (site or {}).get(host)
         d["advice"] = advice(host, d, [r for r in rows if r["tracker"] == host])
+        if d["site"] and d["site"].get("danger"):
+            d["advice"].insert(0, f"Le ratio du site ({d['site']['ratio']:.2f}) est sous le ratio exigé ({d['site']['required']:.2f}) : tous les torrents de ce tracker sont protégés, laissez-les partager.")
+        elif d["site"] and d["site"].get("ratio") is not None and d["ratio"] is not None and abs(d["site"]["ratio"] - d["ratio"]) > max(0.5, d["site"]["ratio"] * 0.3):
+            d["advice"].append(f"Le ratio du site ({d['site']['ratio']:.2f}) diffère de celui de qBittorrent ({d['ratio']:.2f}) : celui du site fait foi.")
         trackers.append(d)
     trackers.sort(key=lambda d: -d["up30"])
     return {"trackers": trackers, "torrents": len(rows), "history_days": max((d["covered"] for d in per_host.values()), default=0),
@@ -320,12 +327,20 @@ def goals_from_ratiogoals():
         return {}
 
 
+def site_stats(torrents):
+    """Ratios réels des trackers (p2p-aggregator, depuis le cache) pour les hôtes de ces torrents ; {} si indisponible."""
+    try:
+        return ctl.trackerstats().by_host({host_of(t) for t in torrents})
+    except Exception:  # noqa: BLE001 - le ratio du site est un complément, jamais une condition
+        return {}
+
+
 def overview(host=None, torrents=None, now=None):
     cfg = settings()
     torrents = fetch() if torrents is None else torrents
     if torrents is None:
         return {"settings": cfg, "available": False, "trackers": [], "torrents": 0, "history_days": 0, "retirable": []}
-    result = analyse(torrents, None, cfg, now, goals_from_ratiogoals())
+    result = analyse(torrents, None, cfg, now, goals_from_ratiogoals(), site_stats(torrents))
     rows = result.pop("rows")
     retirable = [r for r in rows if r["class"] == "sans valeur" and (host is None or r["tracker"] == host)]
     by_hash = {str(t.get("hash", "")).lower(): t for t in torrents}
@@ -369,7 +384,7 @@ def retire(hashes, delete_files=False, torrents=None, post=None, now=None, by="c
     torrents = fetch() if torrents is None else torrents
     if torrents is None:
         raise ctl.SeedboxError("qBittorrent est arrêté")
-    result = analyse(torrents, None, cfg, now, {})
+    result = analyse(torrents, None, cfg, now, {}, site_stats(torrents))
     known = {r["hash"]: r for r in result["rows"]}
     by_hash = {str(t.get("hash", "")).lower(): t for t in torrents}
     refused = [h for h in clean if h not in known or known[h]["class"] != "sans valeur"]
@@ -383,6 +398,10 @@ def retire(hashes, delete_files=False, torrents=None, post=None, now=None, by="c
     (post or _post)("/torrents/delete", {"hashes": "|".join(clean), "deleteFiles": "true" if delete_files else "false"})
     try:
         ctl.audit().record(by, "", "Torrents retirés (sans valeur)", f"{len(clean)} torrent(s)" + (", fichiers supprimés" if delete_files else ""), "console", "ok")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        ctl.libreport().record("retire", len(clean))
     except Exception:  # noqa: BLE001
         pass
     say(f"torrents retirés : {len(clean)}" + (" (fichiers supprimés)" if delete_files else ""))

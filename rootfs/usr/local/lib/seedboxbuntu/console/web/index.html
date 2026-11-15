@@ -187,6 +187,22 @@
         <tbody id="stats-list"></tbody>
       </table></div>
     </div>
+    <div class="card" id="trackerstats-card">
+      <div class="card-head"><h2>Ratios réels des trackers</h2><button id="trackerstats-refresh" class="btn" type="button">Actualiser</button></div>
+      <p class="muted small">Les chiffres que chaque tracker affiche pour votre compte, lus dans P2P Aggregator (qui renouvelle les sessions avec tracker-session). Le ratio du tracker fait foi, celui de qBittorrent n’est qu’une estimation. Sous le ratio exigé, tous les torrents de ce tracker sont protégés dans l’optimisation des seeds.</p>
+      <p id="trackerstats-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Ratios des trackers"><table>
+        <thead><tr><th>Compte</th><th>Ratio</th><th>Exigé</th><th>Envoyé</th><th>Reçu</th><th>Évolution</th><th>État</th></tr></thead>
+        <tbody id="trackerstats-list"></tbody>
+      </table></div>
+      <form id="trackerstats-form" class="row">
+        <label>Hôte vu par qBittorrent<input name="host" maxlength="100" placeholder="tracker.exemple" autocomplete="off" required></label>
+        <label>Compte P2P Aggregator (vide : retirer l’alias)<input name="account" maxlength="80" autocomplete="off"></label>
+        <button class="btn" type="submit">Relier</button>
+        <label class="check"><input id="trackerstats-alert" type="checkbox">Alerte sous le ratio exigé</label>
+      </form>
+      <p id="trackerstats-aliases" class="muted small"></p>
+    </div>
       <div class="card" id="ratio-card">
       <h2>Objectifs de ratio</h2>
       <p class="muted small">Un ratio minimal par tracker : la console prévient avant de passer dessous. Le ratio vient des statistiques de qBittorrent pour les torrents qu’il connaît encore ; après un import ou un nettoyage il peut différer de celui que le tracker affiche, qui seul fait foi.</p>
@@ -636,6 +652,20 @@
         <tbody id="titleshare-list"></tbody>
       </table></div>
     </div>
+    <form class="card form" id="guestquota-card">
+      <h2>Quotas de lecture</h2>
+      <p class="muted small">Titres distincts lus sur 30 jours par chaque compte non administrateur (d’après la dernière lecture que Jellyfin garde pour chaque titre). Au-delà du quota : une alerte, et si l’application automatique est activée, la lecture du compte est suspendue puis rétablie quand il repasse sous son quota. Une suspension faite à la main dans Jellyfin n’est jamais levée.</p>
+      <p id="guestquota-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Quotas de lecture par compte"><table>
+        <thead><tr><th>Compte</th><th>Titres lus (30 jours)</th><th>Quota</th><th>État</th><th></th></tr></thead>
+        <tbody id="guestquota-list"></tbody>
+      </table></div>
+      <div class="row">
+        <label>Quota par défaut (0 = aucun)<input name="default" type="number" min="0" max="10000" required></label>
+        <label class="check"><input name="enforce" type="checkbox">Suspendre la lecture au-delà du quota</label>
+        <button class="btn primary" type="submit">Enregistrer</button>
+      </div>
+    </form>
     <form class="card form" id="peoplereport-card">
       <h2>Bilan du mois par personne</h2>
       <p class="muted small">Pour chaque compte : demandes faites, disponibles et en attente sur les 30 derniers jours, d’après Seerr. Que des nombres : jamais un titre, jamais ce qui a été regardé. Chacun voit son propre bilan sur « Mon espace ». Activé, il envoie aussi le récapitulatif de tout le monde sur vos canaux d’alerte le jour choisi : c’est un choix à annoncer aux personnes concernées.</p>
@@ -843,6 +873,106 @@
     </div>
   </section>
 
+  <section id="view-care" class="view hidden">
+    <header class="page-head"><div><h1>Entretien des médias</h1><p class="sub">Prévoir quand un volume sera plein, repérer les titres que personne ne lit, contrôler que les fichiers sont intacts, remettre les noms en ordre, trouver les sous-titres manquants et savoir ce que coûtent les disques. Tout part du relevé des bibliothèques ; rien n’est supprimé ici.</p></div><div class="actions"><button id="care-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <form id="spacefore-form" class="card form">
+      <h2>Prévision de saturation</h2>
+      <p class="muted small">Un relevé de l’espace libre par jour et par volume ; la date est tirée de la tendance des 30 derniers jours (il faut trois jours de relevés). Un gros import ou un nettoyage fausse la droite : prenez la date comme un ordre de grandeur.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Prévision par volume"><table>
+        <thead><tr><th>Volume</th><th>Libre</th><th>Total</th><th>Tendance par jour</th><th>Plein dans</th><th>Date prévue</th></tr></thead>
+        <tbody id="spacefore-list"></tbody>
+      </table></div>
+      <div class="row">
+        <label>Prévenir sous (jours)<input name="warn_days" type="number" min="3" max="365" required></label>
+        <label class="check"><input name="alert" type="checkbox">Envoyer une alerte</label>
+        <button class="btn primary" type="submit">Enregistrer</button>
+      </div>
+    </form>
+    <form id="libreport-form" class="card form">
+      <h2>Rapport hebdomadaire</h2>
+      <p class="muted small">Un résumé en chiffres, une fois par semaine, sur vos canaux d’alerte : ce qui a été fait (copies reliées, remplacements, allègements, déplacements), les saturations prévues et les fichiers douteux. Jamais de titre ni de nom de personne.</p>
+      <p id="libreport-preview" class="pre-wrap no-i18n"></p>
+      <div class="row">
+        <label class="check"><input name="enabled" type="checkbox">Envoyer chaque semaine</label>
+        <label>Jour<select name="day"><option value="0">Lundi</option><option value="1">Mardi</option><option value="2">Mercredi</option><option value="3">Jeudi</option><option value="4">Vendredi</option><option value="5">Samedi</option><option value="6">Dimanche</option></select></label>
+        <label>Heure<input name="hour" type="number" min="0" max="23" required></label>
+        <button class="btn primary" type="submit">Enregistrer</button>
+        <button id="libreport-send" class="btn" type="button">Envoyer maintenant</button>
+      </div>
+    </form>
+    <div class="card" id="dormant-card">
+      <div class="card-head"><h2>Titres jamais lus et séries abandonnées</h2><div class="row"><button id="dormant-scan" class="btn" type="button">Analyser</button><button id="dormant-unmonitor" class="btn primary" type="button">Ne plus suivre la sélection</button></div></div>
+      <p class="muted small">« Jamais lu » : ajouté depuis longtemps et aucun compte Jellyfin ne l’a lu. « Abandonnée » : série suivie, incomplète, sans fichier récent ni épisode à venir. « Ne plus suivre » arrête seulement la recherche dans Radarr ou Sonarr : aucun fichier n’est touché.</p>
+      <p id="dormant-state" class="notice info"></p>
+      <h3>Jamais lus</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Titres jamais lus"><table>
+        <thead><tr><th></th><th>Titre</th><th>Taille</th><th>Ajouté le</th></tr></thead>
+        <tbody id="dormant-unplayed"></tbody>
+      </table></div>
+      <h3>Séries abandonnées</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Séries abandonnées"><table>
+        <thead><tr><th></th><th>Série</th><th>Épisodes</th><th>Taille</th><th>Dernier fichier</th></tr></thead>
+        <tbody id="dormant-abandoned"></tbody>
+      </table></div>
+      <form id="dormant-form" class="row">
+        <label>Jamais lu après (jours)<input name="unplayed_days" type="number" min="30" max="3650" required></label>
+        <label>Abandonnée après (jours)<input name="abandon_days" type="number" min="90" max="3650" required></label>
+        <button class="btn" type="submit">Enregistrer</button>
+      </form>
+    </div>
+    <div class="card" id="integrity-card">
+      <div class="card-head"><h2>Contrôle d’intégrité</h2><button id="integrity-run" class="btn" type="button">Contrôler maintenant</button></div>
+      <p class="muted small">La nuit, un conteneur sans réseau ouvre chaque fichier (ffprobe), compare sa durée à celle annoncée et décode ses 5 dernières secondes. Un défaut au milieu du fichier n’est pas vu. « Chercher une autre version » lance la recherche dans Radarr ou Sonarr ; rien n’est supprimé.</p>
+      <p id="integrity-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Fichiers douteux"><table>
+        <thead><tr><th>Titre</th><th>Problème</th><th>Contrôlé le</th><th></th></tr></thead>
+        <tbody id="integrity-list"></tbody>
+      </table></div>
+      <form id="integrity-form" class="row">
+        <label class="check"><input name="enabled" type="checkbox">Contrôler chaque nuit</label>
+        <label>Fichiers par nuit<input name="per_night" type="number" min="1" max="2000" required></label>
+        <button class="btn" type="submit">Enregistrer</button>
+      </form>
+    </div>
+    <div class="card" id="renamer-card">
+      <div class="card-head"><h2>Normalisation des noms</h2><div class="row"><button id="renamer-scan" class="btn" type="button">Analyser</button><button id="renamer-apply" class="btn primary" type="button">Renommer la sélection</button></div></div>
+      <p class="muted small">Radarr et Sonarr calculent le nom que chaque fichier devrait porter. L’analyse examine 300 titres par passage, en reprenant où elle s’est arrêtée. Seuls les fichiers sont renommés, sur place et sans copie ; Jellyfin retrouve les chemins au prochain balayage.</p>
+      <p id="renamer-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Titres à renommer"><table>
+        <thead><tr><th></th><th>Titre</th><th>Fichiers</th><th>Exemple</th></tr></thead>
+        <tbody id="renamer-list"></tbody>
+      </table></div>
+    </div>
+    <form id="subsgap-form" class="card form">
+      <h2>Sous-titres manquants</h2>
+      <p class="muted small">Titres dont aucun fichier n’a de sous-titres, ni de piste audio, dans les langues voulues. Seuls les sous-titres intégrés au fichier sont vus : un fichier .srt à côté du film ne compte pas. La console ne les télécharge pas : la liste sert à les chercher avec l’outil de votre choix.</p>
+      <p id="subsgap-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Titres sans sous-titres"><table>
+        <thead><tr><th>Titre</th><th>Audio</th><th>Sous-titres</th><th>Taille</th></tr></thead>
+        <tbody id="subsgap-list"></tbody>
+      </table></div>
+      <div class="row">
+        <label>Langues voulues (codes à 3 lettres)<input name="langs" placeholder="fra eng" maxlength="60" required></label>
+        <button class="btn primary" type="submit">Enregistrer</button>
+      </div>
+    </form>
+    <div class="card" id="energy-card">
+      <h2>Énergie des disques et coût par To</h2>
+      <p class="muted small">Le coût est une estimation : les watts sont des réglages, pas des mesures. La mise en veille ne s’applique qu’aux disques à plateaux qui ne portent pas le système, avec hdparm ; elle allonge le premier accès. Un partage réseau n’a pas de disque local : il n’est pas mesurable ici.</p>
+      <p id="energy-state" class="notice info"></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Disques et énergie"><table>
+        <thead><tr><th>Volume</th><th>Disque</th><th>Libre / total</th><th>Au repos</th><th>Part des lectures</th><th>Puissance</th><th>Par an</th><th>Par To et par an</th><th>Veille (minutes)</th></tr></thead>
+        <tbody id="energy-list"></tbody>
+      </table></div>
+      <form id="energy-form" class="row">
+        <label>Watts d’un disque à plateaux<input name="watts_hdd" type="number" min="0.1" max="50" step="0.1" required></label>
+        <label>Watts d’un SSD<input name="watts_ssd" type="number" min="0.1" max="30" step="0.1" required></label>
+        <label>Watts en veille<input name="watts_standby" type="number" min="0" max="10" step="0.1" required></label>
+        <label>Prix du kWh (€)<input name="price_kwh" type="number" min="0" max="5" step="0.01" required></label>
+        <button class="btn" type="submit">Enregistrer</button>
+      </form>
+    </div>
+  </section>
   <section id="view-seeds" class="view hidden">
     <header class="page-head"><div><h1>Optimisation des seeds</h1><p class="sub">Ce que chaque torrent apporte vraiment à chaque tracker : envoyé sur 7 et 30 jours, envoyé par Go stocké, torrents rares, attendus mais muets, sans valeur. Les règles de vos trackers (ratio, durée de partage) protègent ce qui ne doit pas être retiré.</p></div><div class="actions"><button id="seeds-ai" class="btn" type="button">Demander un avis à l’IA</button><button id="seeds-refresh" class="btn" type="button">Actualiser</button></div></header>
     <div id="seeds-state" class="notice info"></div>
@@ -1335,6 +1465,7 @@
 <script src="ops2.js"></script>
 <script src="ops3.js"></script>
 <script src="ops4.js"></script>
+<script src="ops5.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

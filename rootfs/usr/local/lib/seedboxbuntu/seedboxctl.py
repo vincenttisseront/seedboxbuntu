@@ -62,6 +62,15 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl relocate show|move               déplacer les titres inactifs entre partages
   seedboxctl seedopt show|rule|retire|...     optimisation des seeds, analyse par tracker
   seedboxctl llm show|set|test|explain        connecteur vers un serveur Ollama externe
+  seedboxctl spacefore show|sample|set        prévision de saturation des volumes
+  seedboxctl libreport show|send|set          rapport hebdomadaire des bibliothèques
+  seedboxctl dormant show|scan|unmonitor|set  titres jamais lus et séries abandonnées
+  seedboxctl integrity show|run|research|set  contrôle d'intégrité des fichiers (ffprobe)
+  seedboxctl renamer show|scan|apply          normalisation des noms par Radarr et Sonarr
+  seedboxctl subsgap show|set                 titres sans sous-titres dans les langues voulues
+  seedboxctl guestquota show|default|quota|...  quotas de lecture par compte invité
+  seedboxctl energy show|sample|standby|set   veille des disques et coût par To
+  seedboxctl trackerstats show|refresh|alias  ratios réels des trackers (p2p-aggregator)
   seedboxctl vpnwatch show|set|tick          surveillance du VPN (fuite, changement d'adresse)
   seedboxctl house                           état d'ensemble pour l'écran « maison »
 """
@@ -440,6 +449,42 @@ def seedopt():
 
 def llm():
     return _lazy("llm")
+
+
+def spacefore():
+    return _lazy("spacefore")
+
+
+def libreport():
+    return _lazy("libreport")
+
+
+def dormant():
+    return _lazy("dormant")
+
+
+def integrity():
+    return _lazy("integrity")
+
+
+def renamer():
+    return _lazy("renamer")
+
+
+def subsgap():
+    return _lazy("subsgap")
+
+
+def guestquota():
+    return _lazy("guestquota")
+
+
+def energy():
+    return _lazy("energy")
+
+
+def trackerstats():
+    return _lazy("trackerstats")
 
 
 def backupdiff():
@@ -2732,6 +2777,57 @@ def restart():
     return errors
 
 
+CARE_HELP = {"spacefore": "prévision de saturation", "libreport": "rapport hebdomadaire", "dormant": "titres jamais lus, séries abandonnées",
+             "integrity": "contrôle d'intégrité", "renamer": "normalisation des noms", "subsgap": "sous-titres manquants",
+             "guestquota": "quotas de lecture", "energy": "énergie des disques", "trackerstats": "ratios réels des trackers"}
+_KV = [("key", {}), ("value", {})]
+_IDS = [("app", {"choices": ("radarr", "sonarr")}), ("ids", {"nargs": "+", "type": int})]
+CARE_COMMANDS = {
+    "spacefore": {"show": [], "sample": [], "set": _KV},
+    "libreport": {"show": [], "send": [], "set": _KV},
+    "dormant": {"show": [], "scan": [], "unmonitor": _IDS, "set": _KV},
+    "integrity": {"show": [], "run": [], "research": [("app", {"choices": ("radarr", "sonarr")}), ("owner", {"type": int}), ("file", {"type": int})], "set": _KV},
+    "renamer": {"show": [], "scan": [], "apply": _IDS},
+    "subsgap": {"show": [], "set": [("langs", {"nargs": "+"})]},
+    "guestquota": {"show": [], "tick": [], "default": [("count", {"type": int})], "quota": [("login", {}), ("count", {"type": int})],
+                   "unquota": [("login", {})], "enforce": [("mode", {"choices": ("on", "off")})], "resume": [("login", {})]},
+    "energy": {"show": [], "sample": [], "tick": [], "standby": [("disk", {}), ("minutes", {"type": int})], "set": _KV},
+    "trackerstats": {"show": [], "refresh": [], "alias": [("host", {}), ("account", {})], "unalias": [("host", {})], "alert": [("mode", {"choices": ("on", "off")})]},
+}
+
+
+def run_care(args):
+    """Commandes des modules d'entretien (même schéma : show, actions, set clé valeur)."""
+    module = globals()[args.command]()
+    action = args.action
+    out = None
+    if action == "show":
+        out = module.overview()
+    elif action == "set":
+        out = module.save({"langs": args.langs} if args.command == "subsgap" else {args.key: _cli_value(args.value)})
+    elif args.command == "guestquota":
+        out = {"default": lambda: module.set_default(args.count), "quota": lambda: module.set_quota(args.login, args.count),
+               "unquota": lambda: module.remove_quota(args.login), "enforce": lambda: module.set_enforce(args.mode == "on"),
+               "resume": lambda: module.resume(args.login), "tick": lambda: module.tick(force=True)}[action]()
+    elif args.command == "trackerstats":
+        out = {"refresh": lambda: module.refresh(force_test=True), "alias": lambda: module.set_alias(args.host, args.account),
+               "unalias": lambda: module.remove_alias(args.host), "alert": lambda: module.set_alert(args.mode == "on")}[action]()
+    elif args.command == "dormant":
+        out = module.scan() if action == "scan" else locked(module.unmonitor)(args.app, args.ids)
+    elif args.command == "integrity":
+        out = locked(module.run)(once=True) if action == "run" else module.research(args.app, args.owner, args.file)
+    elif args.command == "renamer":
+        out = module.scan() if action == "scan" else locked(module.apply)(args.app, args.ids)
+    elif args.command == "energy":
+        out = module.sample() if action == "sample" else module.tick() if action == "tick" else module.set_standby(args.disk, args.minutes)
+    elif args.command == "libreport":
+        out = module.send()
+    elif args.command == "spacefore":
+        out = module.sample()
+    if out is not None:
+        print(json.dumps(out, indent=2, ensure_ascii=False, default=str))
+
+
 def _cli_value(text):
     """Valeur de ligne de commande : nombre, booléen ou liste JSON si elle y ressemble, sinon le texte."""
     try:
@@ -2982,6 +3078,12 @@ def main():
     lm_set.add_argument("key")
     lm_set.add_argument("value")
     lm.add_parser("explain").add_argument("topic", choices=("seeds", "library"))
+    for name, actions in CARE_COMMANDS.items():
+        care = commands.add_parser(name, help=CARE_HELP[name]).add_subparsers(dest="action", required=True)
+        for action, arguments in actions.items():
+            sub = care.add_parser(action)
+            for argument, options in arguments:
+                sub.add_argument(argument, **options)
     cfg_cmd = commands.add_parser("config", help="export et import des réglages de la console").add_subparsers(dest="action", required=True)
     cfg_export = cfg_cmd.add_parser("export")
     cfg_export.add_argument("--secrets", action="store_true", help="inclut les secrets des canaux d'alerte")
@@ -3650,6 +3752,8 @@ def main():
             print(json.dumps(module.test(), indent=2, ensure_ascii=False))
         else:
             print(module.explain(args.topic)["text"])
+    elif args.command in CARE_COMMANDS:
+        run_care(args)
     elif args.command == "netcheck":
         netcheck().show()
     elif args.command == "vacation":

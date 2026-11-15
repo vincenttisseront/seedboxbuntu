@@ -48,6 +48,11 @@ TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
          ".webmanifest": "application/manifest+json"}
 
 
+CARE_NAMES = ("spacefore", "libreport", "dormant", "integrity", "renamer", "subsgap", "guestquota", "energy", "trackerstats")
+CARE_GET = tuple(f"/api/{name}" for name in CARE_NAMES)
+CARE_POST = tuple(f"/api/{name}/" for name in CARE_NAMES)
+
+
 def start_job(title, argv, stdin=None):
     """Tâche longue dans un processus séparé : la console reste disponible et suit le journal."""
     identifier = uuid.uuid4().hex[:12]
@@ -502,6 +507,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path == "/api/seedopt":
                 return self.send_json(ctl.seedopt().overview(query.get("tracker", [""])[0] or None))
             return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
+        if path in CARE_GET:
+            return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
         if path == "/api/push":
             return self.send_json(ctl.webpush().status(self.headers.get("Remote-User", "")))
         if path == "/api/messages-language":
@@ -677,6 +684,60 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.titleshare().remove(str(data.get("id", ""))))
         if path == "/api/vpnwatch/settings":
             return self.send_json({"settings": ctl.vpnwatch().save(data)})
+        if path.startswith(CARE_POST):
+            who = self.headers.get("Remote-User", "")[:30] or "console"
+            ids = [x for x in data.get("ids", [])] if isinstance(data.get("ids"), list) else []
+            if path == "/api/spacefore/settings":
+                return self.send_json({"settings": ctl.spacefore().save(data)})
+            if path == "/api/spacefore/sample":
+                return self.send_json({"volumes": ctl.spacefore().sample()})
+            if path == "/api/libreport/settings":
+                return self.send_json({"settings": ctl.libreport().save(data)})
+            if path == "/api/libreport/send":
+                return self.send_json(ctl.libreport().send())
+            if path == "/api/dormant/scan":
+                return self.send_json({"job": start_job("Titres jamais lus et séries abandonnées", ["dormant", "scan"])})
+            if path == "/api/dormant/unmonitor":
+                return self.send_json(ctl.dormant().unmonitor(str(data.get("app", "")), ids, by=who))
+            if path == "/api/dormant/settings":
+                return self.send_json({"settings": ctl.dormant().save(data)})
+            if path == "/api/integrity/run":
+                return self.send_json({"job": start_job("Contrôle d'intégrité des fichiers", ["integrity", "run"])})
+            if path == "/api/integrity/research":
+                return self.send_json(ctl.integrity().research(str(data.get("app", "")), data.get("owner"), data.get("file")))
+            if path == "/api/integrity/settings":
+                return self.send_json({"settings": ctl.integrity().save(data)})
+            if path == "/api/renamer/scan":
+                return self.send_json({"job": start_job("Aperçu du renommage", ["renamer", "scan"])})
+            if path == "/api/renamer/apply":
+                return self.send_json(ctl.renamer().apply(str(data.get("app", "")), ids, by=who))
+            if path == "/api/subsgap/settings":
+                return self.send_json({"settings": ctl.subsgap().save(data)})
+            if path == "/api/guestquota/settings":
+                module = ctl.guestquota()
+                if "default" in data:
+                    module.set_default(data["default"])
+                if "enforce" in data:
+                    module.set_enforce(data["enforce"])
+                return self.send_json({"settings": module.settings()})
+            if path == "/api/guestquota/quota":
+                module = ctl.guestquota()
+                count = data.get("count")
+                return self.send_json({"settings": module.remove_quota(str(data.get("login", ""))) if count == 0 else module.set_quota(str(data.get("login", "")), count)})
+            if path == "/api/guestquota/resume":
+                return self.send_json(ctl.guestquota().resume(str(data.get("login", ""))))
+            if path == "/api/energy/standby":
+                return self.send_json(ctl.energy().set_standby(str(data.get("disk", "")), data.get("minutes")))
+            if path == "/api/energy/settings":
+                return self.send_json({"settings": ctl.energy().save(data)})
+            if path == "/api/trackerstats/refresh":
+                return self.send_json({"job": start_job("Ratios réels des trackers", ["trackerstats", "refresh"])})
+            if path == "/api/trackerstats/alias":
+                module = ctl.trackerstats()
+                account = str(data.get("account", "")).strip()
+                return self.send_json({"settings": module.set_alias(str(data.get("host", "")), account) if account else module.remove_alias(str(data.get("host", "")))})
+            if path == "/api/trackerstats/settings":
+                return self.send_json({"settings": ctl.trackerstats().set_alert(data.get("alert"))})
         if path.startswith(("/api/library/", "/api/copyaudit/", "/api/replacer/", "/api/mediaslim/", "/api/shareprofile/", "/api/relocate/", "/api/seedopt/", "/api/llm/")):
             who = self.headers.get("Remote-User", "")[:30] or "console"
             ids = [str(x) for x in data.get("ids", [])] if isinstance(data.get("ids"), list) else []

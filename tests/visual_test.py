@@ -457,6 +457,46 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(500)
     if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/llm/explain") and body.get("topic") == "seeds"]:
         fail("parcours : le bouton d'avis de l'IA n'envoie pas le sujet « seeds »")
+    # --- entretien des médias, quotas des invités, ratios réels des trackers ---
+    page.goto(base + "#care")
+    settle(page, "care")
+    page.wait_for_timeout(600)
+    care = page.inner_text("#view-care").lower()
+    for needle in ("alpha", "charlie", "delta", "echo", "foxtrot", "nas"):
+        if needle not in care:
+            fail(f"parcours : la page entretien n'affiche pas « {needle} »")
+    ui_mock.CALLS.clear()
+    page.check('input[aria-label="Ne plus suivre Alpha"]')
+    page.click("#dormant-unmonitor")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/dormant/unmonitor") and body.get("app") == "radarr" and body.get("ids") == [1]]:
+        fail("parcours : « Ne plus suivre » n'envoie pas le titre coché")
+    ui_mock.CALLS.clear()
+    page.check('input[aria-label="Renommer Echo"]')
+    page.click("#renamer-apply")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/renamer/apply") and body.get("app") == "sonarr" and body.get("ids") == [9]]:
+        fail("parcours : le renommage n'envoie pas le titre coché")
+    page.goto(base + "#guests")
+    settle(page, "guests")
+    page.wait_for_timeout(500)
+    if "invite-b" not in page.inner_text("#guestquota-list") or "suspendue" not in page.inner_text("#guestquota-list"):
+        fail("parcours : les quotas des invités ne montrent pas la lecture suspendue")
+    ui_mock.CALLS.clear()
+    page.click('#guestquota-list button:has-text("Rétablir")')
+    page.wait_for_timeout(300)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/guestquota/resume") and body.get("login") == "invite-b"]:
+        fail("parcours : « Rétablir » n'envoie pas le compte suspendu")
+    page.goto(base + "#trackers")
+    settle(page, "trackers")
+    page.wait_for_timeout(500)
+    stats = page.inner_text("#trackerstats-list")
+    if "torr9" not in stats or "sous le ratio exigé" not in stats:
+        fail("parcours : les ratios réels n'affichent pas le tracker en danger")
     page.goto(base + "#settings")
     settle(page, "settings")
     page.wait_for_timeout(400)

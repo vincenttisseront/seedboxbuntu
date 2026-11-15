@@ -345,6 +345,7 @@ function trackerCard(t) {
       ['Torrents', fmtNumber(t.torrents, 0)], ['Taille partagée', fmtSize(t.size)],
       ['Envoyé sur 7 jours', fmtSize(t.up7)], ['Envoyé sur 30 jours', fmtSize(t.up30)],
       ['Ratio', t.ratio === null ? '-' : fmtNumber(t.ratio)], ['Objectif de ratio', t.goal ? fmtNumber(t.goal) : '-'],
+      ...(t.site ? [['Ratio du site', t.site.ratio === null ? '-' : fmtNumber(t.site.ratio, 2)], ['Ratio exigé par le site', t.site.required === null ? '-' : fmtNumber(t.site.required, 2)]] : []),
       ['Efficacité (envoyé par Go stocké, 30 j)', fmtNumber(t.efficiency, 2)],
       ['Objectif atteint dans', t.eta_days === null ? (t.goal ? 'inconnu' : '-') : t.eta_days === 0 ? 'déjà atteint' : `${fmtNumber(t.eta_days, 0)} jour(s)`],
       ['Historique', `${t.covered} jour(s)${t.covered_ok ? '' : ' : partiel'}`]])),
