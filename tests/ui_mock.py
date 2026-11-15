@@ -26,7 +26,7 @@ def metrics(rng):
                      {"path": "/", "total": 120e9, "used": 40e9, "per_day": 0, "days": None, "full_on": "", "reliable": False, "r2": 0, "span_days": 1}]}
 STATE = {"import_scanned": True}
 # role « observer » : le serveur de maquette refuse comme le vrai serveur ce qui n'est pas de la lecture
-OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance", "/api/metrics", "/api/notifications", "/api/prefs", "/api/report", "/api/vacation", "/api/push"}
+OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance", "/api/metrics", "/api/notifications", "/api/prefs", "/api/report", "/api/vacation", "/api/push", "/api/house"}
 REPORT = {"generated": now - 3600, "sent": now - 3500, "level": "warning", "title": "Rapport hebdomadaire : points à regarder",
           "text": "seedbox - semaine du 30/10/2026 au 06/11/2026\n\nÀ REGARDER\n- Services à l'arrêt ou en difficulté : Radarr\n- Stockage : 72 % utilisé\n\nServices : 4 / 6 fonctionnent\nDisque Stockage : 72 % (2,9 To sur 4 To)\nSauvegardes : 1 (dernière : 06/11/2026), copie hors serveur oui\nVersion : 2026.11.10-0945 (mise à jour disponible)\nIncidents cette semaine : 2 (Radarr ne répond plus)\nInvitations actives : 1"}
 def route(p, q, role="admin", PREFS=None):
@@ -91,6 +91,44 @@ def route(p, q, role="admin", PREFS=None):
     if p == "/api/catalogexport": return {"settings": {"enabled": True, "days": 7, "keep": 4}, "retention": 4, "apps": {"radarr": True, "sonarr": True}, "exports": [{"name": "catalogue-20261110-030000.json", "created": now - 86400 * 5, "movies": 412, "series": 38, "bytes": 123456}]}
     if p == "/api/remote-control": return {"alerts": [{"title": "Radarr ne répond plus", "level": "critical"}], "alerts_total": 1, "vacation": {"active": False, "until": 0}, "paused_by_remote": 0,
         "downloads": {"available": True, "active": 3, "paused": 1, "down": 4e6, "up": 1e6}}
+    if p == "/api/house": return {"at": now, "verdict": "warn", "services": {"total": 22, "running": 21, "down": [], "unhealthy": ["jellyfin"]},
+        "alerts": [{"title": "Disque presque plein : Stockage", "level": "warning"}], "alerts_total": 1,
+        "downloads": {"available": True, "active": 3, "paused": 1, "down": 4e6, "up": 1e6}, "vacation": False,
+        "vpn": {"state": "healthy", "exit": "", "leak": False}, "backup": {"age_days": 1, "count": 7},
+        "disk": {"label": "Stockage (médias, téléchargements)", "percent": 72, "free": 1.1e12}}
+    if p == "/api/changelog": return {"files": 9, "keep": 20, "events": [
+        {"id": "e2", "file": "alerts.json", "at": now - 1800, "by": "vincent", "action": "POST /api/alerts/settings", "undo": False, "latest": True},
+        {"id": "e1", "file": "bandwidth.json", "at": now - 86400, "by": "hors console", "action": "", "undo": False, "latest": True},
+        {"id": "e0", "file": "alerts.json", "at": now - 86400 * 3, "by": "vincent", "action": "Annulation de e-1", "undo": True, "latest": False}]}
+    if p == "/api/changelog/detail": return {"id": "e2", "file": "alerts.json", "lines": ["-  \"disk_percent\": 90", "+  \"disk_percent\": 85", "   \"token\": \"[masqué:ab12]\""], "more": 0, "note": ""}
+    if p == "/api/restoredrill": return {"services": ["radarr", "sonarr", "prowlarr"], "free_mb": 3200, "needed_mb": 1500,
+        "backups": [{"name": "seedbox-20261111-023000.tar.gz.enc", "time": now - 86400}, {"name": "seedbox-20261110-023000.tar.gz.enc", "time": now - 86400 * 2}],
+        "last": {"ok": False, "name": "seedbox-20261111-023000.tar.gz.enc", "at": now - 3600, "seconds": 142, "items": [
+            {"service": "radarr", "started": True, "answers": True, "api": True, "count": 412, "label": "movies", "seconds": 40, "detail": ""},
+            {"service": "sonarr", "started": True, "answers": False, "api": False, "count": None, "label": "series", "seconds": 150, "detail": "pas de réponse au bout de 150 s"}]}}
+    if p == "/api/diskusage": return {"last": now - 7200, "running": False, "every_hours": 20, "top_growers": ["du.stockage-torrents"], "rows": [
+        {"key": "du.stockage-torrents", "label": "Stockage : torrents", "size": 1.4e12, "per_day": 3.1e10, "span_days": 14, "share": 55.0, "spark": [1.2e12, 1.25e12, 1.3e12, 1.36e12, 1.4e12]},
+        {"key": "du.media-films", "label": "Médias : films", "size": 8e11, "per_day": 2e9, "span_days": 14, "share": 31.4, "spark": [7.9e11, 7.92e11, 7.95e11, 7.98e11, 8e11]},
+        {"key": "du.docker-images", "label": "Docker : images", "size": 9e9, "per_day": 0, "span_days": 14, "share": 0.4, "spark": [9e9, 9e9, 9e9]},
+        {"key": "du.config-jellyfin", "label": "Configuration : jellyfin", "size": 3e9, "per_day": 0, "span_days": 0, "share": 0.1, "spark": [3e9]}]}
+    if p == "/api/rotation": return {"old_after_days": 365, "items": [
+        {"id": "radarr", "label": "Radarr", "present": True, "last": now - 86400 * 30, "by": "vincent", "age_days": 30, "running": True},
+        {"id": "sonarr", "label": "Sonarr", "present": True, "last": 0, "by": "", "age_days": None, "running": True},
+        {"id": "prowlarr", "label": "Prowlarr", "present": True, "last": now - 86400 * 400, "by": "vincent", "age_days": 400, "running": False},
+        {"id": "console", "label": "Secret console ↔ Traefik", "present": True, "last": 0, "by": "", "age_days": None, "running": True}]}
+    if p == "/api/mediaquality": return {"at": now, "errors": {}, "apps": {
+        "radarr": {"app": "radarr", "total": 412, "with_file": 398, "below_cutoff": 14, "missing": 3, "low_rate": 2, "duplicates": 1, "resolutions": {"1080": 300, "720": 98},
+            "below_sample": [{"id": 2, "title": "Alien", "year": 1979, "quality": "DVD"}], "missing_sample": [{"id": 3, "title": "Absent", "year": 2020}],
+            "low_rate_sample": [{"id": 5, "title": "Heat", "year": 1995, "mb_per_min": 1.8, "size": 2e8}], "duplicates_sample": [{"title": "Dune", "year": 2021, "ids": [1, 9]}]},
+        "sonarr": {"app": "sonarr", "total": 38, "with_file": 36, "below_cutoff": 6, "missing": 12, "below_sample": [{"id": 31, "title": "Severance", "season": 1, "episode": 2}],
+            "missing_sample": [{"id": 40, "title": "Fargo", "season": 2, "episode": 1}]}}}
+    if p == "/api/peoplereport": return {"settings": {"enabled": True, "day": 1}, "last": 0, "text": "", "people": [
+        {"login": "marie", "role": "user", "days": 30, "requests": 4, "available": 3, "pending": 1, "declined": 0},
+        {"login": "paul", "role": "manager", "days": 30, "requests": None}]}
+    if p == "/api/titleshare": return {"max": 50, "shares": [{"id": "ab12cd34", "title": "Dune", "year": 2021, "kind": "movie", "files": 2, "created": now - 3600, "expires": now + 86400 * 6, "active": True}]}
+    if p == "/api/titleshare/search": return {"results": [{"id": 12, "title": "Dune", "year": 2021}, {"id": 13, "title": "Dune : deuxième partie", "year": 2024}]}
+    if p == "/api/vpnwatch": return {"settings": {"enabled": True, "auto_stop": False}, "mode": "vpn", "checked": now - 120, "exit": "203.0.113.5", "leak": False, "stopped": False,
+        "history": [{"at": now - 86400, "title": "Adresse de sortie du VPN changée", "detail": "203.0.113.4 → 203.0.113.5"}]}
     if p == "/api/vacation": return {"active": False, "until": 0, "started": 0, "by": "", "paused": 0, "max_days": 120, "qbittorrent": True}
     if p == "/api/push": return {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 2}
     if p == "/api/messages-language": return {"notify": "fr", "choices": ["fr", "en"]}
@@ -185,7 +223,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return self.send(200, f.read_bytes(), types.get(f.suffix, "application/octet-stream")) if f.is_file() else self.send(404, {})
         if p == "/me/api/overview":
             return self.send(200, {"login": "marie", "role": "user", "expires": now + 86400 * 12, "days_left": 12, "limits": {"sessions": 2, "bitrate_mbps": 8, "downloads": False},
-                                   "quota": {"movie": {"limit": 5, "used": 3, "remaining": 2, "days": 7}, "tv": None}, "requests_available": True,
+                                   "quota": {"movie": {"limit": 5, "used": 3, "remaining": 2, "days": 7}, "tv": None}, "requests_available": True, "month": {"days": 30, "requests": 4, "available": 3, "pending": 1, "declined": 0},
                                    "requests": [{"kind": "film", "title": "Alien", "status": "Disponible", "date": "2026-11-02"}, {"kind": "série", "title": "Severance", "status": "En attente d'approbation", "date": "2026-11-09"}]})
         if p in ("/me", "/me/"):
             return self.send(200, (WEB / "me.html").read_bytes(), "text/html; charset=utf-8")
@@ -224,6 +262,14 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith("/api/catalogexport/plan"): return self.send(200, {"name": "catalogue-20261110-030000.json", "rejected": 0, "apps": {
             "radarr": {"ok": True, "error": "", "total": 412, "already": 400, "to_add": 12, "replaced": 2, "sample": [{"title": "Alien", "year": 1979, "notes": []}, {"title": "Heat", "year": 1995, "notes": ["profil remplacé"]}]},
             "sonarr": {"ok": True, "error": "", "total": 38, "already": 38, "to_add": 0, "replaced": 0, "sample": []}}})
+        if self.path.endswith("/api/linkcheck/run"): return self.send(200, {"at": now, "problems": 2, "errors": 1, "items": [
+            {"id": "prowlarr-apps", "title": "Prowlarr → Radarr, Sonarr", "state": "ok", "detail": "Les applications reliées répondent.", "hint": ""},
+            {"id": "radarr-client", "title": "Radarr → client de téléchargement", "state": "error", "detail": "qBittorrent : Unable to connect", "hint": "Relancer la configuration des applications (Applications) relie à nouveau ce que la console provisionne."},
+            {"id": "seerr-sonarr", "title": "Seerr → Sonarr", "state": "warn", "detail": "Seerr n'a aucun serveur Sonarr : les demandes ne partiront pas.", "hint": ""}]})
+        if self.path.endswith("/api/mediaquality/upgrade"): return self.send(200, {"searched": 14})
+        if self.path.endswith("/api/changelog/undo"): return self.send(200, {"file": "alerts.json"})
+        if self.path.endswith("/api/titleshare/create"): return self.send(200, {"id": "ab12cd34", "path": "/invite/" + "S" * 32, "expires": now + 86400 * 8, "title": "Dune"})
+        if self.path.endswith(("/api/titleshare/revoke", "/api/peoplereport/settings", "/api/vpnwatch/settings")): return self.send(200, {"settings": body})
         if self.path.endswith("/api/remote-control/pause"): return self.send(200, {"paused": 3})
         if self.path.endswith("/api/remote-control/resume"): return self.send(200, {"resumed": 3})
         if self.path.endswith(("/api/bandwidth/settings", "/api/ratio/settings", "/api/catalogexport/settings")): return self.send(200, {"settings": body})

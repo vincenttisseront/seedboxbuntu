@@ -283,6 +283,18 @@
         <button id="vpn-disable" class="btn danger" type="button">Désactiver le VPN (accès direct)</button>
       </div>
     </form>
+    <form class="card form" id="vpnwatch-card">
+      <h2>Surveillance du tunnel</h2>
+      <p class="muted small">Toutes les 5 minutes, compare l’adresse de sortie vue depuis le tunnel avec celle de la maison. Identiques : le trafic sort sans passer par le VPN (alerte critique, et pause des torrents si l’arrêt automatique est activé). Un changement d’adresse de sortie est noté. gluetun coupe déjà tout trafic hors tunnel : c’est un filet de sécurité, pas la protection principale. Désactivé par défaut : il interroge un service public (api.ipify.org) depuis le serveur, qui voit alors l’adresse de la maison.</p>
+      <p id="vpnwatch-state" class="notice info"></p>
+      <label class="check"><input name="enabled" type="checkbox">Surveiller le tunnel</label>
+      <label class="check"><input name="auto_stop" type="checkbox">Mettre les torrents en pause en cas de fuite</label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Événement</th><th>Détail</th></tr></thead>
+        <tbody id="vpnwatch-list"></tbody>
+      </table></div>
+    </form>
   </section>
 
   <section id="view-domain" class="view hidden">
@@ -552,6 +564,16 @@
       <button id="backup-key-show" class="btn" type="button">Afficher la clé</button>
       <p id="backup-key" class="secret"></p>
     </div>
+    <div class="card" id="restoredrill-card">
+      <div class="card-head"><h2>Simulation de restauration</h2><button id="restoredrill-run" class="btn primary" type="button">Simuler</button></div>
+      <p class="muted small">Restaure une sauvegarde dans des conteneurs jetables, sans réseau et sans toucher à vos données, puis vérifie que Radarr, Sonarr, Prowlarr et Lidarr démarrent avec leur configuration sauvegardée et que leur API répond avec la clé de la sauvegarde. Il faut environ 1,5 Go de mémoire libre ; la simulation prend quelques minutes. Elle prouve que la sauvegarde se relit, pas que tout le contenu (médias, bases de Jellyfin) est complet.</p>
+      <label>Sauvegarde<select id="restoredrill-name"></select></label>
+      <p id="restoredrill-state" class="notice info"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Application</th><th>Démarre</th><th>API</th><th>Éléments</th><th>Détail</th></tr></thead>
+        <tbody id="restoredrill-list"></tbody>
+      </table></div>
+    </div>
   </section>
 
   <section id="view-guests" class="view hidden">
@@ -591,6 +613,40 @@
       <div class="row"><button class="btn primary" type="submit">Appliquer</button><button id="guest-edit-cancel" class="btn" type="button">Annuler</button></div>
     </form>
     <div class="card hidden" id="guest-history-card"><h2>Derniers événements</h2><pre id="guest-history" class="log"></pre></div>
+    <div class="card" id="titleshare-card">
+      <h2>Partager un seul titre</h2>
+      <p class="muted small">Donne accès à UN film ou UNE série, pour quelques jours : la personne reçoit un lien d’invitation, son compte ne voit qu’une médiathèque réduite à ce titre, ne peut ni le télécharger ni faire de demande, et tout disparaît à l’échéance. Le titre n’est pas copié (liens durs, aucun espace en plus) ; il doit être sur le même disque que le dossier des médias. La personne voit les noms des fichiers.</p>
+      <form id="titleshare-form" class="form">
+        <div class="split">
+          <label>Type<select name="kind"><option value="movie">Film</option><option value="series">Série</option></select></label>
+          <label>Titre contenant<input name="q" maxlength="60" placeholder="Dune" autocomplete="off"></label>
+        </div>
+        <div class="row"><button id="titleshare-search" class="btn" type="button" data-icon="search">Rechercher</button></div>
+        <label>Résultat<select name="id" id="titleshare-results"></select></label>
+        <label>Valable (jours)<input name="days" type="number" min="1" max="30" value="7"></label>
+        <button class="btn primary" type="submit">Créer le partage</button>
+      </form>
+      <div id="titleshare-link" class="notice ok hidden">
+        <p class="small">Lien du partage : il n’est affiché qu’une seule fois.</p>
+        <p class="secret" id="titleshare-link-text"></p>
+        <div class="row"><button id="titleshare-link-copy" class="btn sm" type="button">Copier le lien</button></div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Titre</th><th>Fichiers</th><th>Expire</th><th></th></tr></thead>
+        <tbody id="titleshare-list"></tbody>
+      </table></div>
+    </div>
+    <form class="card form" id="peoplereport-card">
+      <h2>Bilan du mois par personne</h2>
+      <p class="muted small">Pour chaque compte : demandes faites, disponibles et en attente sur les 30 derniers jours, d’après Seerr. Que des nombres : jamais un titre, jamais ce qui a été regardé. Chacun voit son propre bilan sur « Mon espace ». Activé, il envoie aussi le récapitulatif de tout le monde sur vos canaux d’alerte le jour choisi : c’est un choix à annoncer aux personnes concernées.</p>
+      <label class="check"><input name="enabled" type="checkbox">Recevoir le bilan chaque mois</label>
+      <label>Jour du mois (1 à 28)<input name="day" type="number" min="1" max="28" value="1"></label>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button id="peoplereport-send" class="btn" type="button">Envoyer maintenant</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Compte</th><th>Demandes</th><th>Disponibles</th><th>En attente</th></tr></thead>
+        <tbody id="peoplereport-list"></tbody>
+      </table></div>
+    </form>
   </section>
 
   <section id="view-cleanup" class="view hidden">
@@ -652,6 +708,14 @@
   <section id="view-secrets" class="view hidden">
     <header class="page-head"><div><h1>Identifiants</h1><p class="sub">Comptes de service utilisés entre les applications. Un renouvellement met aussi à jour les applications qui en dépendent.</p></div><div class="actions"><button id="secrets-show" class="btn" type="button">Afficher</button></div></header>
     <div id="secrets-list" class="grid"></div>
+    <div class="card" id="rotation-card">
+      <h2>Renouveler un secret interne</h2>
+      <p class="muted small">Un nouveau secret est écrit, propagé aux applications qui en dépendent, puis vérifié : si l’application ne répond pas avec lui, l’ancien est remis et tout est relié à nouveau. Une clé d’API rend l’application indisponible quelques dizaines de secondes. Ne sont pas renouvelés ici : les secrets d’Authelia, les mots de passe des comptes (page Comptes), la clé des sauvegardes et le mot de passe de qBittorrent.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Secret</th><th>Renouvelé</th><th>Âge</th><th></th></tr></thead>
+        <tbody id="rotation-list"></tbody>
+      </table></div>
+    </div>
   </section>
 
   <section id="view-settings" class="view hidden">
@@ -833,6 +897,12 @@
       <div class="actions"><button id="netcheck-run" class="btn primary" type="button" data-icon="check-circle">Vérifier</button></div></header>
     <div id="netcheck-summary" class="notice info"></div>
     <div class="card"><ul id="netcheck-list" class="checks"></ul></div>
+    <div class="card" id="linkcheck-card">
+      <div class="card-head"><h2>Liens entre les applications</h2><button id="linkcheck-run" class="btn" type="button" data-icon="check-circle">Vérifier</button></div>
+      <p class="muted small">Teste, avec les fonctions de test des applications elles-mêmes, Prowlarr vers Radarr et Sonarr, les clients de téléchargement, les dossiers racines, Seerr vers Radarr et Sonarr, et Jellyfin. Les indexeurs ne sont pas contactés. Un test réussi prouve que l’adresse et la clé sont bonnes, pas qu’une recherche donnera des résultats.</p>
+      <p id="linkcheck-summary" class="notice info"></p>
+      <ul id="linkcheck-list" class="checks"></ul>
+    </div>
   </section>
   <section id="view-vacation" class="view hidden">
     <header class="page-head"><div><h1>Mode vacances</h1><p class="sub">Tout se calme jusqu’à une date, puis reprend seul : torrents en pause, nouveaux torrents démarrés en pause, liens d’invitation refusés. Le serveur, les comptes existants, Jellyfin et Seerr continuent de fonctionner.</p></div></header>
@@ -857,6 +927,15 @@
         <tbody id="disks-list"></tbody>
       </table></div>
       <ul id="disks-notes" class="checks"></ul>
+    </div>
+    <div class="card" id="diskusage-card">
+      <div class="card-head"><h2>Où part la place</h2><button id="diskusage-scan" class="btn" type="button">Analyser</button></div>
+      <p class="muted small">Taille de chaque dossier du stockage, des médias, de la configuration de chaque application et de Docker, mesurée une fois par jour en tâche de fond (sans gêner le serveur). Quand un disque doit se remplir, l’alerte nomme le dossier qui grossit le plus. La mesure ignore les liens et reste dans un seul disque : elle est proche de la réalité, pas exacte à l’octet.</p>
+      <p id="diskusage-state" class="notice info"></p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Dossier</th><th>Taille</th><th>Part</th><th>Évolution par jour</th><th>Tendance</th></tr></thead>
+        <tbody id="diskusage-list"></tbody>
+      </table></div>
     </div>
   </section>
 
@@ -932,6 +1011,51 @@
       <p id="remote-vacation" class="small"></p>
       <p><a class="btn" href="#vacation">Régler</a></p>
     </div>
+  </section>
+
+  <section id="view-changes" class="view hidden">
+    <header class="page-head"><div><h1>Journal des réglages</h1><p class="sub">Qui a changé quoi dans les réglages de l’appliance (alertes, sauvegardes, fenêtre de maintenance, débit…), avec les lignes modifiées et un retour à la version d’avant. Les mots de passe, clés et jetons sont masqués : on voit qu’une valeur a changé, jamais sa valeur. L’auteur est déduit du journal d’audit à la même minute ; « hors console » désigne une modification faite à la main sur le serveur.</p></div><div class="actions"><button id="changes-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Fichier</th><th>Auteur</th><th>Action</th><th></th></tr></thead>
+        <tbody id="changes-list"></tbody>
+      </table></div>
+      <p class="muted small">« Revenir » remet la version d’avant pour un fichier, seulement si cette entrée est la plus récente de ce fichier ; le retour est lui-même une entrée, donc annulable. Les 20 dernières versions de chaque fichier sont gardées. Les comptes, le fichier .env et les bases ne sont pas suivis.</p>
+    </div>
+    <div class="card hidden" id="changes-detail-card">
+      <h2 id="changes-detail-title">Détail</h2>
+      <pre id="changes-detail" class="log"></pre>
+    </div>
+  </section>
+
+  <section id="view-quality" class="view hidden">
+    <header class="page-head"><div><h1>Qualité des médias</h1><p class="sub">Ce qui est en dessous de la qualité visée par vos profils, ce qui manque, ce qui est très compressé et les doublons possibles, d’après Radarr et Sonarr. Lecture seule ; la seule action lance, dans Radarr ou Sonarr, une recherche d’une meilleure version : ce sont eux qui décident de télécharger ou non, et qui ne remplacent un fichier que par mieux. Rien n’est supprimé ici.</p></div><div class="actions"><button id="quality-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <div id="quality-state" class="notice info"></div>
+    <div class="grid">
+      <div class="card" id="quality-radarr">
+        <div class="card-head"><h2>Films (Radarr)</h2><button id="quality-radarr-upgrade" class="btn" type="button">Rechercher une meilleure version</button></div>
+        <dl id="quality-radarr-kv" class="kv"></dl>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Films à surveiller"><table>
+          <thead><tr><th>Titre</th><th>Constat</th></tr></thead>
+          <tbody id="quality-radarr-list"></tbody>
+        </table></div>
+      </div>
+      <div class="card" id="quality-sonarr">
+        <div class="card-head"><h2>Séries (Sonarr)</h2><button id="quality-sonarr-upgrade" class="btn" type="button">Rechercher une meilleure version</button></div>
+        <dl id="quality-sonarr-kv" class="kv"></dl>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Séries à surveiller"><table>
+          <thead><tr><th>Épisode</th><th>Constat</th></tr></thead>
+          <tbody id="quality-sonarr-list"></tbody>
+        </table></div>
+      </div>
+    </div>
+    <p class="muted small">Les chiffres des « manquants » dépendent de la date de sortie connue par Radarr et Sonarr ; la compression est une estimation (taille divisée par la durée annoncée) ; les doublons sont repérés par le nom, pas par le contenu. La recherche porte sur les 20 premiers titres sous le seuil, pour ne pas saturer les indexeurs.</p>
+  </section>
+
+  <section id="view-maison" class="view hidden">
+    <header class="page-head"><div><h1>Maison</h1><p class="sub">L’état du serveur en grand, lisible de loin : une tablette au mur ou une télévision. La page se met à jour toute seule toutes les 30 secondes et ne propose aucun geste. Ouvrez l’adresse de la console suivie de #maison ; l’écran doit y être connecté une fois (un compte observateur suffit).</p></div></header>
+    <div id="maison-verdict" class="notice ok"></div>
+    <div class="tiles" id="maison-tiles"></div>
   </section>
 
   <section id="view-styleguide" class="view hidden">
@@ -1019,6 +1143,7 @@
 <script src="extras.js"></script>
 <script src="ops.js"></script>
 <script src="ops2.js"></script>
+<script src="ops3.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

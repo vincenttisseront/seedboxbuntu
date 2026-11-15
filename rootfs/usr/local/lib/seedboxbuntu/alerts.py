@@ -275,7 +275,7 @@ def findings(cfg=None):
                     "critical" if item["days"] < 3 else "warning")
         except (ctl.SeedboxError, OSError, ValueError, KeyError):
             pass
-    for loader in (ctl.resources, ctl.vulnscan, ctl.smarthist, ctl.ratiogoals):  # dérives des conteneurs, failles des images, santé des disques, ratios
+    for loader in (ctl.resources, ctl.vulnscan, ctl.smarthist, ctl.ratiogoals, ctl.diskusage, ctl.vpnwatch):  # dérives des conteneurs, failles des images, santé des disques, ratios
         try:
             found.update(loader().findings())
         except Exception:  # noqa: BLE001 - une source en panne ne bloque pas les autres contrôles
@@ -304,7 +304,7 @@ def load_state():
 
 def housekeeping():
     """Tâches du passage de 5 minutes qui ne dépendent pas des alertes : fin du mode vacances, tâches reportées par la fenêtre de maintenance."""
-    for loader in (ctl.vacation, ctl.maintwindow, ctl.bandwidth, ctl.catalogexport):
+    for loader in (ctl.vacation, ctl.maintwindow, ctl.bandwidth, ctl.catalogexport, ctl.changelog, ctl.diskusage, ctl.peoplereport, ctl.titleshare, ctl.vpnwatch):
         try:
             loader().tick()
         except Exception as error:  # noqa: BLE001 - une tâche en échec ne doit pas empêcher la surveillance

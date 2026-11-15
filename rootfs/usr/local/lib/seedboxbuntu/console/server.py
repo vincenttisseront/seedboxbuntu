@@ -76,7 +76,7 @@ def start_job(title, argv, stdin=None):
 
 # Routes de lecture ouvertes aux observateurs (rôle « observer ») : aucun secret, aucun journal, aucun réglage
 OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance",
-                "/api/metrics", "/api/notifications", "/api/prefs", "/api/report", "/api/vacation", "/api/push"}
+                "/api/metrics", "/api/notifications", "/api/prefs", "/api/report", "/api/vacation", "/api/push", "/api/house"}
 OBSERVER_POST = {"/api/prefs", "/api/push/subscribe", "/api/push/unsubscribe"}
 
 
@@ -469,6 +469,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_text(json.dumps(bundle, ensure_ascii=False, indent=1), "application/json", bundle["name"])
         if path == "/api/remote-control":
             return self.send_json(ctl.telecommande().overview())
+        if path == "/api/house":
+            return self.send_json(ctl.house().overview())
+        if path == "/api/changelog":
+            return self.send_json(ctl.changelog().overview())
+        if path == "/api/changelog/detail":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            return self.send_json(ctl.changelog().detail(query.get("id", [""])[0]))
+        if path == "/api/restoredrill":
+            return self.send_json(ctl.restoredrill().overview())
+        if path == "/api/diskusage":
+            return self.send_json(ctl.diskusage().overview())
+        if path == "/api/rotation":
+            return self.send_json(ctl.rotation().overview())
+        if path == "/api/mediaquality":
+            return self.send_json(ctl.mediaquality().overview())
+        if path == "/api/peoplereport":
+            return self.send_json(ctl.peoplereport().overview())
+        if path == "/api/titleshare":
+            return self.send_json(ctl.titleshare().overview())
+        if path == "/api/titleshare/search":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            return self.send_json({"results": ctl.titleshare().search(query.get("kind", [""])[0], query.get("q", [""])[0])})
+        if path == "/api/vpnwatch":
+            return self.send_json(ctl.vpnwatch().overview())
         if path == "/api/push":
             return self.send_json(ctl.webpush().status(self.headers.get("Remote-User", "")))
         if path == "/api/messages-language":
@@ -614,6 +638,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             module = ctl.catalogexport()
             name = module.load(str(data.get("name", "")) or None)["name"]
             return self.send_json({"job": start_job("Réimport du catalogue", ["catalogexport", "apply", name])})
+        if path == "/api/changelog/undo":
+            return self.send_json(ctl.changelog().undo(str(data.get("id", "")), self.headers.get("Remote-User", "")[:30] or "console"))
+        if path == "/api/restoredrill/run":
+            only = [str(x) for x in data.get("only", []) if ctl.restoredrill().NAME.match(str(x))]
+            name = str(data.get("name", ""))
+            if name:
+                ctl.backup().find(name)
+            return self.send_json({"job": start_job("Simulation de restauration", ["restoredrill", "run"] + ([name] if name else []) + (["--only", *only] if only else []))})
+        if path == "/api/diskusage/scan":
+            return self.send_json({"job": start_job("Mesure de l'espace par dossier", ["diskusage", "scan"])})
+        if path == "/api/rotation/run":
+            item = str(data.get("item", ""))
+            if item not in ctl.rotation().ITEMS:
+                raise ctl.SeedboxError("secret inconnu")
+            return self.send_json({"job": start_job("Renouvellement d'un secret : " + ctl.rotation().ITEMS[item][0], ["rotation", "run", item, "--by",
+                                                                                                                  self.headers.get("Remote-User", "")[:30] or "console"])})
+        if path == "/api/mediaquality/upgrade":
+            return self.send_json(ctl.mediaquality().upgrade(str(data.get("app", "")), data.get("count", 20), by=self.headers.get("Remote-User", "") or "console"))
+        if path == "/api/linkcheck/run":
+            return self.send_json(ctl.linkcheck().run())
+        if path == "/api/peoplereport/settings":
+            return self.send_json({"settings": ctl.peoplereport().save(data)})
+        if path == "/api/peoplereport/send":
+            return self.send_json({"job": start_job("Envoi du bilan mensuel", ["peoplereport", "send"])})
+        if path == "/api/titleshare/create":
+            return self.send_json(ctl.titleshare().create(str(data.get("kind", "")), data.get("id"), data.get("days", 7), by=self.headers.get("Remote-User", "") or "console"))
+        if path == "/api/titleshare/revoke":
+            return self.send_json(ctl.titleshare().remove(str(data.get("id", ""))))
+        if path == "/api/vpnwatch/settings":
+            return self.send_json({"settings": ctl.vpnwatch().save(data)})
         if path == "/api/remote-control/pause":
             return self.send_json({"paused": ctl.telecommande().pause()})
         if path == "/api/remote-control/resume":

@@ -671,15 +671,15 @@ async function loadVersions() {
   $('versions-list').replaceChildren(...rows);
 }
 
-const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadResources().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: async () => { await loadAlerts(); loadMessageLanguage().catch(showError); loadPush().catch(showError); }, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); loadBackupDiff().catch(showError); }, catalog: loadCatalog, settings: async () => { await loadSettings(); loadWindow().catch(showError); }, apps: async () => { await loadApps(); loadRollout().catch(showError); }, users: async () => { await loadUsers(); loadEmergency().catch(showError); }, trackers: async () => { await loadTrackers(); loadRatio().catch(showError); }, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
-  guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal(), setup: loadSetup, report: loadReport,
+const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadResources().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: async () => { await loadAlerts(); loadMessageLanguage().catch(showError); loadPush().catch(showError); }, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); loadBackupDiff().catch(showError); loadRestoredrill().catch(showError); }, catalog: loadCatalog, settings: async () => { await loadSettings(); loadWindow().catch(showError); }, apps: async () => { await loadApps(); loadRollout().catch(showError); }, users: async () => { await loadUsers(); loadEmergency().catch(showError); }, trackers: async () => { await loadTrackers(); loadRatio().catch(showError); }, shares: loadShares, vpn: async () => { await loadVpn(); loadVpnwatch().catch(showError); }, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: loadRotation,
+  guests: async () => { await loadGuests(); loadTitleshare().catch(showError); loadPeoplereport().catch(showError); }, cleanup: loadCleanup, journal: () => loadJournal(), setup: loadSetup, report: loadReport,
   activity: loadActivity, vulns: loadVulns, netcheck: loadNetcheck, vacation: loadVacation,
-  disks: loadDisks, bandwidth: loadBandwidth, diagnose: loadDiagnose, medialist: loadMedialist, telecommande: loadTelecommande };
+  disks: async () => { await loadDisks(); loadDiskusage().catch(showError); }, changes: loadChanges, quality: loadQuality, maison: loadMaison, bandwidth: loadBandwidth, diagnose: loadDiagnose, medialist: loadMedialist, telecommande: loadTelecommande };
 
 function route() {
   const requested = location.hash.slice(1);
   // #kiosk : la vue d'ensemble en grand, sans menu ; tout autre chemin quitte le mode kiosque
-  if (requested === 'kiosk') enterKiosk(); else exitKiosk();
+  if (requested === 'kiosk' || requested === 'maison') enterKiosk(); else exitKiosk();
   const target = requested === 'kiosk' ? 'overview' : requested;
   const name = target in VIEWS && (!readonlyMode() || OBSERVER_VIEWS.includes(target)) ? target : 'overview';
   setCustomizing(false);
@@ -849,6 +849,7 @@ async function start() {
   initExtras();
   initOps();
   initOps2();
+  initOps3();
   watchDecorations();
   window.addEventListener('hashchange', route);
   route();

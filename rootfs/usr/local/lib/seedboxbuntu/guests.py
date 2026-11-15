@@ -33,6 +33,7 @@ PROFILE_LIMITS = {"account_days": (0, 365), "max_sessions": (0, 10), "bitrate_mb
                   "seerr_movie_limit": (0, 100), "seerr_movie_days": (1, 90), "seerr_tv_limit": (0, 100), "seerr_tv_days": (1, 90)}
 MAX_INVITES = 200
 LABEL_RE = re.compile(r"^[\w .,'@+-]{0,60}$", re.U)
+SHARE_LIBRARY_RE = re.compile(r"^Partage [0-9a-f]{8}$")
 ID_RE = re.compile(r"^[0-9a-f]{8}$")
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{20,64}$")
 
@@ -70,6 +71,11 @@ def clean_profile(values):
     for key, value in (values or {}).items():
         if key == "downloads":
             profile[key] = value if isinstance(value, bool) else str(value).lower() in ("1", "true", "on", "oui", "yes")
+        elif key == "library":                                      # partage d'un seul titre : médiathèque unique (voir titleshare.py)
+            if value and not SHARE_LIBRARY_RE.match(str(value)):
+                raise ctl.SeedboxError("médiathèque de partage invalide")
+            if value:
+                profile[key] = str(value)
         elif key in PROFILE_LIMITS:
             low, high = PROFILE_LIMITS[key]
             try:
@@ -97,6 +103,9 @@ def apply_profile(login, profile):
             warnings.append(f"Jellyfin : limites refusées (HTTP {result.status})")
     except (ctl.SeedboxError, OSError, ValueError, KeyError) as error:
         warnings.append(f"Jellyfin : {error}")
+    if profile.get("library"):                                      # compte limité à un seul titre partagé
+        warnings += ctl.titleshare().restrict_policy(login, profile["library"])
+        return warnings
     try:
         seerr_id = ctl.seerr_user_id(jellyfin["Id"])
         if seerr_id:

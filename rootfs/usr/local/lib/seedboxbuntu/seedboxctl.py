@@ -45,6 +45,16 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl catalogexport show|run|plan|apply   liste de la médiathèque : export et réimport
   seedboxctl myspace show LOGIN              ce que voit un compte dans « Mon espace »
   seedboxctl remote-control show|pause|resume    télécommande : pause générale des torrents
+  seedboxctl changelog show|undo ID|tick     journal des réglages : qui a changé quoi, retour en arrière
+  seedboxctl restoredrill show|run [NOM]     simulation de restauration d'une sauvegarde dans des conteneurs jetables
+  seedboxctl diskusage show|scan             espace par dossier et par application, évolution
+  seedboxctl rotation show|run ELEMENT       renouvellement guidé d'un secret interne, avec retour en cas d'échec
+  seedboxctl mediaquality show|upgrade radarr|sonarr [N]   qualité des médias (sous le seuil, manquants, doublons)
+  seedboxctl linkcheck                       contrôle des liens entre les applications de la pile
+  seedboxctl peoplereport show|set|send      bilan du mois par personne
+  seedboxctl titleshare list|create|revoke|tick   partager un seul titre, pour une durée limitée
+  seedboxctl vpnwatch show|set|tick          surveillance du VPN (fuite, changement d'adresse)
+  seedboxctl house                           état d'ensemble pour l'écran « maison »
 """
 import argparse
 import base64
@@ -345,6 +355,46 @@ def catalogexport():
 
 def rollout():
     return _lazy("rollout")
+
+
+def changelog():
+    return _lazy("changelog")
+
+
+def restoredrill():
+    return _lazy("restoredrill")
+
+
+def diskusage():
+    return _lazy("diskusage")
+
+
+def rotation():
+    return _lazy("rotation")
+
+
+def mediaquality():
+    return _lazy("mediaquality")
+
+
+def linkcheck():
+    return _lazy("linkcheck")
+
+
+def peoplereport():
+    return _lazy("peoplereport")
+
+
+def titleshare():
+    return _lazy("titleshare")
+
+
+def vpnwatch():
+    return _lazy("vpnwatch")
+
+
+def house():
+    return _lazy("house")
 
 
 def backupdiff():
@@ -2765,6 +2815,56 @@ def main():
     rc = commands.add_parser("remote-control", help="télécommande").add_subparsers(dest="action", required=True)
     for name in ("show", "pause", "resume"):
         rc.add_parser(name)
+    cl = commands.add_parser("changelog", help="journal des réglages").add_subparsers(dest="action", required=True)
+    for name in ("show", "tick"):
+        cl.add_parser(name)
+    cl_undo = cl.add_parser("undo")
+    cl_undo.add_argument("id")
+    cl_undo.add_argument("--by", default="cli")
+    rd = commands.add_parser("restoredrill", help="simulation de restauration").add_subparsers(dest="action", required=True)
+    rd.add_parser("show")
+    rd_run = rd.add_parser("run")
+    rd_run.add_argument("name", nargs="?", default=None, help="sauvegarde (la plus récente par défaut)")
+    rd_run.add_argument("--only", nargs="*", default=None, help="applications à essayer")
+    du_cmd = commands.add_parser("diskusage", help="espace par dossier et par application").add_subparsers(dest="action", required=True)
+    for name in ("show", "scan"):
+        du_cmd.add_parser(name)
+    rt = commands.add_parser("rotation", help="renouvellement guidé des secrets").add_subparsers(dest="action", required=True)
+    rt.add_parser("show")
+    rt_run = rt.add_parser("run")
+    rt_run.add_argument("item")
+    rt_run.add_argument("--by", default="cli")
+    mq = commands.add_parser("mediaquality", help="qualité des médias").add_subparsers(dest="action", required=True)
+    mq.add_parser("show")
+    mq_up = mq.add_parser("upgrade")
+    mq_up.add_argument("app")
+    mq_up.add_argument("count", nargs="?", type=int, default=20)
+    commands.add_parser("linkcheck", help="contrôle des liens entre applications")
+    pr = commands.add_parser("peoplereport", help="bilan du mois par personne").add_subparsers(dest="action", required=True)
+    for name in ("show", "send"):
+        pr.add_parser(name)
+    pr_set = pr.add_parser("set")
+    pr_set.add_argument("--enable", action="store_true")
+    pr_set.add_argument("--disable", action="store_true")
+    pr_set.add_argument("--day", type=int, default=None)
+    ts = commands.add_parser("titleshare", help="partager un seul titre").add_subparsers(dest="action", required=True)
+    for name in ("list", "tick"):
+        ts.add_parser(name)
+    ts_create = ts.add_parser("create")
+    ts_create.add_argument("kind", choices=("movie", "series"))
+    ts_create.add_argument("id", type=int)
+    ts_create.add_argument("--days", type=int, default=7)
+    ts_create.add_argument("--by", default="cli")
+    ts.add_parser("revoke").add_argument("id")
+    vw = commands.add_parser("vpnwatch", help="surveillance du VPN").add_subparsers(dest="action", required=True)
+    for name in ("show", "tick"):
+        vw.add_parser(name)
+    vw_set = vw.add_parser("set")
+    vw_set.add_argument("--enable", action="store_true")
+    vw_set.add_argument("--disable", action="store_true")
+    vw_set.add_argument("--auto-stop", dest="auto_stop", action="store_true")
+    vw_set.add_argument("--no-auto-stop", dest="no_auto_stop", action="store_true")
+    commands.add_parser("house", help="état d'ensemble pour l'écran maison")
     cfg_cmd = commands.add_parser("config", help="export et import des réglages de la console").add_subparsers(dest="action", required=True)
     cfg_export = cfg_cmd.add_parser("export")
     cfg_export.add_argument("--secrets", action="store_true", help="inclut les secrets des canaux d'alerte")
@@ -3267,6 +3367,85 @@ def main():
             print(locked(module.pause)())
         else:
             print(locked(module.resume)())
+    elif args.command == "changelog":
+        module = changelog()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "tick":
+            locked(module.tick)()
+        else:
+            locked(module.undo)(args.id, args.by)
+    elif args.command == "restoredrill":
+        module = restoredrill()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            report = module.run(args.name, only=args.only)
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            if not report["ok"]:
+                sys.exit(1)
+    elif args.command == "diskusage":
+        module = diskusage()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            module.scan()
+    elif args.command == "rotation":
+        module = rotation()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            locked(module.rotate)(args.item, args.by)
+    elif args.command == "mediaquality":
+        module = mediaquality()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(module.upgrade(args.app, args.count, by="cli"), ensure_ascii=False))
+    elif args.command == "linkcheck":
+        report = linkcheck().run()
+        for item in report["items"]:
+            print(f"{item['state']:5} {item['title']} : {item['detail']}")
+        if report["errors"]:
+            sys.exit(1)
+    elif args.command == "peoplereport":
+        module = peoplereport()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "send":
+            module.send()
+        else:
+            values = {}
+            if args.enable or args.disable:
+                values["enabled"] = bool(args.enable)
+            if args.day is not None:
+                values["day"] = args.day
+            module.save(values)
+    elif args.command == "titleshare":
+        module = titleshare()
+        if args.action == "list":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "create":
+            print(json.dumps(locked(module.create)(args.kind, args.id, args.days, args.by), ensure_ascii=False))
+        elif args.action == "revoke":
+            locked(module.remove)(args.id)
+        else:
+            locked(module.tick)()
+    elif args.command == "vpnwatch":
+        module = vpnwatch()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "tick":
+            module.tick()
+        else:
+            values = {}
+            if args.enable or args.disable:
+                values["enabled"] = bool(args.enable)
+            if args.auto_stop or args.no_auto_stop:
+                values["auto_stop"] = bool(args.auto_stop)
+            module.save(values)
+    elif args.command == "house":
+        print(json.dumps(house().overview(), indent=2, ensure_ascii=False))
     elif args.command == "netcheck":
         netcheck().show()
     elif args.command == "vacation":

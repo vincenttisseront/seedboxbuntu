@@ -35,7 +35,7 @@ MAX_FILES = 60
 MAX_DIFF_LINES = 40
 MAX_WALK = 200000
 HASH_LIMIT = 64 << 20
-SECRET_NAME = re.compile(r"(?i)(pass|secret|token|api[_-]?key|private|credential|cookie|jwt|salt|hash|webhook|session|encryption|auth[_-]?key|"
+SECRET_NAME = re.compile(r"(?i)(pass|secret|token|topic|api[_-]?key|private|credential|cookie|jwt|salt|hash|webhook|session|encryption|auth[_-]?key|"
                          r"(^|[_\-.])key([_\-.]|$)|key$)")
 LINE_PATTERNS = (
     re.compile(r"""^(?P<head>\s*(?:export\s+)?(?P<name>[\w.\-]+)\s*=\s*)(?P<q>['"]?)(?P<value>.*?)(?P=q)\s*$"""),            # KEY=value

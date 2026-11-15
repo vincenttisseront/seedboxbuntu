@@ -327,6 +327,67 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(400)
     if not [1 for path, _ in ui_mock.CALLS if path.endswith("/api/remote-control/pause")]:
         fail("parcours : la télécommande n'envoie pas la pause générale")
+    # --- dix nouveautés : journal, qualité, liens, partage d'un titre, secrets ---
+    page.goto(base + "#changes")
+    settle(page, "changes")
+    page.wait_for_timeout(300)
+    page.click("#changes-list tr:first-child button")
+    page.wait_for_selector("#changes-detail-card:not(.hidden)")
+    if "masqué" not in page.inner_text("#changes-detail") or "token" not in page.inner_text("#changes-detail"):
+        fail("parcours : le détail d'un changement n'affiche pas les lignes modifiées (secrets masqués)")
+    ui_mock.CALLS.clear()
+    page.click("#changes-list tr:first-child button:has-text('Revenir')")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/changelog/undo") and body.get("id") == "e2"]:
+        fail("parcours : « Revenir » n'envoie pas l'entrée du journal")
+    page.goto(base + "#quality")
+    settle(page, "quality")
+    page.wait_for_timeout(300)
+    if "Alien" not in page.inner_text("#quality-radarr-list") or "Fargo" not in page.inner_text("#quality-sonarr-list"):
+        fail("parcours : la qualité des médias n'affiche pas les titres signalés")
+    ui_mock.CALLS.clear()
+    page.click("#quality-radarr-upgrade")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/mediaquality/upgrade") and body.get("app") == "radarr"]:
+        fail("parcours : la recherche d'une meilleure version n'est pas envoyée")
+    page.goto(base + "#netcheck")
+    settle(page, "netcheck")
+    page.click("#linkcheck-run")
+    page.wait_for_selector("#linkcheck-list li strong")
+    if "Unable to connect" not in page.inner_text("#linkcheck-list") or "À faire" not in page.inner_text("#linkcheck-list"):
+        fail("parcours : le contrôle des liens n'affiche pas l'erreur et le conseil")
+    page.goto(base + "#guests")
+    settle(page, "guests")
+    page.wait_for_timeout(300)
+    page.fill("#titleshare-form [name=q]", "dune")
+    page.click("#titleshare-search")
+    page.wait_for_function("document.querySelectorAll('#titleshare-results option').length === 2")
+    ui_mock.CALLS.clear()
+    page.click("#titleshare-form button[type=submit]")
+    page.wait_for_selector("#titleshare-link:not(.hidden)")
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/titleshare/create") and body.get("id") == 12 and body.get("kind") == "movie"] or "/invite/" not in page.inner_text("#titleshare-link-text"):
+        fail("parcours : la création d'un partage n'envoie pas le titre choisi ou n'affiche pas le lien")
+    if "Marie" not in page.inner_text("#peoplereport-list") and "marie" not in page.inner_text("#peoplereport-list"):
+        fail("parcours : le bilan mensuel n'affiche pas les comptes")
+    page.goto(base + "#secrets")
+    settle(page, "secrets")
+    page.wait_for_timeout(300)
+    if page.locator("#rotation-list button:not([disabled])").count() != 3:
+        fail("parcours : la rotation doit proposer 3 secrets renouvelables (le service arrêté est désactivé)")
+    page.goto(base + "#backup")
+    settle(page, "backup")
+    page.wait_for_timeout(300)
+    if "pas de réponse" not in page.inner_text("#restoredrill-list"):
+        fail("parcours : la simulation de restauration n'affiche pas le détail de l'échec")
+    page.goto(base + "#maison")
+    settle(page, "maison")
+    page.wait_for_timeout(300)
+    if not page.evaluate("document.body.classList.contains('kiosk')") or page.locator("#maison-tiles .tile").count() != 6:
+        fail("parcours : la page maison doit s'ouvrir en mode kiosque avec 6 tuiles")
 
 
 def observer_run(browser):
@@ -338,7 +399,7 @@ def observer_run(browser):
         page = context.new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
-        allowed = ["overview", "apps", "system", "alerts", "report"]
+        allowed = ["overview", "maison", "apps", "system", "alerts", "report"]
         page.goto(base + "#overview")
         page.reload()
         settle(page, "overview")

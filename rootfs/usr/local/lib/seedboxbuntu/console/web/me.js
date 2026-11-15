@@ -55,6 +55,11 @@
         list.append(item);
       }
       $("me-no-requests").classList.toggle("hidden", data.requests.length > 0);
+      const month = data.month;
+      $("me-month").classList.toggle("hidden", !month);
+      if (month) {
+        $("me-month").textContent = "Ces " + month.days + " derniers jours : " + month.requests + " demande(s), " + month.available + " disponible(s)" + (month.pending ? ", " + month.pending + " en attente" : "") + ".";
+      }
     }
     $("me-loading").classList.add("hidden");
     $("me-content").classList.remove("hidden");

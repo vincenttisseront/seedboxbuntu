@@ -340,10 +340,11 @@ function watchDecorations() {
 //  Navigation groupée : barre latérale (ordinateur) et barre basse (téléphone), une seule source
 // ---------------------------------------------------------------------------------------------------------------
 const NAV = [
-  { id: 'overview', label: 'Vue d’ensemble', icon: 'home', items: [{ view: 'overview', label: 'Vue d’ensemble', icon: 'home' }] },
+  { id: 'overview', label: 'Vue d’ensemble', icon: 'home', items: [{ view: 'overview', label: 'Vue d’ensemble', icon: 'home' }, { view: 'maison', label: 'Maison', icon: 'monitor' }] },
   { id: 'services', label: 'Services', icon: 'layers', items: [
     { view: 'apps', label: 'Applications', icon: 'apps' }, { view: 'catalog', label: 'Catalogue', icon: 'package' },
-    { view: 'trackers', label: 'Trackers', icon: 'target' }, { view: 'p2p', label: 'P2P Aggregator', icon: 'share' }] },
+    { view: 'trackers', label: 'Trackers', icon: 'target' }, { view: 'p2p', label: 'P2P Aggregator', icon: 'share' },
+    { view: 'quality', label: 'Qualité des médias', icon: 'check-circle' }] },
   { id: 'storage', label: 'Stockage', icon: 'disk', items: [
     { view: 'shares', label: 'Partages', icon: 'folder' }, { view: 'backup', label: 'Sauvegardes', icon: 'download' },
     { view: 'cleanup', label: 'Nettoyage', icon: 'trash' }, { view: 'disks', label: 'Santé des disques', icon: 'disk' },
@@ -358,11 +359,11 @@ const NAV = [
     { view: 'system', label: 'Système', icon: 'monitor' }, { view: 'alerts', label: 'Alertes', icon: 'bell' },
     { view: 'report', label: 'Rapport', icon: 'file' }, { view: 'vacation', label: 'Vacances', icon: 'sun' }, { view: 'diagnose', label: 'Dépannage', icon: 'help' },
     { view: 'telecommande', label: 'Télécommande', icon: 'play' }, { view: 'setup', label: 'Assistant', icon: 'check-circle' },
-    { view: 'journal', label: 'Journal', icon: 'file' }, { view: 'settings', label: 'Paramètres', icon: 'sliders' },
+    { view: 'journal', label: 'Journal', icon: 'file' }, { view: 'changes', label: 'Journal des réglages', icon: 'undo' }, { view: 'settings', label: 'Paramètres', icon: 'sliders' },
     { view: 'styleguide', label: 'Guide de style', icon: 'palette' }] },
 ];
 /** Pages d'un observateur : lecture seule, aucune page qui expose un secret ou un réglage. */
-const OBSERVER_VIEWS = ['overview', 'apps', 'system', 'alerts', 'report'];
+const OBSERVER_VIEWS = ['overview', 'apps', 'system', 'alerts', 'report', 'maison'];
 const readonlyMode = () => typeof SESSION !== 'undefined' && SESSION.readonly;
 /** Navigation visible pour le compte courant. */
 const visibleNav = () => NAV.map((g) => ({ ...g, items: g.items.filter((i) => !readonlyMode() || OBSERVER_VIEWS.includes(i.view)) })).filter((g) => g.items.length);

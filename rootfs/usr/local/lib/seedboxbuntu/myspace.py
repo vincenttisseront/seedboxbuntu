@@ -94,7 +94,7 @@ def overview(login, now=None, fetch=None):
     expires = int(entry.get("expires") or 0)
     result = {"login": login, "role": users[login], "expires": expires, "days_left": max(0, (expires - int(now)) // 86400) if expires else None,
               "limits": {"sessions": profile["max_sessions"], "bitrate_mbps": profile["bitrate_mbps"], "downloads": bool(profile["downloads"])},
-              "quota": {"movie": None, "tv": None}, "requests": [], "requests_available": False}
+              "quota": {"movie": None, "tv": None}, "requests": [], "requests_available": False, "month": None}
     try:
         jellyfin = ctl.jellyfin_user(login)
         seerr = ctl.seerr_user_id(jellyfin["Id"]) if jellyfin else None
@@ -102,6 +102,10 @@ def overview(login, now=None, fetch=None):
         seerr = None
     if seerr:
         result["requests_available"] = True
+        try:
+            result["month"] = ctl.peoplereport().month(login, now)         # nombres seulement : demandes du mois, disponibles
+        except Exception:  # noqa: BLE001 - le bilan ne doit jamais empêcher « Mon espace »
+            pass
         try:
             quota = ctl.seerr_api("GET", f"/user/{seerr}/quota").json() or {}
             result["quota"] = {"movie": quota_view(quota.get("movie")), "tv": quota_view(quota.get("tv"))}

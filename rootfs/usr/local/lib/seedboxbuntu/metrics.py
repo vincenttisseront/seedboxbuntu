@@ -155,7 +155,7 @@ def history(range_name="24h", now=None):
     seconds = RANGES[range_name]
     series = {}
     for key in keys():
-        if key.startswith(("disktotal:", "ctr.", "smart.", "trk.")):
+        if key.startswith(("disktotal:", "ctr.", "smart.", "trk.", "du.")):
             continue                                          # séries des conteneurs : page « Ressources » (resources.py)
         series[key] = points(key, seconds, now)
     totals = {}
