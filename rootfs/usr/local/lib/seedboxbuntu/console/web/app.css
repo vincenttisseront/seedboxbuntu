@@ -381,3 +381,7 @@ body.kiosk .tiles{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
+
+.spark{width:90px;height:24px;display:block}
+.spark .line{fill:none;stroke:var(--c0);stroke-width:1.5;stroke-linejoin:round}
+#vacation-banner{margin:0;border-radius:0;justify-content:center}

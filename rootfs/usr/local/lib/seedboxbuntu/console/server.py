@@ -76,7 +76,8 @@ def start_job(title, argv, stdin=None):
 
 # Routes de lecture ouvertes aux observateurs (rôle « observer ») : aucun secret, aucun journal, aucun réglage
 OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance",
-                "/api/metrics", "/api/notifications", "/api/prefs", "/api/report"}
+                "/api/metrics", "/api/notifications", "/api/prefs", "/api/report", "/api/vacation", "/api/push"}
+OBSERVER_POST = {"/api/prefs", "/api/push/subscribe", "/api/push/unsubscribe"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -155,7 +156,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if method == "GET":
             ok = not path.startswith("/api/") or path in OBSERVER_GET
         else:
-            ok = path == "/api/prefs"
+            ok = path in OBSERVER_POST
         if not ok:
             self.send_json({"error": "lecture seule : cette action est réservée aux administrateurs"}, 403)
         return ok
@@ -390,6 +391,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(self.observer_view(path, ctl.alerts().overview()))
         if path == "/api/backup":
             return self.send_json(ctl.backup().overview())
+        if path == "/api/resources":
+            return self.send_json(ctl.resources().overview())
+        if path == "/api/window":
+            return self.send_json(ctl.maintwindow().overview())
+        if path == "/api/activity":
+            return self.send_json(ctl.activity().overview())
+        if path == "/api/vulns":
+            return self.send_json(ctl.vulnscan().overview())
+        if path == "/api/netcheck":
+            return self.send_json(ctl.netcheck().run())
+        if path == "/api/vacation":
+            return self.send_json(ctl.vacation().overview())
+        if path == "/api/push":
+            return self.send_json(ctl.webpush().status(self.headers.get("Remote-User", "")))
+        if path == "/api/messages-language":
+            return self.send_json({"notify": ctl.texts().language(), "choices": list(ctl.texts().LANGS)})
+        if path == "/api/config/export":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            return self.send_json(ctl.configbundle().export(query.get("secrets", ["0"])[0] == "1"))
         if path == "/api/guests":
             return self.send_json(ctl.guests().overview())
         if path == "/api/audit":
@@ -480,6 +500,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def route_post(self, path, data):
         if path == "/api/prefs":
             return self.send_json(ctl.notifications().prefs_set(self.headers.get("Remote-User", ""), data))
+        if path == "/api/resources/settings":
+            return self.send_json({"settings": ctl.resources().save(data)})
+        if path == "/api/window/settings":
+            return self.send_json({"settings": ctl.maintwindow().save(data)})
+        if path == "/api/activity/settings":
+            return self.send_json({"settings": ctl.activity().save(data)})
+        if path == "/api/vulns/settings":
+            return self.send_json({"settings": ctl.vulnscan().save(data)})
+        if path == "/api/vulns/scan":
+            return self.send_json({"job": start_job("Analyse de vulnérabilités", ["vulnscan", "scan"])})
+        if path == "/api/messages-language":
+            return self.send_json({"notify": ctl.texts().save(data.get("notify", ""))})
+        if path == "/api/vacation/start":
+            until = str(data.get("until", ""))
+            ctl.vacation().parse_until(until)
+            return self.send_json({"job": start_job("Mode vacances", ["vacation", "start", "--until", until, "--by",
+                                                                       self.headers.get("Remote-User", "")[:30] or "console"])})
+        if path == "/api/vacation/stop":
+            return self.send_json({"job": start_job("Reprise après les vacances", ["vacation", "stop"])})
+        if path == "/api/backup/check":
+            return self.send_json(ctl.sandbox().check(str(data.get("name", "")) or None))
+        if path == "/api/config/import":
+            module = ctl.configbundle()
+            bundle = module.parse(json.dumps(data.get("bundle", {})))
+            if data.get("apply"):
+                only = [k for k in data.get("only", []) if isinstance(k, str)] or None
+                return self.send_json({"sections": module.apply(bundle, only)})
+            return self.send_json({"sections": module.plan(bundle)})
+        if path == "/api/push/subscribe":
+            return self.send_json({"devices": ctl.webpush().subscribe(self.headers.get("Remote-User", ""), data.get("subscription"))})
+        if path == "/api/push/unsubscribe":
+            ctl.webpush().unsubscribe(self.headers.get("Remote-User", ""), str(data.get("endpoint", "")))
+            return self.send_json(ctl.webpush().status(self.headers.get("Remote-User", "")))
+        if path == "/api/push/test":
+            return self.send_json({"job": start_job("Notification push de test", ["push", "test"])})
         if path == "/api/report/settings":
             return self.send_json({"settings": ctl.weekly_report().save(data)})
         if path == "/api/report/build":

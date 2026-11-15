@@ -173,8 +173,22 @@ def send_email(cfg, title, message, level):
         client.send_message(mail)
 
 
+def send_push(cfg, title, message, level):
+    result = ctl.webpush().send(title, message)
+    if result["errors"] and not result["sent"]:
+        raise ctl.SeedboxError("push : " + result["errors"][0])
+
+
+def _push_configured(cfg):
+    try:
+        return ctl.webpush().has_subscribers()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 CHANNELS = (("ntfy", lambda c: c["ntfy"]["topic"], send_ntfy), ("discord", lambda c: c["discord"]["webhook"], send_discord),
-            ("webhook", lambda c: c["webhook"]["url"], send_webhook), ("email", lambda c: c["email"]["host"] and c["email"]["to"], send_email))
+            ("webhook", lambda c: c["webhook"]["url"], send_webhook), ("email", lambda c: c["email"]["host"] and c["email"]["to"], send_email),
+            ("push", _push_configured, send_push))
 
 
 def notify(title, message, level="warning", force=False):
@@ -183,6 +197,11 @@ def notify(title, message, level="warning", force=False):
     results = {}
     if not cfg["enabled"] and not force:
         return results
+    try:
+        texts = ctl.texts()
+        title, message = texts.tr(title), texts.tr(message)      # langue choisie pour les messages envoyés
+    except Exception:  # noqa: BLE001 - une traduction en panne ne doit jamais empêcher l'envoi
+        pass
     for name, configured, sender in CHANNELS:
         if not configured(cfg):
             continue
@@ -256,6 +275,11 @@ def findings(cfg=None):
                     "critical" if item["days"] < 3 else "warning")
         except (ctl.SeedboxError, OSError, ValueError, KeyError):
             pass
+    for loader in (ctl.resources, ctl.vulnscan):                 # dérives des conteneurs, failles corrigeables des images
+        try:
+            found.update(loader().findings())
+        except Exception:  # noqa: BLE001 - une source en panne ne bloque pas les autres contrôles
+            pass
     pending = ctl.STATE / "upgrade-pending"
     if pending.exists() and time.time() - pending.stat().st_mtime > 900:
         found["mise-a-jour"] = ("Mise à jour de l'appliance bloquée", "Elle échoue depuis plus de 15 minutes : voir Applications > Configuration et mises à jour.", "warning")
@@ -278,8 +302,18 @@ def load_state():
         return {}
 
 
+def housekeeping():
+    """Tâches du passage de 5 minutes qui ne dépendent pas des alertes : fin du mode vacances, tâches reportées par la fenêtre de maintenance."""
+    for loader in (ctl.vacation, ctl.maintwindow):
+        try:
+            loader().tick()
+        except Exception as error:  # noqa: BLE001 - une tâche en échec ne doit pas empêcher la surveillance
+            say(f"{loader.__name__} : {str(error)[:100]}")
+
+
 def check():
     """Une passe de surveillance ; renvoie le nombre de messages envoyés."""
+    housekeeping()
     cfg = settings()
     if not cfg["enabled"]:
         return 0

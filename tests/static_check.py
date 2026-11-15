@@ -102,7 +102,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # --- interface : identifiants, CSP, ressources ---------------------------------------------------------------------------
 index = (web / "index.html").read_text()
 ids_html = set(re.findall(r'\bid="([^"]+)"', index))
-SCRIPTS = ("app.js", "ui.js", "features.js", "pages.js")
+SCRIPTS = ("app.js", "ui.js", "features.js", "pages.js", "ops.js")
 used = set()
 for script in SCRIPTS:
     text = (web / script).read_text()
@@ -142,7 +142,7 @@ def color_lines(path, skip=()):
             out.append(f"{path.name}:{number}")
     return out
 literal = []
-for name in ("app.css", "index.html", "invite.html", "error.html", "app.js", "ui.js", "features.js", "pages.js", "invite.js"):
+for name in ("app.css", "index.html", "invite.html", "error.html", "app.js", "ui.js", "features.js", "pages.js", "ops.js", "invite.js"):
     literal += color_lines(web / name, skip=("theme-color", "@font-face"))
 literal += color_lines(web / "display.js", skip=("THEME_COLOR",))
 check("couleurs : aucune valeur en dur hors de tokens.css", not literal, literal[:8])
@@ -169,7 +169,7 @@ def class_problems(text, source):
             problems.append(f"{source}: {call[:60]!r}")
     return problems
 problems = []
-for name in ("index.html", "invite.html", "error.html", "app.js", "ui.js", "features.js", "pages.js", "invite.js"):
+for name in ("index.html", "invite.html", "error.html", "app.js", "ui.js", "features.js", "pages.js", "ops.js", "invite.js"):
     problems += class_problems((web / name).read_text(), name)
 check("boutons : uniquement les classes btn, tab, seg, icon-btn, tabbar-item et leurs variantes", not problems, problems[:6])
 
@@ -195,7 +195,7 @@ check("libellés de boutons : aucun synonyme interdit (voir docs/GLOSSAIRE.md)",
 saving = [l for l in labels if l.strip().startswith("Sauvegarder") and "maintenant" not in l]
 check("libellés : « Sauvegarder » réservé aux sauvegardes du serveur", not saving, saving)
 raw_format = []
-for name in ("app.js", "features.js", "pages.js", "invite.js"):
+for name in ("app.js", "features.js", "pages.js", "ops.js", "invite.js"):
     for number, line in enumerate((web / name).read_text().splitlines(), 1):
         if re.search(r"toLocale\w*String\(|toLocaleDateString\(|toLocaleTimeString\(|new Intl\.|\.toFixed\(", line) and "x(t).toFixed(1)" not in line:
             raw_format.append(f"{name}:{number}")
@@ -206,9 +206,9 @@ units = SRC / "rootfs/etc/systemd/system"
 post = (SRC / "rootfs/usr/local/lib/seedboxbuntu/postinstall.sh").read_text()
 enabled = set(re.findall(r"(seedbox-[a-z-]+\.timer)", post))
 check("minuteries activées : unités présentes", all((units / t).exists() for t in enabled), sorted(t for t in enabled if not (units / t).exists()))
-for timer in ("seedbox-appliance", "seedbox-restoretest", "seedbox-metrics", "seedbox-report"):
+for timer in ("seedbox-appliance", "seedbox-restoretest", "seedbox-metrics", "seedbox-report", "seedbox-vulnscan"):
     check(f"unité {timer} : service et minuterie", (units / f"{timer}.service").exists() and (units / f"{timer}.timer").exists() and f"{timer}.timer" in post)
-for name in ("offsite", "metrics", "cleanup", "gpu", "guests", "audit", "importer", "appliance", "notifications", "assistant", "report"):
+for name in ("offsite", "metrics", "cleanup", "gpu", "guests", "audit", "importer", "appliance", "notifications", "assistant", "report", "resources", "maintwindow", "sandbox", "activity", "texts", "vulnscan", "netcheck", "vacation", "webpush", "configbundle"):
     check(f"module {name}.py présent", (SRC / f"rootfs/usr/local/lib/seedboxbuntu/{name}.py").exists())
 check("rclone installé par l'ISO", "rclone" in (SRC / "lib/60-autoinstall.sh").read_text())
 check("outil de manifeste et workflow de publication", (SRC / "tools/manifest.py").exists() and (SRC / ".github/workflows/release.yml").exists())

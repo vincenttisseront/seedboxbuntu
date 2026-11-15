@@ -176,6 +176,11 @@ def lookup(token, now=None):
     """Invitation active correspondant au jeton, ou None (aucune indication sur la raison)."""
     if not TOKEN_RE.match(token or ""):
         return None
+    try:
+        if ctl.vacation().active(now):
+            return None                                            # mode vacances : les liens sont suspendus, pas révoqués
+    except Exception:  # noqa: BLE001 - l'état du mode vacances ne doit jamais casser la page publique
+        pass
     wanted = token_hash(token)
     found = None
     for invite in invites():

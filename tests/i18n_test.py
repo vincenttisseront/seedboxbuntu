@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "rootfs/usr/local/lib/seedboxbuntu/console/web"
-CEILING = 8                          # phrases françaises tolérées dans les pages en anglais (données de démonstration)
+CEILING = 7                          # phrases françaises tolérées dans les pages en anglais (données de démonstration)
 failures = []
 checks = 0
 

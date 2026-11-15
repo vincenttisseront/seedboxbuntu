@@ -1,9 +1,9 @@
 // Service worker de la console : garde l'interface (HTML, CSS, JS, polices, icônes) pour qu'elle
 // s'ouvre même sans réseau. Les données (/api) ne sont jamais mises en cache : elles viennent
 // toujours du serveur, et sans réseau l'interface le dit.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = `seedbox-console-${VERSION}`;
-const SHELL = ['./', 'tokens.css', 'app.css', 'display.js', 'i18n.js', 'lang-en.js', 'ui.js', 'features.js', 'pages.js', 'extras.js', 'app.js', 'icons.svg', 'logo.svg', 'icon-192.png', 'manifest.webmanifest'];
+const SHELL = ['./', 'tokens.css', 'app.css', 'display.js', 'i18n.js', 'lang-en.js', 'ui.js', 'features.js', 'pages.js', 'extras.js', 'ops.js', 'app.js', 'icons.svg', 'logo.svg', 'icon-192.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()).catch(() => self.skipWaiting()));
@@ -39,4 +39,24 @@ self.addEventListener('fetch', (event) => {
       throw error;
     }
   })());
+});
+
+// Notifications push (alertes) : le serveur envoie un message chiffré, le navigateur l'affiche même console fermée.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (error) { data = {}; }
+  const title = String(data.title || 'SeedBoxBuntu').slice(0, 100);
+  event.waitUntil(self.registration.showNotification(title, {
+    body: String(data.body || '').slice(0, 300), icon: 'icon-192.png', badge: 'icon-192.png', tag: String(data.tag || 'seedbox'), data: { url: String(data.url || './#alerts') },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data && event.notification.data.url ? event.notification.data.url : './#alerts', self.registration.scope);
+  if (target.origin !== self.location.origin) return;       // jamais d'ouverture d'un autre site
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+    for (const client of windows) if ('focus' in client) { client.navigate(target.href).catch(() => {}); return client.focus(); }
+    return self.clients.openWindow(target.href);
+  }));
 });

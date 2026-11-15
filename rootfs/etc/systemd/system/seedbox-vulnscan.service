@@ -1,0 +1,11 @@
+[Unit]
+Description=SeedBoxBuntu - analyse hebdomadaire des vulnérabilités des images Docker
+After=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl vulnscan auto
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=1h

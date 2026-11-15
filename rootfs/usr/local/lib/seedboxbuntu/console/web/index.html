@@ -42,6 +42,7 @@
   <button class="icon-btn" type="button" data-display-open aria-label="Affichage"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-sun"/></svg></button>
 </header>
 
+<div id="vacation-banner" class="notice info hidden" role="status"><span id="vacation-banner-text"></span> <a href="#vacation">Détails</a></div>
 <main id="main" tabindex="-1">
   <section id="view-overview" class="view hidden">
     <header class="page-head"><div><h1>Vue d’ensemble</h1><p class="sub">L’état de la seedbox en un coup d’œil : santé des services, espace, mises à jour, alertes et invitations.</p></div>
@@ -334,6 +335,24 @@
         <tbody id="sys-containers"></tbody>
       </table></div>
     </div>
+    <div class="card hidden" id="resources-card">
+      <h2>Ressources par conteneur (24 h)</h2>
+      <p class="muted small">Le processeur et la mémoire de chaque conteneur sont relevés toutes les 5 minutes. Une alerte prévient quand la mémoire frôle sa limite, qu’elle grimpe sans raison (fuite probable) ou que le processeur reste saturé.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Conteneur</th><th>Processeur</th><th>Mémoire</th><th>Tendance</th><th>État</th></tr></thead>
+        <tbody id="resources-list"></tbody>
+      </table></div>
+      <details id="resources-extra">
+        <summary class="small">Seuils d’alerte</summary>
+        <form id="resources-form" class="form">
+          <label class="check"><input name="enabled" type="checkbox">Alerter sur les dérives de ressources</label>
+          <label>Mémoire : alerte au-delà de (% de la limite)<input name="memory_percent" type="number" autocomplete="off" min="50" max="100"></label>
+          <label>Fuite probable : à partir de (Mo)<input name="leak_mb" type="number" autocomplete="off" min="64" max="65536"></label>
+          <label>Processeur : alerte au-delà de (% de la machine)<input name="cpu_percent" type="number" autocomplete="off" min="50" max="100"></label>
+          <button class="btn primary" type="submit">Enregistrer</button>
+        </form>
+      </details>
+    </div>
     <div class="card" id="gpu-card">
       <h2>Transcodage matériel (GPU)</h2>
       <p class="muted small">Jellyfin peut utiliser la carte graphique du serveur pour transcoder sans saturer le processeur : Intel (QSV, VAAPI), AMD (VAAPI) ou NVIDIA (NVENC, pilote et NVIDIA Container Toolkit requis).</p>
@@ -360,6 +379,21 @@
   <section id="view-alerts" class="view hidden">
     <header class="page-head"><div><h1>Alertes</h1><p class="sub">L'appliance se surveille toutes les 5 minutes : services arrêtés, disque presque plein, mise à jour bloquée, étape de configuration en échec, certificat proche de l'expiration. Un problème n'est signalé qu'après deux constats successifs, rappelé selon l'intervalle choisi, et un message « rétabli » l'annonce à sa disparition.</p></div><div class="actions"><button id="alerts-test" class="btn" type="button">Envoyer un message de test</button></div></header>
     <div class="card"><h2>Problèmes en cours</h2><ul id="alerts-active" class="checks"></ul></div>
+    <form id="msglang-form" class="card form half">
+      <h2>Langue des messages envoyés</h2>
+      <p class="muted small">Alertes, messages « rétabli » et rapport hebdomadaire envoyés sur ntfy, Discord, webhook, e-mail et notifications push. L’interface de la console suit la langue du navigateur.</p>
+      <label>Langue<select name="notify" id="msglang-select" class="no-i18n"><option value="fr">Français</option><option value="en">English</option></select></label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+    <div class="card half" id="push-card" data-ro-ok>
+      <h2>Notifications dans le navigateur</h2>
+      <p class="muted small">Une alerte s’affiche sur cet appareil même quand la console n’est pas ouverte (Chrome, Edge, Firefox, et Safari à partir de l’écran d’accueil). Chaque appareil s’inscrit séparément.</p>
+      <p id="push-state" class="notice info"></p>
+      <div class="row">
+        <button id="push-toggle" class="btn primary" type="button">Activer</button>
+        <button id="push-test" class="btn" type="button">Tester</button>
+      </div>
+    </div>
     <form id="alerts-form" class="card form">
       <label class="check"><input name="enabled" type="checkbox">Activer les alertes</label>
       <label>Seuil d'alerte du disque (% utilisés)<input name="disk_percent" type="number" autocomplete="off" min="50" max="99"></label>
@@ -421,6 +455,30 @@
           <button id="offsite-clear" class="btn danger" type="button">Retirer la destination</button>
         </div>
       </form>
+    </div>
+    <div class="card" id="sandbox-card">
+      <h2>Vérifier une sauvegarde</h2>
+      <p class="muted small">Répétition à blanc : la sauvegarde est déchiffrée et dépliée dans un dossier de travail, ses bases de données et ses fichiers de réglages sont contrôlés, puis comparés à ce serveur pour dire ce qu’une restauration remplacerait. Rien n’est modifié.</p>
+      <div class="row"><label>Sauvegarde<select id="sandbox-name" aria-label="Sauvegarde à vérifier"></select></label>
+        <button id="sandbox-run" class="btn primary" type="button">Vérifier</button></div>
+      <div id="sandbox-result" class="hidden"></div>
+    </div>
+    <div class="card" id="config-card">
+      <h2>Réglages de la console</h2>
+      <p class="muted small">Exportez les réglages de cette console (alertes, rapport, fenêtre de maintenance, seuils, préférences d’affichage) dans un petit fichier, pour les réappliquer sur un autre serveur. Les comptes, les médias et les applications n’en font pas partie ; les secrets des canaux d’alerte ne sont inclus que si vous le demandez.</p>
+      <div class="row">
+        <label class="check"><input id="config-secrets" type="checkbox">Inclure les secrets des alertes</label>
+        <button id="config-export" class="btn" type="button">Télécharger</button>
+      </div>
+      <div class="row"><label>Fichier à importer<input id="config-file" type="file" accept="application/json,.json"></label>
+        <button id="config-plan" class="btn" type="button">Simuler</button></div>
+      <div id="config-plan-box" class="hidden">
+        <div class="table-wrap"><table>
+          <thead><tr><th></th><th>Section</th><th>État</th><th>Détail</th></tr></thead>
+          <tbody id="config-plan-list"></tbody>
+        </table></div>
+        <div class="row"><button id="config-apply" class="btn primary" type="button">Appliquer</button></div>
+      </div>
     </div>
     <div class="card" id="import-card">
       <h2>Importer une autre seedbox</h2>
@@ -556,6 +614,18 @@
   <section id="view-settings" class="view hidden">
     <header class="page-head"><div><h1>Paramètres</h1><p class="sub">Mises à jour, double authentification, sécurité de l'hôte et ports.</p></div></header>
     <div id="reboot-notice" class="notice hidden"></div>
+    <form id="window-card" class="card form">
+      <h2>Fenêtre de maintenance</h2>
+      <p class="muted small">Les tâches automatiques lourdes (mise à jour de l’appliance, mise à jour des applications, analyse de vulnérabilités, test de restauration) ne démarrent que pendant cette fenêtre. Une tâche prévue en dehors attend l’ouverture ; les sauvegardes et la surveillance ne sont jamais retardées.</p>
+      <p id="window-state" class="notice info"></p>
+      <label class="check"><input name="enabled" type="checkbox">Limiter les tâches automatiques à une fenêtre</label>
+      <div class="days" id="window-days"></div>
+      <div class="split">
+        <label>Début<input name="start" type="time" required></label>
+        <label>Fin<input name="end" type="time" required></label>
+      </div>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
     <div class="card form" id="appliance-card">
       <h2>Mise à jour de l'appliance</h2>
       <p class="muted small">Installe la dernière version de SeedBoxBuntu depuis GitHub, sans passer par l'ISO : fichiers de l'appliance, modèles et stack. Comptes, secrets, bibliothèques et réglages sont conservés ; les fichiers remplacés sont sauvegardés (retour arrière possible). Aucun redémarrage du serveur : seule cette console redémarre à la fin.</p>
@@ -687,6 +757,54 @@
     <div class="card half"><div class="card-head"><h2 id="report-title">Dernier rapport</h2><span id="report-state"></span></div>
       <p class="muted small" id="report-date"></p><pre id="report-text" class="log"></pre></div>
   </section>
+  <section id="view-activity" class="view hidden">
+    <header class="page-head"><div><h1>Activité par personne</h1><p class="sub">Dernière connexion, dernière activité et demandes de chaque compte, pour repérer les comptes oubliés. Fonction facultative : elle ne montre jamais ce qui est regardé, seulement « en lecture » ou non.</p></div>
+      <div class="actions"><button id="activity-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <form id="activity-form" class="card form half">
+      <label class="check"><input name="enabled" type="checkbox">Afficher l’activité par personne</label>
+      <label class="check"><input name="show_playing" type="checkbox">Indiquer qui est en lecture en ce moment</label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+    <div id="activity-off" class="notice info hidden">L’activité par personne est désactivée : activez-la ci-dessus pour afficher la liste.</div>
+    <div class="card table-wrap" id="activity-card"><table>
+      <thead><tr><th>Compte</th><th>Dernière connexion</th><th>Dernière activité</th><th>Demandes</th><th>Quotas</th></tr></thead>
+      <tbody id="activity-list"></tbody>
+    </table></div>
+  </section>
+  <section id="view-vulns" class="view hidden">
+    <header class="page-head"><div><h1>Vulnérabilités</h1><p class="sub">Failles connues dans les images Docker en service (analyse Trivy). Seules les failles critiques et élevées qui ont un correctif sont comptées : une mise à jour de l’application suffit alors à les fermer.</p></div>
+      <div class="actions"><button id="vulns-scan" class="btn primary" type="button" data-icon="search">Analyser</button></div></header>
+    <div id="vulns-summary" class="notice info"></div>
+    <div class="card table-wrap"><table>
+      <thead><tr><th>Image</th><th>Conteneurs</th><th>Critiques</th><th>Élevées</th><th>Sans correctif</th><th>À regarder</th></tr></thead>
+      <tbody id="vulns-list"></tbody>
+    </table></div>
+    <form id="vulns-form" class="card form half">
+      <h2>Analyse automatique</h2>
+      <label class="check"><input name="enabled" type="checkbox">Analyser chaque semaine et alerter sur les failles critiques corrigeables</label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+  </section>
+  <section id="view-netcheck" class="view hidden">
+    <header class="page-head"><div><h1>Diagnostic réseau</h1><p class="sub">« Rien ne marche de l’extérieur » : huit contrôles dans l’ordre (Internet, noms, domaine, certificat, horloge, VPN, port entrant, qBittorrent), chacun avec ce qu’il faut faire.</p></div>
+      <div class="actions"><button id="netcheck-run" class="btn primary" type="button" data-icon="check-circle">Vérifier</button></div></header>
+    <div id="netcheck-summary" class="notice info"></div>
+    <div class="card"><ul id="netcheck-list" class="checks"></ul></div>
+  </section>
+  <section id="view-vacation" class="view hidden">
+    <header class="page-head"><div><h1>Mode vacances</h1><p class="sub">Tout se calme jusqu’à une date, puis reprend seul : torrents en pause, nouveaux torrents démarrés en pause, liens d’invitation refusés. Le serveur, les comptes existants, Jellyfin et Seerr continuent de fonctionner.</p></div></header>
+    <div id="vacation-state" class="notice info"></div>
+    <form id="vacation-form" class="card form half">
+      <h2>Partir en vacances</h2>
+      <label>Reprise le<input name="until" type="date" required></label>
+      <button class="btn primary" type="submit">Activer</button>
+    </form>
+    <div class="card half" id="vacation-active-card">
+      <h2>En cours</h2>
+      <dl id="vacation-info" class="kv"></dl>
+      <button id="vacation-stop" class="btn danger" type="button">Désactiver</button>
+    </div>
+  </section>
   <section id="view-styleguide" class="view hidden">
     <header class="page-head"><div><h1>Guide de style</h1><p class="sub">Chaque composant de la console, tel qu’il est réellement rendu. Une nouvelle page se construit uniquement avec ces éléments et les jetons de tokens.css.</p></div>
       <div class="actions"><button id="sg-display" class="btn" type="button" data-icon="sun">Affichage</button></div></header>
@@ -770,6 +888,7 @@
 <script src="features.js"></script>
 <script src="pages.js"></script>
 <script src="extras.js"></script>
+<script src="ops.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

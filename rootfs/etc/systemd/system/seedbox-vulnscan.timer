@@ -1,0 +1,10 @@
+[Unit]
+Description=SeedBoxBuntu - analyse hebdomadaire des vulnérabilités (dimanche matin)
+
+[Timer]
+OnCalendar=Sun *-*-* 03:40:00
+Persistent=true
+RandomizedDelaySec=1200
+
+[Install]
+WantedBy=timers.target

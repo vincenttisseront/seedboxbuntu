@@ -88,6 +88,7 @@ def read_sources():
         values[f"disktotal:{disk['path']}"] = disk["total"]
     try:
         values["containers"] = sum(1 for state in ctl.containers().values() if state.get("state") == "running")
+        values.update(ctl.resources().sample())               # processeur et mémoire de chaque conteneur
     except Exception:                                         # noqa: BLE001 - Docker arrêté : pas de mesure, rien d'autre
         pass
     try:
@@ -149,8 +150,8 @@ def history(range_name="24h", now=None):
     seconds = RANGES[range_name]
     series = {}
     for key in keys():
-        if key.startswith("disktotal:"):
-            continue
+        if key.startswith(("disktotal:", "ctr.")):
+            continue                                          # séries des conteneurs : page « Ressources » (resources.py)
         series[key] = points(key, seconds, now)
     totals = {}
     with connect() as db:

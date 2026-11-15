@@ -26,6 +26,15 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl assistant show                  liste de contrôle de la configuration
   seedboxctl offsite show|set|connection|push|restore-test   sauvegarde hors du serveur (rclone)
   seedboxctl appliance status|check|apply|rollback|source|auto|signer   mise à jour de l'appliance depuis GitHub (sans ISO)
+  seedboxctl resources show|set              ressources et dérives de chaque conteneur
+  seedboxctl backup check [nom]              vérification à blanc d'une sauvegarde (bases, fichiers, ce qui serait remplacé)
+  seedboxctl window show|set|tick            fenêtre de maintenance des tâches automatiques lourdes
+  seedboxctl activity show|set               activité par personne (facultatif)
+  seedboxctl vulnscan show|set|scan|auto     failles connues dans les images Docker (Trivy)
+  seedboxctl netcheck                        diagnostic réseau
+  seedboxctl vacation show|start|stop|tick   mode vacances
+  seedboxctl push show|test                    notifications push dans le navigateur
+  seedboxctl config export|import            export et import des réglages de la console
 """
 import argparse
 import base64
@@ -261,6 +270,55 @@ def cleanup():
         sys.path.insert(0, here)
     import cleanup as module
     return module
+
+
+def _lazy(name):
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    return __import__(name)
+
+
+def resources():
+    """Ressources par conteneur et dérives, chargées à la demande."""
+    return _lazy("resources")
+
+
+def texts():
+    """Langue des messages envoyés."""
+    return _lazy("texts")
+
+
+def vulnscan():
+    return _lazy("vulnscan")
+
+
+def maintwindow():
+    return _lazy("maintwindow")
+
+
+def netcheck():
+    return _lazy("netcheck")
+
+
+def vacation():
+    return _lazy("vacation")
+
+
+def webpush():
+    return _lazy("webpush")
+
+
+def activity():
+    return _lazy("activity")
+
+
+def configbundle():
+    return _lazy("configbundle")
+
+
+def sandbox():
+    return _lazy("sandbox")
 
 
 def weekly_report():
@@ -2592,12 +2650,35 @@ def main():
     restore_cmd = bk.add_parser("restore")
     restore_cmd.add_argument("name", help="nom d'une sauvegarde listée, ou chemin d'un fichier")
     restore_cmd.add_argument("--key-file", default="", help="clé du serveur d'origine (sinon celle de ce serveur)")
+    bk_check = bk.add_parser("check", help="vérification à blanc d'une sauvegarde")
+    bk_check.add_argument("name", nargs="?", default="")
     bk_set = bk.add_parser("set")
     bk_set.add_argument("--enabled")
     bk_set.add_argument("--days")
     bk_set.add_argument("--time")
     bk_set.add_argument("--keep")
     bk_set.add_argument("--destination")
+    for command, actions, helptext in (
+            ("resources", ("show", "set"), "ressources et dérives de chaque conteneur"),
+            ("window", ("show", "set", "tick"), "fenêtre de maintenance des tâches automatiques"),
+            ("activity", ("show", "set"), "activité par personne (facultatif)"),
+            ("vulnscan", ("show", "set", "scan", "auto"), "failles connues dans les images Docker"),
+            ("push", ("show", "test"), "notifications push dans le navigateur")):
+        sub = commands.add_parser(command, help=helptext).add_subparsers(dest="action", required=True)
+        for name in actions:
+            sub.add_parser(name)
+    commands.add_parser("netcheck", help="diagnostic réseau")
+    vac = commands.add_parser("vacation", help="mode vacances").add_subparsers(dest="action", required=True)
+    vac_start = vac.add_parser("start")
+    vac_start.add_argument("--until", required=True, help="date de reprise AAAA-MM-JJ")
+    vac_start.add_argument("--by", default="cli", help="compte à l'origine de la demande (journal)")
+    for name in ("show", "stop", "tick"):
+        vac.add_parser(name)
+    cfg_cmd = commands.add_parser("config", help="export et import des réglages de la console").add_subparsers(dest="action", required=True)
+    cfg_export = cfg_cmd.add_parser("export")
+    cfg_export.add_argument("--secrets", action="store_true", help="inclut les secrets des canaux d'alerte")
+    cfg_import = cfg_cmd.add_parser("import", help="lit le fichier sur l'entrée standard ; à blanc sans --apply")
+    cfg_import.add_argument("--apply", action="store_true")
     au = commands.add_parser("audit", help="journal d'audit et recherche dans les journaux").add_subparsers(dest="action", required=True)
     for name in ("sync", "verify", "prune"):
         au.add_parser(name)
@@ -2815,7 +2896,8 @@ def main():
     elif args.command == "firewall-guard":
         maintenance().guard()
     elif args.command == "autoupdate":
-        locked(maintenance().autoupdate)()
+        if maintwindow().allow("autoupdate"):
+            locked(maintenance().autoupdate)()
     elif args.command == "updates":
         module = maintenance()
         if args.action == "show":
@@ -2882,6 +2964,8 @@ def main():
             locked(module.auto)()
         elif args.action == "key":
             print(module.key())
+        elif args.action == "check":
+            print(json.dumps(sandbox().check(args.name or None), indent=2, ensure_ascii=False))
         elif args.action == "delete":
             locked(module.delete)(args.name)
         elif args.action == "restore":
@@ -2979,6 +3063,63 @@ def main():
             module.auto()
     elif args.command == "assistant":
         assistant().show()
+    elif args.command == "resources":
+        module = resources()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(module.save(json.loads(sys.stdin.read() or "{}")), ensure_ascii=False))
+    elif args.command == "window":
+        module = maintwindow()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            module.save(json.loads(sys.stdin.read() or "{}"))
+        else:
+            module.tick()
+    elif args.command == "activity":
+        module = activity()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            module.save(json.loads(sys.stdin.read() or "{}"))
+    elif args.command == "vulnscan":
+        module = vulnscan()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            module.save(json.loads(sys.stdin.read() or "{}"))
+        elif args.action == "scan":
+            locked(module.scan)()
+        else:
+            locked(module.auto)()
+    elif args.command == "netcheck":
+        netcheck().show()
+    elif args.command == "vacation":
+        module = vacation()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "start":
+            locked(module.start)(args.until, args.by)
+        elif args.action == "stop":
+            locked(module.stop)()
+        else:
+            locked(module.tick)()
+    elif args.command == "push":
+        module = webpush()
+        if args.action == "show":
+            print(json.dumps(module.status(""), indent=2, ensure_ascii=False))
+        else:
+            result = module.send("Test SeedBoxBuntu", "Les notifications push fonctionnent.")
+            print(json.dumps(result, ensure_ascii=False))
+    elif args.command == "config":
+        module = configbundle()
+        if args.action == "export":
+            print(json.dumps(module.export(args.secrets), indent=2, ensure_ascii=False))
+        else:
+            bundle = module.parse(sys.stdin.read())
+            rows = module.apply(bundle) if args.apply else module.plan(bundle)
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
     elif args.command == "metrics":
         module = metrics()
         if args.action == "collect":
@@ -2998,6 +3139,8 @@ def main():
         elif args.action == "push":
             locked(module.push_latest)()
         elif args.action == "restore-test":
+            if args.auto and not maintwindow().allow("restoretest"):
+                return 0
             print(json.dumps(locked(module.restore_test)("local" if args.local else None), ensure_ascii=False))
         else:
             locked(module.clear)()
@@ -3112,7 +3255,8 @@ def main():
         elif args.action == "rollback":
             module.rollback()
         elif args.action == "auto":
-            locked(module.auto)()
+            if maintwindow().allow("appliance"):
+                locked(module.auto)()
         elif args.action == "signer":
             if args.set:
                 print(json.dumps(module.set_signers(sys.stdin.read()), ensure_ascii=False))

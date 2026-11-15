@@ -39,7 +39,7 @@ function adoptAccountLanguage() {
 // ---------------------------------------------------------------------------------------------------------------
 //  Lecture seule : l'observateur voit, rien de plus (le serveur refuse de toute façon ; ceci évite des boutons morts)
 // ---------------------------------------------------------------------------------------------------------------
-const READONLY_HIDE = ['check-run', 'steps-card', 'versions-card', 'gpu-card', 'alerts-form', 'log-source'];
+const READONLY_HIDE = ['check-run', 'steps-card', 'versions-card', 'gpu-card', 'alerts-form', 'log-source', 'msglang-form', 'resources-card'];
 function lockReadonly() {
   if (!SESSION.readonly) return;
   document.body.classList.add('readonly');

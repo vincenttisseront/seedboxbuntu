@@ -26,7 +26,7 @@ def metrics(rng):
                      {"path": "/", "total": 120e9, "used": 40e9, "per_day": 0, "days": None, "full_on": "", "reliable": False, "r2": 0, "span_days": 1}]}
 STATE = {"import_scanned": True}
 # role « observer » : le serveur de maquette refuse comme le vrai serveur ce qui n'est pas de la lecture
-OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance", "/api/metrics", "/api/notifications", "/api/prefs", "/api/report"}
+OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance", "/api/metrics", "/api/notifications", "/api/prefs", "/api/report", "/api/vacation", "/api/push"}
 REPORT = {"generated": now - 3600, "sent": now - 3500, "level": "warning", "title": "Rapport hebdomadaire : points à regarder",
           "text": "seedbox - semaine du 30/10/2026 au 06/11/2026\n\nÀ REGARDER\n- Services à l'arrêt ou en difficulté : Radarr\n- Stockage : 72 % utilisé\n\nServices : 4 / 6 fonctionnent\nDisque Stockage : 72 % (2,9 To sur 4 To)\nSauvegardes : 1 (dernière : 06/11/2026), copie hors serveur oui\nVersion : 2026.11.10-0945 (mise à jour disponible)\nIncidents cette semaine : 2 (Radarr ne répond plus)\nInvitations actives : 1"}
 def route(p, q, role="admin", PREFS=None):
@@ -50,6 +50,28 @@ def route(p, q, role="admin", PREFS=None):
         {"id": "updates", "group": "Exploitation", "title": "Mises à jour", "state": "info", "detail": "Mise à jour de l’appliance manuelle : activez-la ou vérifiez régulièrement.", "view": "settings"},
         {"id": "report", "group": "Exploitation", "title": "Rapport hebdomadaire", "state": "unknown", "detail": "Contrôle impossible : exemple.", "view": "report"}]}
     if p == "/api/report": return {"settings": {"enabled": True, "day": 0, "send": True}, "days": ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"], "last": REPORT, "channels": ["ntfy"]}
+    if p == "/api/resources": return {"now": now, "settings": {"enabled": True, "memory_percent": 90, "memory_samples": 3, "leak_mb": 512, "leak_factor": 2.0, "cpu_percent": 90, "cpu_samples": 6, "ignore_cpu": ["jellyfin"]}, "containers": [
+        {"name": "jellyfin", "cpu": 42, "cpu_max": 88, "mem": 1.4e9, "mem_max": 2.1e9, "mem_avg": 1.2e9, "samples": 288, "spark": [40, 42, 45, 44, 50, 58, 61, 66, 70, 74], "problems": [{"code": "leak", "detail": "mémoire 1400 Mo, 2.3 fois sa valeur habituelle"}]},
+        {"name": "radarr", "cpu": 3, "cpu_max": 11, "mem": 3.2e8, "mem_max": 3.4e8, "mem_avg": 3.1e8, "samples": 288, "spark": [30, 31, 30, 31, 32, 31, 31, 32, 31, 31], "problems": []},
+        {"name": "qbittorrent", "cpu": 8, "cpu_max": 35, "mem": 9e8, "mem_max": 1e9, "mem_avg": 8.5e8, "samples": 288, "spark": [50, 52, 51, 55, 54, 53, 56, 55, 54, 55], "problems": []}]}
+    if p == "/api/window": return {"settings": {"enabled": True, "days": [0, 3], "start": "03:00", "end": "05:00"}, "open": False, "next_open": now + 86400, "pending": ["vulnscan"], "tasks": ["appliance", "autoupdate", "restoretest", "vulnscan"]}
+    if p == "/api/activity": return {"settings": {"enabled": True, "show_playing": True}, "enabled": True, "now": now, "people": [
+        {"login": "marie", "role": "user", "jellyfin": True, "last_login": now - 3600, "last_activity": now - 600, "playing": True, "requests": 14, "quota": {"movie": {"used": 2, "limit": 5, "days": 7}}, "inactive_days": 0},
+        {"login": "paul", "role": "manager", "jellyfin": True, "last_login": now - 86400 * 41, "last_activity": now - 86400 * 40, "playing": False, "requests": 3, "quota": {}, "inactive_days": 40},
+        {"login": "vincent", "role": "admin", "jellyfin": False, "last_login": 0, "last_activity": 0, "playing": False, "requests": None, "quota": {}, "inactive_days": None}]}
+    if p == "/api/vulns": return {"settings": {"enabled": True}, "scanned": now - 86400 * 2, "error": "", "totals": {"critical": 1, "high": 3}, "images": [
+        {"image": "lscr.io/linuxserver/radarr:5.14", "containers": ["radarr"], "critical": 1, "high": 2, "unfixed": 14, "top": [{"id": "CVE-2026-1111", "package": "libssl3", "installed": "3.0.1", "fixed": "3.0.2", "severity": "critical"}]},
+        {"image": "lscr.io/linuxserver/sonarr:4.0", "containers": ["sonarr"], "critical": 0, "high": 1, "unfixed": 3, "top": []},
+        {"image": "ghcr.io/example/old:1", "containers": ["old"], "error": "image introuvable"}]}
+    if p == "/api/netcheck": return {"at": now, "problems": 3, "errors": 1, "items": [
+        {"id": "internet", "title": "Accès à Internet", "state": "ok", "detail": "Le serveur joint Internet.", "hint": ""},
+        {"id": "dns", "title": "Résolution des noms", "state": "ok", "detail": "« releases.ubuntu.com » se résout.", "hint": ""},
+        {"id": "certificate", "title": "Certificat HTTPS", "state": "warn", "detail": "Le certificat expire dans 9 jours (R3).", "hint": "Un renouvellement automatique est attendu ; vérifiez que les ports 80 et 443 sont joignables."},
+        {"id": "port", "title": "Port entrant", "state": "warn", "detail": "Aucun port entrant annoncé.", "hint": "Le fournisseur doit accepter la redirection de port (NAT-PMP pour Proton)."},
+        {"id": "vpn", "title": "Tunnel VPN", "state": "error", "detail": "Le tunnel n'est pas en marche (état : exited).", "hint": "Vérifiez le fournisseur et les identifiants VPN ; arrêtez qBittorrent tant que ce n'est pas réglé."}]}
+    if p == "/api/vacation": return {"active": False, "until": 0, "started": 0, "by": "", "paused": 0, "max_days": 120, "qbittorrent": True}
+    if p == "/api/push": return {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 2}
+    if p == "/api/messages-language": return {"notify": "fr", "choices": ["fr", "en"]}
     if p == "/api/metrics": return metrics(q.get("range", ["24h"])[0])
     if p == "/api/system": return {"uptime": 900000, "load": [1.1, 1.0, .9], "cpus": 4, "memory": {"total": 16e9, "used": 7e9, "swap_total": 0, "swap_used": 0}, "network": {"interface": "eth0", "rx": 1e12, "tx": 5e11}, "disks": [{"label": "Stockage", "path": "/mnt/storage", "used": 2.9e12, "total": 4e12, "percent": 72}], "smart": {"available": False, "reason": "VM", "disks": []}, "time": now}
     if p == "/api/system/containers": return {"containers": []}
@@ -156,10 +178,14 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0); body = json.loads(self.rfile.read(n) or b"{}")
         CALLS.append((self.path, body))
-        if self.role == "observer" and not self.path.endswith("/api/prefs"):
+        if self.role == "observer" and not self.path.endswith(("/api/prefs", "/api/push/subscribe", "/api/push/unsubscribe")):
             return self.send(403, {"error": "lecture seule : cette action est réservée aux administrateurs"})
         if self.path.endswith("/api/prefs"): self.prefs.update(body); return self.send(200, self.prefs)
         if self.path.endswith("/api/report/build"): return self.send(200, REPORT)
+        if self.path.endswith("/api/backup/check"): return self.send(200, {"ok": False, "name": "seedbox-20261111-023000.tar.gz.enc", "files": 412, "databases": 9, "configs": 31, "seconds": 2.4, "at": now,
+            "problems": [{"file": "/var/lib/seedboxbuntu/guests.json", "problem": "JSON illisible"}], "changes": {"same": 380, "changed": 31, "added": 1, "sample": [{"path": "/etc/seedboxbuntu/alerts.json", "change": "changed"}]}})
+        if self.path.endswith("/api/config/import"): return self.send(200, {"sections": [{"section": "alerts", "title": "Alertes", "state": "modifiée", "detail": ""}, {"section": "report", "title": "Rapport hebdomadaire", "state": "inchangée", "detail": ""}, {"section": "window", "title": "Fenêtre de maintenance", "state": "refusée", "detail": "heure HH:MM attendue"}]})
+        if self.path.endswith("/api/push/unsubscribe"): return self.send(200, {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 1})
         if self.path.endswith("/guests/invite"): return self.send(200, {"id": "ab12", "token": "T" * 32, "path": "/invite/" + "T" * 32, "expires": now + 86400 * 7})
         if "/jobs/" in self.path: return self.send(200, {})
         self.send(200, {"job": "j1"})

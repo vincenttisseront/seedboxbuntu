@@ -585,6 +585,7 @@ async function loadBackup() {
       el('button', { class: 'btn sm danger', type: 'button', onclick: (event) => confirmAction(event.currentTarget, `La sauvegarde « ${b.name} » est supprimée définitivement.`,
         () => runJob('/api/backup/delete', { name: b.name }, loadBackup)) }, 'Supprimer')))));
   $('backup-list').replaceChildren(...(rows.length ? rows : [emptyRow(4, 'Aucune sauvegarde pour le moment.')]));
+  loadSandbox(data.backups);
 }
 
 let catalogData = null;
@@ -670,8 +671,9 @@ async function loadVersions() {
   $('versions-list').replaceChildren(...rows);
 }
 
-const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: loadAlerts, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: loadSettings, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
-  guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal(), setup: loadSetup, report: loadReport };
+const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadResources().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: async () => { await loadAlerts(); loadMessageLanguage().catch(showError); loadPush().catch(showError); }, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: async () => { await loadSettings(); loadWindow().catch(showError); }, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
+  guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal(), setup: loadSetup, report: loadReport,
+  activity: loadActivity, vulns: loadVulns, netcheck: loadNetcheck, vacation: loadVacation };
 
 function route() {
   const requested = location.hash.slice(1);
@@ -844,6 +846,7 @@ async function start() {
   initFeatures();
   initPages();
   initExtras();
+  initOps();
   watchDecorations();
   window.addEventListener('hashchange', route);
   route();

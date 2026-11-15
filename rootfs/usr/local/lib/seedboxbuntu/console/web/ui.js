@@ -347,13 +347,14 @@ const NAV = [
     { view: 'shares', label: 'Partages', icon: 'folder' }, { view: 'backup', label: 'Sauvegardes', icon: 'download' },
     { view: 'cleanup', label: 'Nettoyage', icon: 'trash' }] },
   { id: 'network', label: 'Réseau', icon: 'globe', items: [
-    { view: 'vpn', label: 'VPN', icon: 'shield' }, { view: 'domain', label: 'Adresse', icon: 'globe' }] },
+    { view: 'vpn', label: 'VPN', icon: 'shield' }, { view: 'domain', label: 'Adresse', icon: 'globe' }, { view: 'netcheck', label: 'Diagnostic', icon: 'check-circle' }] },
   { id: 'security', label: 'Sécurité', icon: 'lock', items: [
     { view: 'users', label: 'Comptes', icon: 'users' }, { view: 'guests', label: 'Invités', icon: 'user-plus' },
-    { view: 'secrets', label: 'Identifiants', icon: 'key' }] },
+    { view: 'secrets', label: 'Identifiants', icon: 'key' }, { view: 'activity', label: 'Activité', icon: 'activity' },
+    { view: 'vulns', label: 'Vulnérabilités', icon: 'shield' }] },
   { id: 'ops', label: 'Exploitation', icon: 'activity', items: [
     { view: 'system', label: 'Système', icon: 'monitor' }, { view: 'alerts', label: 'Alertes', icon: 'bell' },
-    { view: 'report', label: 'Rapport', icon: 'file' }, { view: 'setup', label: 'Assistant', icon: 'check-circle' },
+    { view: 'report', label: 'Rapport', icon: 'file' }, { view: 'vacation', label: 'Vacances', icon: 'sun' }, { view: 'setup', label: 'Assistant', icon: 'check-circle' },
     { view: 'journal', label: 'Journal', icon: 'file' }, { view: 'settings', label: 'Paramètres', icon: 'sliders' },
     { view: 'styleguide', label: 'Guide de style', icon: 'palette' }] },
 ];

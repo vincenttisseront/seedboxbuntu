@@ -209,6 +209,60 @@ def journeys_extra(page, base):
     page.reload()
 
 
+def journeys_ops(page, base):
+    """Vérification d'une sauvegarde, import de réglages, fenêtre de maintenance, vacances, diagnostic réseau, push."""
+    page.goto(base + "#backup")
+    settle(page, "backup")
+    page.click("#sandbox-run")
+    try:
+        page.wait_for_selector("#sandbox-result:not(.hidden) .notice.err", timeout=4000)
+    except Exception:  # noqa: BLE001
+        fail("parcours : la vérification d'une sauvegarde n'affiche pas son verdict")
+    if not page.locator("#sandbox-result li").count():
+        fail("parcours : la vérification n'énumère pas ses problèmes")
+    page.set_input_files("#config-file", {"name": "reglages.json", "mimeType": "application/json", "buffer": b'{"format": "seedboxbuntu-console", "version": 1, "sections": {}}'})
+    page.click("#config-plan")
+    page.wait_for_selector("#config-plan-box:not(.hidden)")
+    if page.locator("#config-plan-list tr").count() != 3 or page.locator("#config-plan-list input[type=checkbox]").count() != 1:
+        fail("parcours : le plan d'import doit lister 3 sections dont une seule applicable")
+    ui_mock.CALLS.clear()
+    page.click("#config-apply")
+    page.wait_for_timeout(400)
+    sent = [body for path, body in ui_mock.CALLS if path.endswith("/api/config/import")]
+    if not sent or sent[-1].get("apply") is not True or sent[-1].get("only") != ["alerts"]:
+        fail(f"parcours : l'import n'envoie que les sections cochées ({sent})")
+    page.goto(base + "#settings")
+    settle(page, "settings")
+    if page.locator("#window-days input").count() != 7 or not page.inner_text("#window-state").strip():
+        fail("parcours : la fenêtre de maintenance n'affiche ni ses jours ni son état")
+    ui_mock.CALLS.clear()
+    page.click("#window-card button[type=submit]")
+    page.wait_for_timeout(400)
+    sent = [body for path, body in ui_mock.CALLS if path.endswith("/api/window/settings")]
+    if not sent or sent[-1].get("days") != [0, 3] or sent[-1].get("start") != "03:00":
+        fail(f"parcours : la fenêtre n'envoie pas ses réglages ({sent})")
+    page.goto(base + "#vacation")
+    settle(page, "vacation")
+    page.fill("#vacation-form input[name=until]", "2026-12-20")
+    ui_mock.CALLS.clear()
+    page.click("#vacation-form button[type=submit]")
+    page.wait_for_timeout(400)
+    if not [b for path, b in ui_mock.CALLS if path.endswith("/api/vacation/start") and b.get("until") == "2026-12-20"]:
+        fail("parcours : le mode vacances n'envoie pas sa date de reprise")
+    page.goto(base + "#netcheck")
+    settle(page, "netcheck")
+    if page.locator("#netcheck-list li").count() < 4 or not page.locator("#netcheck-list .pill.err").count():
+        fail("parcours : le diagnostic réseau n'affiche pas ses contrôles et son erreur")
+    page.goto(base + "#alerts")
+    settle(page, "alerts")
+    if not page.inner_text("#push-state").strip() or page.locator("#msglang-select").input_value() != "fr":
+        fail("parcours : la carte des notifications push ou la langue des messages est vide")
+    page.goto(base + "#system")
+    settle(page, "system")
+    if page.locator("#resources-list tr").count() != 3 or not page.locator("#resources-list .pill.warn").count():
+        fail("parcours : les ressources par conteneur n'affichent pas 3 lignes dont une dérive")
+
+
 def observer_run(browser):
     """Compte « observateur » : navigation réduite, aucun bouton d'action actif, aucune erreur."""
     server = ui_mock.serve(8774, background=True, role="observer")
@@ -235,6 +289,14 @@ def observer_run(browser):
             if active:
                 fail(f"observateur : {view} garde des boutons d'action actifs : {active}")
             check_page(page, view, "obs", errors)
+        page.goto(base + "#alerts")
+        settle(page, "alerts")
+        if not page.locator("#push-card").is_visible() or page.locator("#msglang-form").is_visible():
+            fail("observateur : la carte push doit être visible et la langue des messages masquée")
+        page.goto(base + "#system")
+        settle(page, "system")
+        if page.locator("#resources-card").is_visible():
+            fail("observateur : les ressources par conteneur sont réservées aux administrateurs")
         page.goto(base + "#users")                                     # page interdite : retour à la vue d'ensemble, sans erreur
         page.wait_for_timeout(500)
         if page.evaluate("document.getElementById('view-users') && !document.getElementById('view-users').classList.contains('hidden')"):
@@ -301,6 +363,7 @@ def main():
                     contrast_modes(page)
                     journeys(page, base)
                     journeys_extra(page, base)
+                    journeys_ops(page, base)
                 if tag == "m" and not ONLY:
                     journey_mobile(page, base)
                 context.close()
