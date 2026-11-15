@@ -36,7 +36,11 @@ JOBS_LOCK = threading.Lock()
 PUBLIC_JOBS = set()                      # tâches lancées par une personne invitée : seul leur état est visible publiquement
 ATTEMPTS = {}                            # adresse -> instants des essais d'invitation (limite de débit)
 ATTEMPTS_LOCK = threading.Lock()
-PUBLIC_FILES = {"app.css", "invite.js", "logo.svg", "favicon.ico", "icon-192.png"}
+PUBLIC_FILES = {"app.css", "tokens.css", "display.js", "invite.js", "logo.svg", "favicon.ico", "icon-192.png"}
+# Pages d'erreur de Traefik (statuts 502 à 504, application arrêtée ou lente) : texte fixe, sans donnée
+ERROR_PAGES = {"502": ("Application indisponible", "L'application ne répond pas correctement. Elle démarre peut-être encore : réessayez dans une minute."),
+               "503": ("Service indisponible", "Le service est arrêté ou en cours de redémarrage : réessayez dans une minute."),
+               "504": ("Délai dépassé", "L'application met trop de temps à répondre. Réessayez dans un instant.")}
 ATTEMPT_LIMIT, ATTEMPT_WINDOW = 12, 600   # essais par adresse et par 10 minutes
 MAX_PUBLIC_JOBS = 3                       # créations de compte simultanées au plus
 TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -239,8 +243,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             sys.stderr.write("audit : %s\n" % error)
         self.send_json({"job": identifier})
 
+    def send_error_page(self, status):
+        title, text = ERROR_PAGES[status]
+        body = (WEB / "error.html").read_text().replace("{{status}}", status).replace("{{title}}", title).replace("{{text}}", text).encode()
+        self.send_response(int(status))
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        error = re.fullmatch(r"/errors/(50[234])", path)
+        if error:                                    # appelée par Traefik (middleware errors) : aucune donnée, aucun accès
+            return self.send_error_page(error.group(1))
         if path == "/invite" or path.startswith("/invite/"):
             return self.public_get(path)
         if self.public_request():                    # un en-tête public n'ouvre jamais l'administration

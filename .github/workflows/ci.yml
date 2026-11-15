@@ -16,7 +16,13 @@ jobs:
         with:
           node-version: "20"
       - name: Dépendances
-        run: pip install pyyaml
+        run: |
+          pip install pyyaml playwright pillow
+          playwright install --with-deps chromium
       # Contrôles statiques, puis tests unitaires, dont la mise à jour N-1 -> N (sans Docker)
       - name: Tests
         run: tests/run.sh
+        env:
+          # Les captures de référence viennent d'un autre poste : en CI, seuls les contrôles de comportement,
+          # de contraste et de classes s'appliquent (voir tests/visual_test.py)
+          VISUAL_COMPARE: "off"

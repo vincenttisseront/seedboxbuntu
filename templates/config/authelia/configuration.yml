@@ -9,6 +9,8 @@ default_2fa_method: totp
 server:
   # Portail servi sous https://<adresse>/auth/
   address: tcp://0.0.0.0:9091/auth
+  # Logo et icône de l'appliance (assets/logo.png, assets/favicon.ico) : même identité que la console
+  asset_path: /config/assets/
   endpoints:
     authz:
       forward-auth:

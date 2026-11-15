@@ -12,50 +12,60 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SeedBox">
 <link rel="preload" href="fonts/fira-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="app.css">
+<script src="display.js"></script>
 </head>
 <body>
 <div id="offline" class="notice warn hidden" role="status">Hors connexion : les données affichées peuvent être périmées et les actions sont indisponibles.</div>
+<div class="shell">
+<aside class="side">
+  <a class="brand" href="#overview"><img src="logo.svg" alt="" width="34" height="34"><span class="brand-name">SeedBox<b>Buntu</b></span></a>
+  <span id="version" class="ver"></span>
+  <nav id="nav" aria-label="Navigation principale"></nav>
+  <div class="side-foot">
+    <span class="who"></span>
+    <button id="display-open" class="btn sm" type="button" data-icon="sun">Affichage</button>
+  </div>
+</aside>
+<div class="content">
 <header class="top">
-  <div class="brand"><img src="logo.svg" alt="" width="34" height="34">SeedBox<b>Buntu</b><span id="version" class="ver"></span></div>
-  <nav id="nav">
-    <a href="#apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>Applications</a>
-    <a href="#users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Comptes</a>
-    <a href="#catalog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Catalogue</a>
-    <a href="#trackers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Trackers</a>
-    <a href="#shares"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>Partages</a>
-    <a href="#vpn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>VPN</a>
-    <a href="#domain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Adresse</a>
-    <a href="#p2p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></svg>P2P Aggregator</a>
-    <a href="#system"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/><path d="m7 11 3-3 3 3 4-4"/></svg>Système</a>
-    <a href="#alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Alertes</a>
-    <a href="#backup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Sauvegardes</a>
-    <a href="#guests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>Invités</a>
-    <a href="#cleanup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>Nettoyage</a>
-    <a href="#journal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>Journal</a>
-    <a href="#secrets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>Identifiants</a>
-    <a href="#settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></svg>Paramètres</a>
-  </nav>
-  <span id="who" class="who"></span>
+  <a class="brand" href="#overview"><img src="logo.svg" alt="" width="28" height="28"><span class="brand-name">SeedBox<b>Buntu</b></span></a>
+  <span class="who"></span>
+  <button class="btn sm" type="button" data-icon="sun" data-display-open>Affichage</button>
 </header>
 
 <main>
-  <section id="view-apps" class="view">
-    <div class="title"><h1>Applications</h1><button id="deploy" class="btn" type="button">Relancer la configuration</button></div>
+  <section id="view-overview" class="view hidden">
+    <header class="page-head"><div><h1>Vue d’ensemble</h1><p class="sub">L’état de la seedbox en un coup d’œil : santé des services, espace, mises à jour, alertes et invitations.</p></div>
+      <div class="actions"><button id="overview-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <div class="tiles">
+      <article id="tile-health" class="card tile"><div class="tile-head"><h2>Santé</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#apps">Voir les applications</a></article>
+      <article id="tile-space" class="card tile"><div class="tile-head"><h2>Espace</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#system">Voir le système</a></article>
+      <article id="tile-updates" class="card tile"><div class="tile-head"><h2>Mises à jour</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#settings">Voir les paramètres</a></article>
+      <article id="tile-alerts" class="card tile"><div class="tile-head"><h2>Alertes</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#alerts">Voir les alertes</a></article>
+      <article id="tile-guests" class="card tile"><div class="tile-head"><h2>Invitations</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#guests">Voir les invités</a></article>
+    </div>
+    <div class="card half"><h2>Disques</h2><div id="overview-disks"></div></div>
+    <div class="card half"><h2>Problèmes en cours</h2><ul id="overview-alerts" class="checks"></ul></div>
+  </section>
+
+  <section id="view-apps" class="view hidden">
+    <header class="page-head"><div><h1>Applications</h1><p class="sub">État des services, liaisons entre applications, contrôle de santé et versions.</p></div><div class="actions"><button id="deploy" class="btn" type="button">Relancer la configuration</button></div></header>
     <div id="apps-state" class="notice hidden"></div>
-    <div id="appliance-banner" class="notice hidden"><span id="appliance-banner-text"></span> <a href="#settings">Voir dans Paramètres</a></div>
+    <div id="appliance-banner" class="notice info hidden"><span id="appliance-banner-text"></span> <a href="#settings">Voir dans Paramètres</a></div>
     <div class="table-wrap card"><table>
       <thead><tr><th>Application</th><th>État</th><th>Connexion</th><th></th></tr></thead>
       <tbody id="apps-list"></tbody>
     </table></div>
     <div class="card">
-      <div class="title"><h2>Contrôle de santé</h2><button id="check-run" class="btn" type="button">Vérifier maintenant</button></div>
+      <div class="card-head"><h2>Contrôle de santé</h2><button id="check-run" class="btn" type="button">Vérifier maintenant</button></div>
       <p class="muted small">Interroge l'API de chaque application et vérifie leurs liaisons : Radarr, Sonarr et Prowlarr entre eux, Jackett et FlareSolverr, clients qBittorrent, Seerr, Jellyfin, autobrr, Dockge.</p>
       <p id="check-summary" class="small"></p>
       <ul id="check-list" class="checks"></ul>
     </div>
     <div class="card" id="steps-card">
-      <div class="title"><h2>Configuration et mises à jour</h2><button id="steps-retry" class="btn" type="button">Réessayer les étapes en échec</button></div>
+      <div class="card-head"><h2>Configuration et mises à jour</h2><button id="steps-retry" class="btn" type="button">Réessayer les étapes en échec</button></div>
       <p class="muted small">Chaque étape de liaison entre applications est suivie ici. Une étape annexe en échec (Jackett, applications ajoutées...) n'arrête pas l'appliance : elle est réessayée chaque heure.</p>
       <div id="upgrade-box" class="notice hidden"></div>
       <pre id="upgrade-log" class="log hidden"></pre>
@@ -66,7 +76,7 @@
       </table></div>
     </div>
     <div class="card" id="versions-card">
-      <div class="title"><h2>Versions des services</h2><button id="versions-load" class="btn" type="button">Afficher</button></div>
+      <div class="card-head"><h2>Versions des services</h2><button id="versions-load" class="btn" type="button">Afficher</button></div>
       <p class="muted small">Met à jour un service à la fois. La version précédente est gardée : « Revenir » la rétablit et épingle le service (plus de mise à jour automatique) jusqu'à sa prochaine mise à jour manuelle.</p>
       <div id="versions-wrap" class="table-wrap hidden"><table>
         <thead><tr><th>Service</th><th>Version</th><th>Construite le</th><th>Versions gardées</th><th></th></tr></thead>
@@ -76,8 +86,7 @@
   </section>
 
   <section id="view-catalog" class="view hidden">
-    <div class="title"><h1>Catalogue d'applications</h1><button id="catalog-refresh" class="btn" type="button">Actualiser sur le web</button></div>
-    <p class="muted">Ajoutez des applications à la seedbox en un clic. Celles marquées « intégré » sont reliées aux autres (Prowlarr, qBittorrent, Jellyfin...) ; celles venues de linuxserver.io sont installées en mode générique, derrière la connexion unique et réservées aux administrateurs : elles ne fonctionnent que si l'application accepte d'être servie sous un sous-chemin.</p>
+    <header class="page-head"><div><h1>Catalogue d'applications</h1><p class="sub">Ajoutez des applications à la seedbox en un clic. Celles marquées « intégré » sont reliées aux autres (Prowlarr, qBittorrent, Jellyfin...) ; celles venues de linuxserver.io sont installées en mode générique, derrière la connexion unique et réservées aux administrateurs : elles ne fonctionnent que si l'application accepte d'être servie sous un sous-chemin.</p></div><div class="actions"><button id="catalog-refresh" class="btn" type="button">Actualiser sur le web</button></div></header>
     <p id="catalog-state" class="muted small"></p>
     <div class="card" id="packs-card">
       <h2>Packs</h2>
@@ -110,8 +119,7 @@
   </section>
 
   <section id="view-users" class="view hidden">
-    <div class="title"><h1>Comptes</h1></div>
-    <p class="muted">Un compte vaut pour toute l'appliance : connexion unique, Jellyfin, Seerr et P2P Aggregator.</p>
+    <header class="page-head"><div><h1>Comptes</h1><p class="sub">Un compte vaut pour toute l'appliance : connexion unique, Jellyfin, Seerr et P2P Aggregator.</p></div></header>
     <div class="table-wrap card"><table>
       <thead><tr><th>Identifiant</th><th>Rôle</th><th></th></tr></thead>
       <tbody id="users-list"></tbody>
@@ -132,13 +140,7 @@
   </section>
 
   <section id="view-trackers" class="view hidden">
-    <div class="title"><h1>Trackers</h1>
-      <div class="row">
-        <a id="tracker-add" class="btn" target="_blank" rel="noopener">Ajouter dans Prowlarr</a>
-        <button id="trackers-sync" class="btn primary" type="button">Synchroniser</button>
-      </div>
-    </div>
-    <p class="muted">Un indexeur ajouté dans Prowlarr (ou dans Jackett : il est repris automatiquement par Prowlarr, FlareSolverr est déjà branché) est transmis à Radarr, Sonarr, cross-seed, qbit_manage et P2P Aggregator.</p>
+    <header class="page-head"><div><h1>Trackers</h1><p class="sub">Un indexeur ajouté dans Prowlarr (ou dans Jackett : il est repris automatiquement par Prowlarr, FlareSolverr est déjà branché) est transmis à Radarr, Sonarr, cross-seed, qbit_manage et P2P Aggregator.</p></div><div class="actions"><a id="tracker-add" class="btn" target="_blank" rel="noopener">Ajouter dans Prowlarr</a><button id="trackers-sync" class="btn primary" type="button">Synchroniser</button></div></header>
     <div class="card">
       <h2>Règles de seed</h2>
       <div class="table-wrap"><table>
@@ -157,8 +159,7 @@
   </section>
 
   <section id="view-shares" class="view hidden">
-    <div class="title"><h1>Partages réseau et disques</h1></div>
-    <p class="muted">Un NAS (SMB ou NFS) ou un disque branché sur le serveur peut recevoir les téléchargements, les fichiers .torrent ou les bibliothèques. Les applications sont reconfigurées automatiquement.</p>
+    <header class="page-head"><div><h1>Partages réseau et disques</h1><p class="sub">Un NAS (SMB ou NFS) ou un disque branché sur le serveur peut recevoir les téléchargements, les fichiers .torrent ou les bibliothèques. Les applications sont reconfigurées automatiquement.</p></div></header>
     <div id="shares-notes" class="notice hidden"></div>
     <div class="card">
       <h2>Partages</h2>
@@ -198,7 +199,7 @@
       <p class="muted small" data-kinds="smb">Le compte doit pouvoir écrire dans le partage. Les fichiers appartiennent aux applications (utilisateur 1000) côté serveur.</p>
       <p class="muted small" data-kinds="nfs">Autorisez l'adresse IP de ce serveur dans l'export, et mappez les accès en écriture (all_squash, anonuid=1000 ou équivalent du NAS).</p>
       <p class="muted small" data-kinds="disk">Seuls les disques non montés sont proposés. Le disque n'est pas formaté : son contenu est conservé.</p>
-      <button class="btn primary" type="submit">Monter et ajouter</button>
+      <button class="btn primary" type="submit">Ajouter et monter</button>
     </form>
     <form id="share-credentials" class="card form hidden" autocomplete="off">
       <h2>Identifiants SMB</h2>
@@ -211,7 +212,7 @@
   </section>
 
   <section id="view-vpn" class="view hidden">
-    <div class="title"><h1>qBittorrent : accès direct ou VPN</h1></div>
+    <header class="page-head"><div><h1>qBittorrent : accès direct ou VPN</h1><p class="sub">Choisissez si le trafic de qBittorrent passe par un tunnel VPN.</p></div></header>
     <div class="card"><dl id="vpn-state" class="kv"></dl></div>
     <form id="vpn-form" class="card form">
       <h2>Passer par un tunnel VPN (WireGuard)</h2>
@@ -235,13 +236,13 @@
       <p class="muted small">Proton VPN : générez la configuration WireGuard avec l'option NAT-PMP activée.</p>
       <div class="row">
         <button class="btn primary" type="submit">Appliquer</button>
-        <button id="vpn-disable" class="btn danger" type="button">Repasser en accès direct (sans VPN)</button>
+        <button id="vpn-disable" class="btn danger" type="button">Désactiver le VPN (accès direct)</button>
       </div>
     </form>
   </section>
 
   <section id="view-domain" class="view hidden">
-    <div class="title"><h1>Adresse et certificat</h1></div>
+    <header class="page-head"><div><h1>Adresse et certificat</h1><p class="sub">Adresses d'accès au serveur et certificats.</p></div></header>
     <div class="card"><dl id="domain-state" class="kv"></dl>
       <div class="row"><a class="btn" href="api/ca.crt">Télécharger l'autorité locale</a></div>
       <p class="muted small">À installer sur vos appareils pour éviter l'alerte du navigateur en mode auto-signé.</p>
@@ -282,7 +283,7 @@
   </section>
 
   <section id="view-p2p" class="view hidden">
-    <div class="title"><h1>P2P Aggregator</h1></div>
+    <header class="page-head"><div><h1>P2P Aggregator</h1><p class="sub">Agrégateur de trackers privés intégré à l'appliance.</p></div></header>
     <div class="card"><dl id="p2p-state" class="kv"></dl>
       <div class="row">
         <button id="p2p-update" class="btn primary" type="button">Mettre à jour</button>
@@ -298,14 +299,14 @@
   </section>
 
   <section id="view-system" class="view hidden">
-    <div class="title"><h1>Système</h1><span id="sys-up" class="muted small"></span></div>
+    <header class="page-head"><div><h1>Système</h1><p class="sub">Ressources de la machine, disques, conteneurs et historique.</p></div><div class="actions"><span id="sys-up" class="muted small"></span></div></header>
     <div class="grid">
-      <div class="card"><h2>Processeur</h2><progress id="sys-cpu" max="100" value="0"></progress><p id="sys-cpu-t" class="small muted"></p></div>
-      <div class="card"><h2>Mémoire</h2><progress id="sys-mem" max="100" value="0"></progress><p id="sys-mem-t" class="small muted"></p></div>
+      <div class="card"><h2>Processeur</h2><div id="sys-cpu-g"></div></div>
+      <div class="card"><h2>Mémoire</h2><div id="sys-mem-g"></div></div>
       <div class="card"><h2>Réseau</h2><p id="sys-net" class="secret"></p><p id="sys-net-t" class="small muted"></p></div>
     </div>
     <div class="card" id="history-card">
-      <div class="title"><h2>Historique</h2><div id="history-ranges" class="segmented" role="group" aria-label="Période"></div></div>
+      <div class="card-head"><h2>Historique</h2><div id="history-ranges" class="segmented" role="group" aria-label="Période"></div></div>
       <div id="history-empty" class="muted small hidden">Les mesures sont enregistrées toutes les 5 minutes : le graphique apparaît après quelques relevés.</div>
       <div id="history-charts" class="charts"></div>
       <h2 class="sub">Prévision de remplissage des disques</h2>
@@ -330,12 +331,12 @@
       <div class="row">
         <label>Mode<select id="gpu-mode"></select></label>
         <button id="gpu-save" class="btn primary" type="button">Appliquer</button>
-        <button id="gpu-test" class="btn" type="button">Essayer l’encodage</button>
+        <button id="gpu-test" class="btn" type="button">Tester l’encodage</button>
       </div>
       <p class="muted small">Appliquer recrée le conteneur Jellyfin (quelques secondes d’interruption) et règle le transcodage dans Jellyfin.</p>
     </div>
     <div class="card">
-      <div class="title"><h2>Journaux</h2>
+      <div class="card-head"><h2>Journaux</h2>
         <div class="row">
           <select id="log-source" aria-label="Source du journal"></select>
           <select id="log-lines" aria-label="Nombre de lignes"><option>50</option><option selected>100</option><option>200</option><option>500</option></select>
@@ -347,8 +348,7 @@
   </section>
 
   <section id="view-alerts" class="view hidden">
-    <div class="title"><h1>Alertes</h1><button id="alerts-test" class="btn" type="button">Envoyer un message de test</button></div>
-    <p class="muted">L'appliance se surveille toutes les 5 minutes : services arrêtés, disque presque plein, mise à jour bloquée, étape de configuration en échec, certificat proche de l'expiration. Un problème n'est signalé qu'après deux constats successifs, rappelé selon l'intervalle choisi, et un message « rétabli » l'annonce à sa disparition.</p>
+    <header class="page-head"><div><h1>Alertes</h1><p class="sub">L'appliance se surveille toutes les 5 minutes : services arrêtés, disque presque plein, mise à jour bloquée, étape de configuration en échec, certificat proche de l'expiration. Un problème n'est signalé qu'après deux constats successifs, rappelé selon l'intervalle choisi, et un message « rétabli » l'annonce à sa disparition.</p></div><div class="actions"><button id="alerts-test" class="btn" type="button">Envoyer un message de test</button></div></header>
     <div class="card"><h2>Problèmes en cours</h2><ul id="alerts-active" class="checks"></ul></div>
     <form id="alerts-form" class="card form">
       <label class="check"><input name="enabled" type="checkbox">Activer les alertes</label>
@@ -376,8 +376,7 @@
   </section>
 
   <section id="view-backup" class="view hidden">
-    <div class="title"><h1>Sauvegardes</h1><button id="backup-create" class="btn primary" type="button">Sauvegarder maintenant</button></div>
-    <p class="muted">Configuration de l'appliance : comptes, clés, réglages des applications, partages, applications ajoutées. Les médias et téléchargements n'en font pas partie (c'est le stockage), ni les caches, journaux et vignettes de Jellyfin. L'archive est chiffrée avec une clé propre à ce serveur. Restaurez après le premier déploiement d'un serveur neuf.</p>
+    <header class="page-head"><div><h1>Sauvegardes</h1><p class="sub">Configuration de l'appliance : comptes, clés, réglages des applications, partages, applications ajoutées. Les médias et téléchargements n'en font pas partie (c'est le stockage), ni les caches, journaux et vignettes de Jellyfin. L'archive est chiffrée avec une clé propre à ce serveur. Restaurez après le premier déploiement d'un serveur neuf.</p></div><div class="actions"><button id="backup-create" class="btn primary" type="button">Sauvegarder maintenant</button></div></header>
     <div class="card table-wrap"><table>
       <thead><tr><th>Date</th><th>Emplacement</th><th>Taille</th><th></th></tr></thead>
       <tbody id="backup-list"></tbody>
@@ -408,7 +407,7 @@
           <button class="btn primary" type="submit">Enregistrer</button>
           <button id="offsite-connection" class="btn" type="button">Tester la connexion</button>
           <button id="offsite-push" class="btn" type="button">Envoyer la dernière sauvegarde</button>
-          <button id="offsite-test" class="btn" type="button">Test de restauration</button>
+          <button id="offsite-test" class="btn" type="button">Tester la restauration</button>
           <button id="offsite-clear" class="btn danger" type="button">Retirer la destination</button>
         </div>
       </form>
@@ -445,8 +444,7 @@
   </section>
 
   <section id="view-guests" class="view hidden">
-    <div class="title"><h1>Invités</h1></div>
-    <p class="muted">Invitez quelqu’un par un lien à usage limité : il choisit son identifiant et son mot de passe, sans que vous ayez à créer le compte. Chaque compte peut avoir une échéance, un nombre d’écrans simultanés, un débit maximal et des quotas de demandes Seerr.</p>
+    <header class="page-head"><div><h1>Invités</h1><p class="sub">Invitez quelqu’un par un lien à usage limité : il choisit son identifiant et son mot de passe, sans que vous ayez à créer le compte. Chaque compte peut avoir une échéance, un nombre d’écrans simultanés, un débit maximal et des quotas de demandes Seerr.</p></div></header>
     <div id="guest-link" class="notice ok hidden">
       <p class="small">Lien d’invitation — il n’est affiché qu’une seule fois :</p>
       <p class="secret" id="guest-link-text"></p>
@@ -485,13 +483,12 @@
   </section>
 
   <section id="view-cleanup" class="view hidden">
-    <div class="title"><h1>Nettoyage</h1><button id="cleanup-scan" class="btn primary" type="button">Analyser</button></div>
-    <p class="muted">Trouve ce qui prend de la place pour rien. L’analyse ne supprime rien : les éléments choisis vont dans une corbeille (sur le même disque, donc instantané) et ne sont effacés qu’au vidage, automatique après 14 jours. Chaque élément est revérifié juste avant d’être déplacé.</p>
+    <header class="page-head"><div><h1>Nettoyage</h1><p class="sub">Trouve ce qui prend de la place pour rien. L’analyse ne supprime rien : les éléments choisis vont dans une corbeille (sur le même disque, donc instantané) et ne sont effacés qu’au vidage, automatique après 14 jours. Chaque élément est revérifié juste avant d’être déplacé.</p></div><div class="actions"><button id="cleanup-scan" class="btn primary" type="button">Analyser</button></div></header>
     <p id="cleanup-summary" class="small muted"></p>
     <div id="cleanup-notes" class="notice hidden"></div>
     <div id="cleanup-categories"></div>
     <div class="card">
-      <div class="title"><h2>Corbeille</h2><div class="row">
+      <div class="card-head"><h2>Corbeille</h2><div class="row">
         <button id="cleanup-restore" class="btn sm" type="button">Restaurer la sélection</button>
         <button id="cleanup-empty" class="btn sm danger" type="button">Vider la corbeille</button></div></div>
       <p id="cleanup-trash-summary" class="small muted"></p>
@@ -503,7 +500,7 @@
   </section>
 
   <section id="view-journal" class="view hidden">
-    <div class="title"><h1>Journal</h1></div>
+    <header class="page-head"><div><h1>Journal</h1><p class="sub">Qui a fait quoi, et journaux des services.</p></div></header>
     <div class="tabs" role="tablist">
       <button class="tab active" type="button" role="tab" data-tab="actions" aria-selected="true">Actions et connexions</button>
       <button class="tab" type="button" role="tab" data-tab="logs" aria-selected="false">Journaux des services</button>
@@ -533,7 +530,7 @@
         <label>Période<select name="since"><option value="15m">15 minutes</option><option value="1h" selected>1 heure</option><option value="6h">6 heures</option><option value="24h">24 heures</option><option value="7j">7 jours</option></select></label>
         <label>Source<select name="source" id="logs-source"><option value="">Toutes</option></select></label>
         <label class="check"><input name="regex" type="checkbox">Expression régulière</label>
-        <button class="btn primary" type="submit">Chercher</button>
+        <button class="btn primary" type="submit">Rechercher</button>
         <a id="logs-export" class="btn" href="api/logs/export">Exporter (texte)</a>
       </form>
       <p id="logs-summary" class="small muted"></p>
@@ -542,13 +539,12 @@
   </section>
 
   <section id="view-secrets" class="view hidden">
-    <div class="title"><h1>Identifiants</h1><button id="secrets-show" class="btn" type="button">Afficher</button></div>
-    <p class="muted">Comptes de service utilisés entre les applications. Un renouvellement met aussi à jour les applications qui en dépendent.</p>
+    <header class="page-head"><div><h1>Identifiants</h1><p class="sub">Comptes de service utilisés entre les applications. Un renouvellement met aussi à jour les applications qui en dépendent.</p></div><div class="actions"><button id="secrets-show" class="btn" type="button">Afficher</button></div></header>
     <div id="secrets-list" class="grid"></div>
   </section>
 
   <section id="view-settings" class="view hidden">
-    <div class="title"><h1>Paramètres</h1></div>
+    <header class="page-head"><div><h1>Paramètres</h1><p class="sub">Mises à jour, double authentification, sécurité de l'hôte et ports.</p></div></header>
     <div id="reboot-notice" class="notice hidden"></div>
     <div class="card form" id="appliance-card">
       <h2>Mise à jour de l'appliance</h2>
@@ -560,7 +556,7 @@
       <div class="row">
         <button id="appliance-check" class="btn" type="button">Rechercher une mise à jour</button>
         <button id="appliance-apply" class="btn primary" type="button">Mettre à jour</button>
-        <button id="appliance-rollback" class="btn" type="button">Annuler la dernière mise à jour</button>
+        <button id="appliance-rollback" class="btn" type="button">Revenir à la version précédente</button>
       </div>
       <pre id="appliance-log" class="log hidden"></pre>
       <details id="appliance-extra">
@@ -658,13 +654,76 @@
       <button class="btn primary" type="submit">Appliquer</button>
     </form>
   </section>
+  <section id="view-styleguide" class="view hidden">
+    <header class="page-head"><div><h1>Guide de style</h1><p class="sub">Chaque composant de la console, tel qu’il est réellement rendu. Une nouvelle page se construit uniquement avec ces éléments et les jetons de tokens.css.</p></div>
+      <div class="actions"><button id="sg-display" class="btn" type="button" data-icon="sun">Affichage</button></div></header>
 
-  <section id="job" class="card hidden">
-    <h2 id="job-title"></h2>
-    <pre id="job-log" class="log"></pre>
+    <div class="card"><h2>Couleurs et séries</h2><div id="sg-colors" class="swatches"></div></div>
+    <div class="card half"><h2>Texte</h2><div class="type-scale">
+      <p class="sg-xl" id="sg-t-xl">Titre de page (--fs-xl)</p><p id="sg-t-lg">Grand texte (--fs-lg)</p><p>Texte courant (--fs-md)</p><p class="small">Texte de tableau et petit texte (--fs-base, --fs-sm)</p>
+      <p class="muted small">Texte secondaire : <code>--muted</code></p><p><a href="#styleguide">Lien</a> et <code>code</code></p></div></div>
+    <div class="card half"><h2>Espacements et rayons</h2><div id="sg-space"></div></div>
+
+    <div class="card half"><h2>Boutons</h2>
+      <div class="demo-row"><button class="btn" type="button">Actualiser</button><button class="btn primary" type="button">Enregistrer</button><button class="btn danger" type="button">Supprimer</button><button class="btn" type="button" disabled>Désactivé</button></div>
+      <div class="demo-row"><button class="btn sm" type="button">Copier</button><button class="btn sm primary" type="button">Appliquer</button><button class="btn sm danger" type="button">Révoquer</button><a class="btn sm" href="#styleguide">Afficher</a></div></div>
+    <div class="card half"><h2>États : pastilles et messages</h2>
+      <div class="demo-row" id="sg-pills"></div>
+      <div class="notice ok">Opération réussie.</div><div class="notice info" id="sg-info">Information neutre.</div>
+      <div class="notice">Attention : à vérifier.</div><div class="notice err">Erreur : l’opération a échoué.</div></div>
+    <div class="card half"><h2>Jauges (seuils 85 % et 95 %)</h2><div id="sg-gauges"></div></div>
+    <div class="card half"><h2>Chargement, vide, erreur</h2>
+      <div id="sg-states"></div><table class="sg-skeleton"><tbody id="sg-skeleton"></tbody></table></div>
+
+    <form class="card half" id="sg-form"><h2>Champs</h2>
+      <div class="fields"><label>Texte<input placeholder="Valeur"></label><label>Liste<select><option>Premier choix</option><option>Second choix</option></select></label></div>
+      <label>Zone de texte<textarea rows="2" spellcheck="false">ligne 1</textarea></label>
+      <label class="check"><input type="checkbox" checked>Case à cocher</label>
+      <div class="demo-row"><div class="segmented" role="group" aria-label="Exemple"><button class="seg active" type="button">24 h</button><button class="seg" type="button">7 j</button><button class="seg" type="button">30 j</button></div></div>
+      <div class="tabs" role="tablist"><button class="tab active" type="button">Onglet actif</button><button class="tab" type="button">Autre onglet</button></div></form>
+    <div class="card half"><h2>Tableau</h2><div class="table-wrap"><table>
+      <thead><tr><th>Application</th><th>État</th><th></th></tr></thead>
+      <tbody><tr><td>Jellyfin</td><td id="sg-row-ok"></td><td><button class="btn sm" type="button">Redémarrer</button></td></tr><tr><td>Radarr</td><td id="sg-row-warn"></td><td><button class="btn sm" type="button">Redémarrer</button></td></tr></tbody>
+    </table></div></div>
+
+    <div class="card"><h2>Graphique</h2><div id="sg-chart" class="charts"></div></div>
+
+    <div class="card half"><h2>Retours d’action</h2>
+      <p class="muted small">Le résultat d’une action s’affiche près d’elle : notification, tiroir de détails ou boîte de confirmation.</p>
+      <div class="demo-row"><button id="sg-toast" class="btn" type="button" data-icon="info">Notification</button><button id="sg-drawer" class="btn" type="button" data-icon="file">Tiroir de tâche</button><button id="sg-confirm" class="btn danger" type="button">Supprimer</button></div></div>
+    <div class="card half"><h2>Formats</h2><dl id="sg-formats" class="kv"></dl></div>
+
+    <div class="card"><h2>Glossaire des actions</h2>
+      <p class="muted small">Un verbe, un sens, une icône : voir aussi <code>docs/GLOSSAIRE.md</code>.</p>
+      <div class="table-wrap"><table><thead><tr><th>Verbe</th><th>Quand l’employer</th></tr></thead><tbody id="sg-glossary"></tbody></table></div></div>
+    <div class="card"><div class="card-head"><h2>Contraste mesuré (AA : 4,5 minimum)</h2><button id="sg-contrast-run" class="btn" type="button">Vérifier</button></div>
+      <div class="table-wrap"><table class="contrast-table"><thead><tr><th>Texte</th><th>Fond</th><th>Rapport</th><th>Résultat</th></tr></thead><tbody id="sg-contrast"></tbody></table></div></div>
   </section>
 </main>
+</div>
+</div>
+<nav id="tabbar" class="tabbar" aria-label="Navigation mobile"></nav>
+<div id="sheet" class="hidden"></div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<aside id="drawer" class="drawer hidden" aria-label="Détails de la tâche" aria-hidden="true">
+  <div class="drawer-head"><h2 id="drawer-title"></h2><span id="drawer-state"></span>
+    <button id="drawer-close" class="icon-btn" type="button" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-x"/></svg></button></div>
+  <pre id="drawer-log" class="log"></pre>
+</aside>
+<dialog id="dialog" aria-labelledby="dialog-title">
+  <h2 id="dialog-title"></h2>
+  <p id="dialog-text"></p>
+  <div class="dialog-actions"><button id="dialog-no" class="btn" type="button">Annuler</button><button id="dialog-yes" class="btn primary" type="button">Confirmer</button></div>
+</dialog>
+<dialog id="display-dialog" aria-labelledby="display-title">
+  <h2 id="display-title">Affichage</h2>
+  <p>Ces choix sont gardés dans ce navigateur.</p>
+  <div class="display-controls"></div>
+  <div class="dialog-actions"><button id="display-reset" class="btn" type="button" data-icon="undo">Réinitialiser</button><button id="display-close" class="btn primary" type="button">Fermer</button></div>
+</dialog>
+<script src="ui.js"></script>
 <script src="features.js"></script>
+<script src="pages.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

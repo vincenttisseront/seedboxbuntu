@@ -666,6 +666,9 @@ def render_templates():
             continue
         fresh = not target.exists()
         target.parent.mkdir(parents=True, exist_ok=True)
+        if source.suffix in (".png", ".ico"):      # images (logo d'Authelia) : copiées telles quelles
+            target.write_bytes(source.read_bytes())
+            continue
         target.write_text(substitute(source.read_text(), values))
         if fresh and relative == "qbittorrent/qBittorrent/qBittorrent.conf":
             qbit_bind_interface(qbit_mode() == "vpn")

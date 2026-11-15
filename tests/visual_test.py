@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Garde-fous visuels de la console : chaque page est ouverte dans un vrai navigateur (Playwright) avec de
+fausses données (tests/ui_mock.py), en clair, en sombre et sur téléphone.
+
+Contrôles, pour chaque page et chaque variante :
+  - aucune erreur JavaScript ni débordement horizontal ;
+  - aucun tableau resté en « chargement » ;
+  - tous les boutons utilisent les classes autorisées (btn, tab, seg, icon-btn, tabbar-item) ;
+  - contraste AA (4,5 : 1) mesuré sur les couleurs réellement affichées, en clair, sombre et contraste élevé ;
+  - la capture est comparée à la référence de tests/visual/baseline/ (écart toléré : 1,5 % des pixels).
+Parcours : notification, tiroir, confirmation, réglages d'affichage (mémorisés après rechargement), barre mobile.
+
+    python3 tests/visual_test.py            vérifie
+    python3 tests/visual_test.py --update   remplace les références (après un changement voulu du rendu)
+    python3 tests/visual_test.py --only guests
+VISUAL_COMPARE=off : ne compare pas les captures (les autres contrôles restent actifs).
+Sans Playwright ou Pillow installés, le test est ignoré (code 0) : pip install playwright pillow.
+"""
+import os
+import re
+import shutil
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from playwright.sync_api import sync_playwright
+    from PIL import Image, ImageChops
+except ImportError as error:
+    print(f"visual_test : ignoré ({error.name} absent)")
+    sys.exit(0)
+import ui_mock
+
+WEB = ROOT / "rootfs/usr/local/lib/seedboxbuntu/console/web"
+BASELINE = ROOT / "tests/visual/baseline"
+CURRENT = ROOT / "tests/visual/current"
+TOLERANCE = 0.015
+VARIANTS = (("d", "dark", 1180), ("l", "light", 1180), ("m", "dark", 390))
+BUTTON_OK = {"btn", "tab", "seg", "icon-btn", "tabbar-item"}
+UPDATE = "--update" in sys.argv
+COMPARE = os.environ.get("VISUAL_COMPARE") != "off"   # CI : les captures dépendent des polices et du moteur du poste
+ONLY = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
+failures = []
+
+
+def fail(text):
+    failures.append(text)
+    print("  ÉCHEC", text)
+
+
+def views():
+    ui = (WEB / "ui.js").read_text()
+    return re.findall(r"view: '([a-z]+)'", ui)
+
+
+def settle(page, view):
+    page.wait_for_function(f"!document.getElementById('view-{view}').hasAttribute('aria-busy')", timeout=8000)
+    page.wait_for_timeout(350)
+
+
+def compare(name, path):
+    if not COMPARE and not UPDATE:
+        return
+    ref = BASELINE / name
+    if UPDATE or not ref.exists():
+        if not UPDATE:
+            fail(f"{name} : pas de référence (lancez avec --update)")
+            return
+        BASELINE.mkdir(parents=True, exist_ok=True)
+        shutil.copy(path, ref)
+        return
+    a, b = Image.open(ref).convert("RGB"), Image.open(path).convert("RGB")
+    if a.size != b.size:
+        fail(f"{name} : taille différente ({a.size} -> {b.size})")
+        return
+    diff = ImageChops.difference(a, b).convert("L").point(lambda v: 255 if v > 40 else 0)
+    ratio = diff.histogram()[255] / (a.size[0] * a.size[1])
+    if ratio > TOLERANCE:
+        fail(f"{name} : {ratio:.1%} des pixels ont changé (tolérance {TOLERANCE:.1%}) ; voir tests/visual/current/{name}")
+
+
+def shrink(path):
+    """Références légères : un tiers de la taille, 32 couleurs."""
+    image = Image.open(path).convert("RGB")
+    image = image.resize((max(1, image.width // 3), max(1, image.height // 3)), Image.LANCZOS)
+    image.quantize(32).convert("RGB").save(path, optimize=True)
+
+
+def check_page(page, view, tag, errors):
+    over = page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1")
+    if over:
+        fail(f"{tag}-{view} : débordement horizontal")
+    if page.locator(f"#view-{view} .skeleton-row").count():
+        fail(f"{tag}-{view} : lignes de chargement restantes")
+    bad = page.evaluate("""(allowed) => [...document.querySelectorAll('button, a.btn')]
+        .filter((b) => ![...b.classList].some((c) => allowed.includes(c))).map((b) => b.id || b.textContent.trim().slice(0, 30))""", sorted(BUTTON_OK))
+    if bad:
+        fail(f"{tag}-{view} : boutons hors classes autorisées : {bad}")
+    if errors:
+        fail(f"{tag}-{view} : erreurs JavaScript : {errors[:3]}")
+        errors.clear()
+
+
+def check_extra(page, tag, errors):
+    """Pages hors console (invitation, erreur Traefik) : mêmes jetons, donc mêmes couleurs que la console."""
+    if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"):
+        fail(f"{tag} : débordement horizontal")
+    back = page.evaluate("getComputedStyle(document.body).backgroundColor")
+    if back not in ("rgb(2, 6, 23)", "rgb(241, 245, 249)"):
+        fail(f"{tag} : fond {back} différent de celui de la console")
+    if errors:
+        fail(f"{tag} : erreurs JavaScript : {errors[:3]}")
+        errors.clear()
+
+
+def contrast_modes(page):
+    """Mesure le contraste réel dans chaque combinaison de thème et de contraste."""
+    for scheme in ("dark", "light"):
+        for contrast in ("normal", "high"):
+            page.evaluate("([s, c]) => Display.set({ theme: s, contrast: c })", [scheme, contrast])
+            rows = page.evaluate("contrastReport()")
+            for row in rows:
+                if not row["ok"]:
+                    fail(f"contraste {scheme}/{contrast} : {row['fg']} sur {row['bg']} = {row['ratio']:.2f}")
+    page.evaluate("Display.reset()")
+
+
+def journeys(page, base):
+    page.goto(base + "#styleguide")
+    settle(page, "styleguide")
+    page.click("#sg-toast")
+    if not page.locator("#toasts .toast.ok").count():
+        fail("parcours : la notification n'apparaît pas")
+    page.click("#sg-drawer")
+    if page.locator("#drawer").evaluate("e => e.classList.contains('hidden')"):
+        fail("parcours : le tiroir ne s'ouvre pas")
+    page.keyboard.press("Escape")
+    if not page.locator("#drawer").evaluate("e => e.classList.contains('hidden')"):
+        fail("parcours : Échap ne ferme pas le tiroir")
+    page.click("#sg-confirm")
+    if not page.locator("#dialog[open]").count():
+        fail("parcours : la confirmation ne s'ouvre pas")
+    page.click("#dialog-no")
+    if page.locator("#dialog[open]").count():
+        fail("parcours : Annuler ne ferme pas la confirmation")
+    # réglages d'affichage mémorisés
+    page.click("#sg-display")
+    page.click(".display-controls .seg:has-text('Clair')")
+    page.click(".display-controls .seg:has-text('Compacte')")
+    page.click(".display-controls .seg:has-text('Élevé')")
+    page.click("#display-close")
+    page.reload()
+    page.wait_for_timeout(400)
+    got = page.evaluate("[document.documentElement.dataset.scheme, document.documentElement.dataset.density, document.documentElement.dataset.contrast]")
+    if got != ["light", "compact", "high"]:
+        fail(f"parcours : réglages d'affichage non mémorisés ({got})")
+    page.evaluate("Display.reset()")
+
+
+def journey_mobile(page, base):
+    page.goto(base + "#overview")
+    settle(page, "overview")
+    page.click(".tabbar-item[data-group=services]")
+    if page.locator("#sheet a").count() < 4:
+        fail("parcours mobile : la feuille de navigation n'affiche pas les pages du groupe")
+    page.click("#sheet a[data-view=catalog]")
+    page.wait_for_timeout(300)
+    if "catalog" not in page.url or page.locator("#sheet:not(.hidden)").count():
+        fail("parcours mobile : la navigation ne ferme pas la feuille")
+
+
+def main():
+    shutil.rmtree(CURRENT, ignore_errors=True)
+    CURRENT.mkdir(parents=True)
+    server = ui_mock.serve(8767, background=True)
+    base = "http://127.0.0.1:8767/console/"
+    pages = [v for v in views() if not ONLY or v == ONLY]
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            for tag, scheme, width in VARIANTS:
+                context = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=scheme, locale="fr-FR",
+                                              timezone_id="Europe/Paris", reduced_motion="reduce", device_scale_factor=1)
+                page = context.new_page()
+                errors = []
+                page.on("pageerror", lambda e: errors.append(str(e)))
+                page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "favicon" not in m.text else None)
+                page.clock.set_fixed_time("2026-11-06T12:00:00+01:00")
+                for view in pages:
+                    print(f"{tag}-{view}")
+                    page.goto(base + "#" + view)
+                    page.reload()
+                    settle(page, view)
+                    check_page(page, view, tag, errors)
+                    name = f"{tag}-{view}.png"
+                    path = CURRENT / name
+                    page.screenshot(path=path, full_page=True)
+                    shrink(path)
+                    compare(name, path)
+                if not ONLY:
+                    for extra, route in (("invite", "invite/TOKEN"), ("erreur", "errors/503")):
+                        print(f"{tag}-{extra}")
+                        page.goto(base.replace("console/", route))
+                        page.wait_for_timeout(500)
+                        page.wait_for_selector("main.invite .card:not(.hidden)")
+                        check_extra(page, f"{tag}-{extra}", errors)
+                        path = CURRENT / f"{tag}-{extra}.png"
+                        page.screenshot(path=path, full_page=True)
+                        shrink(path)
+                        compare(f"{tag}-{extra}.png", path)
+                if tag == "d" and not ONLY:
+                    page.goto(base + "#overview")
+                    settle(page, "overview")
+                    contrast_modes(page)
+                    journeys(page, base)
+                if tag == "m" and not ONLY:
+                    journey_mobile(page, base)
+                context.close()
+            browser.close()
+    finally:
+        server.shutdown()
+    print(f"visual_test : {len(failures)} échec(s)" if failures else "visual_test : tous les contrôles réussis")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

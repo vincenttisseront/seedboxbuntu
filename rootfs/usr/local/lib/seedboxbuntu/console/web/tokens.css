@@ -1,0 +1,80 @@
+/* SeedBoxBuntu — jetons de design : SEUL fichier où figurent couleurs, espacements, rayons, tailles de
+   texte, ombres et profondeurs. Le reste des feuilles de style (et les scripts) n'écrit que var(--…).
+   Le thème est posé par display.js sur <html> : data-scheme (dark|light, déjà résolu), data-contrast,
+   data-density, data-text. Sans script, le thème sombre s'applique.
+   Les couleurs de Homepage (templates/config/homepage/custom.css) en reprennent une copie :
+   tests/static_check.py vérifie qu'elles restent identiques. */
+
+:root{
+  color-scheme:dark;
+
+  /* surfaces et textes */
+  --bg:#020617;--bar:rgba(2,6,23,.86);--panel:#0b1220;--panel2:#111b2e;--line:#1e293b;--line2:#3b4a63;
+  --text:#f1f5f9;--muted:#9aa8bd;--chip:#1e293b;--code:#060b16;--overlay:rgba(2,6,23,.66);
+  /* marque et actions */
+  --brand:#2dd4bf;--accent:#22c55e;--accent-hover:#4ade80;--on-accent:#03140a;--glow:rgba(45,212,191,.16);--focus:#5eead4;
+  /* échelle d'états : ok, attention, erreur, information, inconnu — partout la même */
+  --ok:#4ade80;--warn:#fbbf24;--err:#f87171;--info:#60a5fa;--unknown:#9aa8bd;
+  --ok-bg:rgba(74,222,128,.12);--warn-bg:rgba(251,191,36,.12);--err-bg:rgba(248,113,113,.13);--info-bg:rgba(96,165,250,.13);--unknown-bg:rgba(154,168,189,.12);
+  /* séries des graphiques (ordre fixe) */
+  --c0:#2dd4bf;--c1:#a78bfa;--c2:#f472b6;--c3:#38bdf8;
+  /* seuils partagés (pourcentage) : lus aussi par ui.js, voir THRESHOLDS */
+  --th-warn:85;--th-crit:95;
+
+  /* typographie */
+  --font:"Fira Sans",system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;
+  --mono:"Fira Code",ui-monospace,Menlo,Consolas,monospace;
+  --ts:1;
+  --fs-xs:calc(11.5px*var(--ts));--fs-sm:calc(13px*var(--ts));--fs-base:calc(14px*var(--ts));--fs-md:calc(15px*var(--ts));
+  --fs-lg:calc(18px*var(--ts));--fs-xl:calc(24px*var(--ts));--fs-brand:calc(19px*var(--ts));
+  --lh:1.55;
+
+  /* espacements, rayons, ombres, profondeurs, durées */
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;
+  --r-sm:8px;--r:12px;--r-pill:99px;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.35);--shadow-lg:0 12px 48px rgba(0,0,0,.55);
+  --z-bar:20;--z-nav:30;--z-drawer:40;--z-dialog:50;--z-toast:60;
+  --t:180ms ease;
+
+  /* densité (confortable par défaut) */
+  --pad-card:var(--sp-5);--pad-cell:11px 10px;--pad-btn:9px 15px;--pad-btn-sm:5px 11px;--pad-field:9px 11px;--gap:var(--sp-4);
+
+  /* gabarit */
+  --side-w:244px;--content-max:1180px;--bar-h:60px;
+}
+
+html[data-scheme=light]{
+  color-scheme:light;
+  --bg:#f1f5f9;--bar:rgba(255,255,255,.88);--panel:#ffffff;--panel2:#f8fafc;--line:#e2e8f0;--line2:#94a3b8;
+  --text:#0f172a;--muted:#475569;--chip:#e2e8f0;--code:#f1f5f9;--overlay:rgba(15,23,42,.45);
+  --brand:#0f766e;--accent:#0f766e;--accent-hover:#115e59;--on-accent:#ffffff;--glow:rgba(15,118,110,.12);--focus:#0f766e;
+  --ok:#146c36;--warn:#9a4607;--err:#b91c1c;--info:#1d4ed8;--unknown:#475569;
+  --ok-bg:rgba(21,128,61,.1);--warn-bg:rgba(180,83,9,.1);--err-bg:rgba(185,28,28,.09);--info-bg:rgba(29,78,216,.09);--unknown-bg:rgba(71,85,105,.1);
+  --c0:#0f766e;--c1:#6d28d9;--c2:#be185d;--c3:#0369a1;
+  --shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.07);--shadow-lg:0 12px 48px rgba(15,23,42,.22);
+}
+
+/* contraste élevé : texte et bordures poussés au maximum, états plus saturés */
+html[data-contrast=high]{
+  --bg:#000000;--bar:rgba(0,0,0,.94);--panel:#000000;--panel2:#0a0a0a;--line:#8a96a8;--line2:#c3cbd8;
+  --text:#ffffff;--muted:#dbe2ec;--chip:#1f2937;--code:#000000;
+  --brand:#5eead4;--accent:#4ade80;--accent-hover:#86efac;--on-accent:#000000;--focus:#ffffff;
+  --ok:#86efac;--warn:#fde047;--err:#fca5a5;--info:#93c5fd;--unknown:#dbe2ec;
+  --c0:#5eead4;--c1:#c4b5fd;--c2:#f9a8d4;--c3:#7dd3fc;
+}
+html[data-contrast=high][data-scheme=light]{
+  --bg:#ffffff;--bar:rgba(255,255,255,.96);--panel:#ffffff;--panel2:#f1f5f9;--line:#475569;--line2:#1e293b;
+  --text:#000000;--muted:#1e293b;--chip:#e2e8f0;--code:#f1f5f9;
+  --brand:#0b524c;--accent:#0b524c;--accent-hover:#083d39;--on-accent:#ffffff;--focus:#000000;
+  --ok:#0f5c2a;--warn:#7c3a06;--err:#8f1414;--info:#1e3a8a;--unknown:#1e293b;
+  --c0:#0b524c;--c1:#4c1d95;--c2:#9d174d;--c3:#075985;
+}
+
+/* densité compacte */
+html[data-density=compact]{
+  --pad-card:var(--sp-3);--pad-cell:6px 8px;--pad-btn:6px 12px;--pad-btn-sm:3px 9px;--pad-field:6px 9px;--gap:var(--sp-3);
+}
+
+/* taille du texte */
+html[data-text=large]{--ts:1.12}
+html[data-text=xlarge]{--ts:1.26}

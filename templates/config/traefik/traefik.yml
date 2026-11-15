@@ -28,19 +28,27 @@ entryPoints:
     address: ":443"
     http:
       tls: @@TRAEFIK_TLS@@
+      middlewares:
+        - error-pages@file
   # Applications qui ne fonctionnent qu'à la racine d'une adresse : un port HTTPS chacune
   seerr:
     address: ":5055"
     http:
       tls: @@TRAEFIK_TLS@@
+      middlewares:
+        - error-pages@file
   dockge:
     address: ":5001"
     http:
       tls: @@TRAEFIK_TLS@@
+      middlewares:
+        - error-pages@file
   p2p:
     address: ":3000"
     http:
       tls: @@TRAEFIK_TLS@@
+      middlewares:
+        - error-pages@file
 
 providers:
   docker:

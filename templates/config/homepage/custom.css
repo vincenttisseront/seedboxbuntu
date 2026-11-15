@@ -1,0 +1,39 @@
+/* SeedBoxBuntu - Homepage aux couleurs de la console.
+   Les variables ci-dessous sont une copie du thème sombre de console/web/tokens.css :
+   tests/static_check.py vérifie qu'elles restent identiques. Seul le thème sombre est repris
+   (settings.yaml : theme: dark). */
+:root{
+  --bg:#020617;--panel:#0b1220;--panel2:#111b2e;--line:#1e293b;--line2:#3b4a63;
+  --text:#f1f5f9;--muted:#9aa8bd;--brand:#2dd4bf;--glow:rgba(45,212,191,.16);
+  --ok:#4ade80;--warn:#fbbf24;--err:#f87171;
+  --mono:"Fira Code",ui-monospace,Menlo,Consolas,monospace;
+  --r:12px;
+}
+body,#page_wrapper,#inner_wrapper{
+  background-color:var(--bg)!important;
+  background-image:radial-gradient(900px 380px at 12% -80px,var(--glow),transparent 70%)!important;
+  background-repeat:no-repeat!important;
+  color:var(--text)!important;
+}
+/* cartes de services et bandeau d'indicateurs : même surface, même bordure et même rayon que les cartes de la console */
+.service-card,.information-widget-resource,.bookmark,#information-widgets>div>div{
+  background-color:var(--panel)!important;
+  border:1px solid var(--line)!important;
+  border-radius:var(--r)!important;
+}
+.service-card:hover{border-color:var(--brand)!important}
+/* titres de groupes : petites capitales à chasse fixe, comme les titres de cartes */
+.service-group-name,.services-group h2,.bookmark-group-name{
+  font-family:var(--mono)!important;
+  font-size:.75rem!important;
+  letter-spacing:.09em!important;
+  text-transform:uppercase!important;
+  color:var(--muted)!important;
+}
+.service-name,.service-title{color:var(--text)!important}
+.service-description{color:var(--muted)!important}
+a{color:var(--brand)}
+/* pastilles de surveillance : mêmes couleurs d'états que la console */
+.service-card [class*="bg-emerald"],.service-card [class*="bg-green"]{background-color:var(--ok)!important}
+.service-card [class*="bg-orange"],.service-card [class*="bg-yellow"],.service-card [class*="bg-amber"]{background-color:var(--warn)!important}
+.service-card [class*="bg-rose"],.service-card [class*="bg-red"]{background-color:var(--err)!important}

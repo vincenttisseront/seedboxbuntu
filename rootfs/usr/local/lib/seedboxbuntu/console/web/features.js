@@ -1,20 +1,15 @@
 'use strict';
 // SeedBoxBuntu - console : historique, copie hors serveur, nettoyage, invités, journal, GPU, import et mise à jour signée.
-// Chargé avant app.js : les fonctions ci-dessous s'appuient sur ses outils ($, el, api, runJob, confirmAction, fmtSize…)
+// Chargé après ui.js (formats, états, notifications) et avant app.js, dont elle utilise api, runJob, showError…
 // qui n'existent qu'à l'appel ; initFeatures() est lancée par app.js une fois le document prêt.
 
 let featureTimer = null;
 
-const fmtDateTime = (ts) => (ts ? new Date(ts * 1000).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '-');
-const fmtDay = (ts) => (ts ? new Date(ts * 1000).toLocaleDateString('fr-FR', { dateStyle: 'medium' }) : '-');
-const pill = (text, kind) => el('span', { class: `pill ${kind || ''}` }, text);
-const emptyRow = (cols, text) => el('tr', {}, el('td', { colspan: String(cols), class: 'muted' }, text));
 const labelled = (text, input) => el('label', {}, text, input);
 
 // ---------------------------------------------------------------------------------------------------------------
 //  Graphiques (SVG construit à la main : aucune bibliothèque, aucun style en ligne)
 // ---------------------------------------------------------------------------------------------------------------
-const SVGNS = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs = {}, ...kids) {
   const node = document.createElementNS(SVGNS, tag);
   for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
@@ -58,9 +53,15 @@ function lineChart(series, options) {
   const dayScale = seconds > 86400 * 1.5;
   for (let i = 0; i <= 4; i += 1) {
     const t = start + (seconds * i) / 4;
-    const d = new Date(t * 1000);
-    const text = dayScale ? d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const text = fmtAxis(t, dayScale);
     root.append(svgEl('text', { class: 'tick', x: x(t), y: H - 6, 'text-anchor': i === 0 ? 'start' : i === 4 ? 'end' : 'middle' }, text));
+  }
+  if (options.max === 100) {
+    // Mêmes seuils que les jauges et les alertes (THRESHOLDS) : attention puis critique
+    for (const [value, kind] of [[THRESHOLDS.warn, 'warn'], [THRESHOLDS.crit, 'err']]) {
+      root.append(svgEl('line', { class: `th ${kind}`, x1: PAD.l, x2: W - PAD.r, y1: y(value), y2: y(value) }),
+        svgEl('text', { class: `th-label ${kind}`, x: W - PAD.r - 2, y: y(value) - 3, 'text-anchor': 'end' }, `${value} %`));
+    }
   }
   series.forEach((s, index) => {
     let path = '';
@@ -126,7 +127,7 @@ async function loadHistory() {
   const charts = [];
   if (has('cpu')) charts.push(lineChart([{ name: 'Processeur', points: s.cpu }], { ...base, fmt: pct, max: 100, title: 'Processeur' }));
   if (has('mem')) charts.push(lineChart([{ name: 'Mémoire', points: s.mem }], { ...base, fmt: pct, max: 100, title: 'Mémoire' }));
-  if (has('load')) charts.push(lineChart([{ name: 'Charge', points: s.load }], { ...base, fmt: (v) => v.toFixed(2), title: 'Charge moyenne (1 min)' }));
+  if (has('load')) charts.push(lineChart([{ name: 'Charge', points: s.load }], { ...base, fmt: (v) => fmtNumber(v, 2), title: 'Charge moyenne (1 min)' }));
   if (has('net_rx') || has('net_tx')) {
     charts.push(lineChart([{ name: 'Reçu', points: s.net_rx || [] }, { name: 'Émis', points: s.net_tx || [] }], { ...base, fmt: rate, title: 'Réseau' }));
   }
@@ -144,7 +145,7 @@ async function loadHistory() {
     const detail = f.reliable && f.per_day > 0 ? ` +${fmtSize(f.per_day)} par jour` : !f.reliable ? ' historique trop court ou évolution irrégulière' : '';
     return el('li', {}, status, ` ${f.path} : ${fmtSize(f.used)} sur ${fmtSize(f.total)}`, el('span', { class: 'muted' }, detail));
   });
-  $('history-forecast').replaceChildren(...(rows.length ? rows : [el('li', { class: 'muted' }, 'Aucune mesure de disque pour le moment.')]));
+  $('history-forecast').replaceChildren(...(rows.length ? rows : [emptyItem('Aucune mesure de disque pour le moment.')]));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -349,7 +350,7 @@ async function loadGuests() {
     el('td', {}, `${i.uses} / ${i.max_uses}`),
     el('td', { class: 'muted small' }, i.accounts.join(', ') || '-'),
     el('td', {}, i.status === 'active' ? el('button', { class: 'btn sm danger', type: 'button',
-      onclick: (event) => confirmAction(event.target, 'Confirmer ?', async () => {
+      onclick: (event) => confirmAction(event.currentTarget, 'Le lien ne fonctionnera plus. Les comptes déjà créés avec cette invitation sont conservés.', async () => {
         try { await api('/api/guests/revoke', { id: i.id }); loadGuests().catch(showError); } catch (error) { showError(error); }
       }) }, 'Révoquer') : null)))
     : [emptyRow(6, 'Aucune invitation pour le moment.')]));
@@ -385,14 +386,14 @@ async function copyLink() {
   const text = $('guest-link-text').textContent;
   try {
     await navigator.clipboard.writeText(text);
-    $('guest-link-copy').textContent = 'Copié';
+    setLabel($('guest-link-copy'), 'Copié');
   } catch (error) {
     const range = document.createRange();
     range.selectNodeContents($('guest-link-text'));
     const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
-    $('guest-link-copy').textContent = 'Sélectionné : copiez avec Ctrl+C';
+    setLabel($('guest-link-copy'), 'Sélectionné : copiez avec Ctrl+C');
   }
-  setTimeout(() => { $('guest-link-copy').textContent = 'Copier le lien'; }, 3000);
+  setTimeout(() => { setLabel($('guest-link-copy'), 'Copier le lien'); }, 3000);
 }
 
 function guestEditSubmit(event) {
@@ -433,11 +434,11 @@ async function loadCleanup() {
     selectAll(all, table);
     const verb = c.trashable ? 'Mettre à la corbeille' : 'Supprimer';
     const card = el('div', { class: 'card' },
-      el('div', { class: 'title' }, el('h2', {}, `${c.label} · ${c.count} · ${fmtSize(c.size)}`),
+      el('div', { class: 'card-head' }, el('h2', {}, `${c.label} · ${c.count} · ${fmtSize(c.size)}`),
         el('button', { class: 'btn sm', type: 'button', onclick: (event) => {
           const ids = checkedIds(card);
           if (!ids.length) { showError(new Error('Cochez au moins un élément')); return; }
-          confirmAction(event.target, c.trashable ? 'Confirmer ?' : 'Supprimer définitivement ?', () => runJob('/api/cleanup/trash', { ids }, loadCleanup));
+          confirmAction(event.currentTarget, c.trashable ? `${ids.length} élément(s) iront dans la corbeille ; ils pourront être restaurés tant qu’elle n’est pas vidée.` : `${ids.length} élément(s) seront supprimés définitivement, sans corbeille.`, () => runJob('/api/cleanup/trash', { ids }, loadCleanup));
         } }, verb)),
       el('p', { class: 'muted small' }, c.hint + (c.count > c.items.length ? ` (les ${c.items.length} plus gros sont listés)` : '')),
       el('div', { class: 'table-wrap' }, table));
@@ -479,7 +480,7 @@ async function loadJournal(more = false) {
     select.value = current;
   }
   const rows = data.events.map((e) => el('tr', {},
-    el('td', { class: 'muted small nowrap' }, new Date(e.ts * 1000).toLocaleString('fr-FR')),
+    el('td', { class: 'muted small nowrap' }, fmtDateTime(e.ts)),
     el('td', { class: 'small' }, e.source), el('td', {}, e.user), el('td', { class: 'muted small' }, e.ip || '-'),
     el('td', {}, e.action, e.detail ? el('div', { class: 'muted small' }, e.detail) : null),
     el('td', {}, pill(...(OUTCOME[e.outcome] || [e.outcome, ''])))));
@@ -510,7 +511,7 @@ async function searchLogs() {
   const q = logsQuery(); q.set('limit', '500');
   const data = await api(`/api/logs/search?${q}`);
   $('logs-summary').textContent = `${data.total} ligne(s) dans ${data.sources} source(s)${data.truncated ? ' — les 500 plus récentes sont affichées' : ''}.`;
-  $('logs-view').textContent = data.lines.map((l) => `${new Date(l.ts * 1000).toLocaleTimeString('fr-FR')} [${l.source}] ${l.line}`).join('\n') || '(aucune ligne)';
+  $('logs-view').textContent = data.lines.map((l) => `${fmtTime(l.ts)} [${l.source}] ${l.line}`).join('\n') || '(aucune ligne)';
   $('logs-export').setAttribute('href', `api/logs/export?${logsQuery()}`);
 }
 
@@ -588,7 +589,7 @@ function initFeatures() {
     if (!ids.length) { showError(new Error('Cochez au moins un élément')); return; }
     runJob('/api/cleanup/restore', { ids }, loadCleanup);
   });
-  $('cleanup-empty').addEventListener('click', (event) => confirmAction(event.target, 'Supprimer définitivement ?', () => runJob('/api/cleanup/empty', {}, loadCleanup)));
+  $('cleanup-empty').addEventListener('click', (event) => confirmAction(event.currentTarget, 'Tout le contenu de la corbeille sera supprimé définitivement.', () => runJob('/api/cleanup/empty', {}, loadCleanup)));
 
   $('journal-form').addEventListener('submit', (event) => { event.preventDefault(); loadJournal().catch(showError); });
   $('journal-more').addEventListener('click', () => loadJournal(true).catch(showError));
@@ -603,7 +604,7 @@ function initFeatures() {
   $('offsite-connection').addEventListener('click', () => runJob('/api/offsite/connection', {}, loadOffsite));
   $('offsite-push').addEventListener('click', () => runJob('/api/offsite/push', {}, loadOffsite));
   $('offsite-test').addEventListener('click', () => runJob('/api/offsite/restore-test', {}, loadOffsite));
-  $('offsite-clear').addEventListener('click', (event) => confirmAction(event.target, 'Confirmer ?', () => runJob('/api/offsite/clear', {}, loadOffsite)));
+  $('offsite-clear').addEventListener('click', (event) => confirmAction(event.currentTarget, 'La destination hors serveur est oubliée : les copies déjà envoyées restent chez le fournisseur.', () => runJob('/api/offsite/clear', {}, loadOffsite)));
 
   $('import-scan').addEventListener('click', () => runJob('/api/import/scan', {}, loadImport));
   $('import-map-add').addEventListener('click', () => $('import-map').append(importRow()));
@@ -611,12 +612,12 @@ function initFeatures() {
   $('import-run').addEventListener('click', (event) => {
     try {
       const payload = importPayload(false);
-      confirmAction(event.target, 'Confirmer l’import ?', () => runJob('/api/import/run', payload, loadImport));
+      confirmAction(event.currentTarget, 'Les données de l’autre seedbox sont converties et copiées ici ; vos réglages actuels peuvent être remplacés.', () => runJob('/api/import/run', payload, loadImport));
     } catch (error) { showError(error); }
   });
-  $('import-clear').addEventListener('click', (event) => confirmAction(event.target, 'Vider le dossier ?', () => runJob('/api/import/clear', {}, loadImport)));
+  $('import-clear').addEventListener('click', (event) => confirmAction(event.currentTarget, 'Les fichiers de sauvegarde déposés dans le dossier d’import seront supprimés.', () => runJob('/api/import/clear', {}, loadImport)));
 
   $('appliance-extra-save').addEventListener('click', () => { try { applianceExtraSave(); } catch (error) { showError(error); } });
   $('appliance-signer-save').addEventListener('click', () => applianceAction('/api/appliance/signer', { key: $('appliance-signer').value }));
-  $('appliance-force').addEventListener('click', (event) => confirmAction(event.target, 'Confirmer ?', () => applianceAction('/api/appliance/apply', { force: true })));
+  $('appliance-force').addEventListener('click', (event) => confirmAction(event.currentTarget, 'La mise à jour est installée malgré le blocage signalé. Une version précédente reste disponible pour revenir en arrière.', () => applianceAction('/api/appliance/apply', { force: true })));
 }

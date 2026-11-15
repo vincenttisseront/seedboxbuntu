@@ -1,16 +1,6 @@
 'use strict';
-
-const $ = (id) => document.getElementById(id);
-
-function el(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key === 'onclick') node.addEventListener('click', value);
-    else if (value !== undefined && value !== null) node.setAttribute(key, value);
-  }
-  node.append(...children.flat().filter((c) => c !== null && c !== undefined));
-  return node;
-}
+// SeedBoxBuntu - console : pages et actions. Le socle visuel (formats, états, notifications,
+// tiroir de tâches, confirmation, navigation) est dans ui.js ; les pages récentes dans features.js.
 
 async function api(path, body) {
   const options = body === undefined ? {} : {
@@ -24,32 +14,33 @@ async function api(path, body) {
 }
 
 function showError(error) {
-  const box = $('job');
-  box.classList.remove('hidden');
-  $('job-title').textContent = 'Erreur';
-  $('job-log').textContent = error.message;
+  toast('err', (error && error.message) || String(error));
 }
 
-let jobTimer = null;
+const JOB_STATE = { running: ['info', 'en cours'], ok: ['ok', 'terminé'], error: ['err', 'échec'] };
+let latestJob = null;
+// Une tâche longue : notification qui suit son avancement, détails dans le tiroir (ouvert d'office en cas d'échec)
 function followJob(id, done) {
-  const box = $('job');
-  box.classList.remove('hidden');
-  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  clearInterval(jobTimer);
-  jobTimer = setInterval(async () => {
+  latestJob = id;
+  const note = toast('info', 'Tâche en cours…', { sticky: true, busy: true, action: { label: 'Détails', run: () => drawer.open() } });
+  drawer.show('Tâche en cours', 'info', 'en cours', '');
+  const poll = async () => {
     try {
       const job = await api(`/api/jobs/${id}`);
-      $('job-title').textContent = `${job.title} : ${{ running: 'en cours', ok: 'terminé', error: 'échec' }[job.state]}`;
-      $('job-log').textContent = job.log || '...';
-      if (job.state !== 'running') {
-        clearInterval(jobTimer);
-        if (done) done();
-      }
+      const [kind, word] = JOB_STATE[job.state] || ['unknown', job.state];
+      if (latestJob === id) drawer.show(job.title, kind, word, job.log);
+      if (job.state === 'running') { note.update('info', `${job.title} : en cours…`, { sticky: true, busy: true }); return; }
+      clearInterval(timer);
+      note.update(kind, `${job.title} : ${word}`);
+      if (job.state === 'error' && latestJob === id) drawer.open();
+      if (done) done();
     } catch (error) {
       // Traefik ou Authelia peuvent redémarrer pendant un changement d'adresse
-      $('job-log').textContent += '\nConsole momentanément injoignable...';
+      if (latestJob === id) $('drawer-log').textContent += '\nConsole momentanément injoignable...';
     }
-  }, 1500);
+  };
+  const timer = setInterval(poll, 1500);
+  poll();
 }
 
 async function runJob(path, body, done) {
@@ -61,31 +52,12 @@ async function runJob(path, body, done) {
   }
 }
 
-function confirmAction(button, label, action) {
-  // Double clic explicite plutôt qu'une boîte de dialogue du navigateur
-  if (button.dataset.armed) {
-    delete button.dataset.armed;
-    button.textContent = button.dataset.label;
-    action();
-    return;
-  }
-  button.dataset.armed = '1';
-  button.dataset.label = button.textContent;
-  button.textContent = label;
-  setTimeout(() => {
-    if (button.dataset.armed) {
-      delete button.dataset.armed;
-      button.textContent = button.dataset.label;
-    }
-  }, 4000);
-}
-
 function statePill(app) {
   const running = app.state === 'running';
   const sick = app.health === 'unhealthy';
   const label = sick ? 'en difficulté' : running ? (app.health === 'starting' ? 'démarrage' : 'actif')
-    : app.state === 'absent' ? 'non démarré' : app.state;
-  return el('span', { class: `pill ${sick ? 'err' : running ? 'ok' : 'warn'}` }, label);
+    : app.state === 'absent' ? 'non démarré' : app.state === 'exited' ? 'arrêté' : app.state;
+  return pill(label, sick ? 'err' : running ? 'ok' : 'warn');
 }
 
 const ROLE_LABEL = { admin: 'Administrateur', manager: 'Gestionnaire', user: 'Utilisateur' };
@@ -109,13 +81,13 @@ async function loadSteps() {
   }
   const rows = data.steps.map((step) => el('tr', {},
     el('td', {}, step.label, step.critical ? el('span', { class: 'muted small' }, ' (essentielle)') : null),
-    el('td', {}, el('span', { class: `pill ${step.ok ? 'ok' : step.ignored ? 'warn' : 'err'}` }, step.ok ? 'OK' : step.ignored ? 'ignorée' : 'échec')),
+    el('td', {}, pill(step.ok ? 'OK' : step.ignored ? 'ignorée' : 'échec', step.ok ? 'ok' : step.ignored ? 'warn' : 'err')),
     el('td', { class: 'muted small' }, step.error || ''),
     el('td', {}, !step.ok && !step.ignored && !step.critical ? el('button', {
       class: 'btn sm', type: 'button',
       onclick: () => runJob('/api/steps/ignore', { label: step.label }, loadSteps),
     }, 'Ignorer') : null)));
-  $('steps-list').replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colspan: '4', class: 'muted' }, 'Aucune étape exécutée pour le moment.'))]));
+  $('steps-list').replaceChildren(...(rows.length ? rows : [emptyRow(4, 'Aucune étape exécutée pour le moment.')]));
 }
 
 async function loadApps() {
@@ -132,7 +104,7 @@ async function loadApps() {
     el('td', {}, app.service === 'console' ? null : el('button', {
       class: 'btn sm', type: 'button',
       onclick: async (event) => {
-        event.target.disabled = true;
+        event.currentTarget.disabled = true;
         await api(`/api/services/${app.service}/restart`, {}).catch(showError);
         loadApps();
       },
@@ -162,7 +134,7 @@ async function loadUsers() {
     }, 'Changer');
     const remove = user.login === session.user ? null : el('button', {
       class: 'btn sm danger', type: 'button',
-      onclick: (event) => confirmAction(event.target, 'Confirmer ?', () => runJob(`/api/users/${encodeURIComponent(user.login)}/delete`, {}, loadUsers)),
+      onclick: (event) => confirmAction(event.currentTarget, `Le compte « ${user.login} » est supprimé de toutes les applications (connexion unique, Jellyfin, Seerr).`, () => runJob(`/api/users/${encodeURIComponent(user.login)}/delete`, {}, loadUsers)),
     }, 'Supprimer');
     const role = el('select', { 'aria-label': `Rôle de ${user.login}` },
       ...Object.entries(ROLE_LABEL).map(([value, label]) => el('option', { value, selected: value === user.role ? '' : null }, label)));
@@ -176,13 +148,6 @@ async function loadUsers() {
   }));
 }
 
-const bytes = (value) => {
-  if (!value) return '0 o';
-  const units = ['o', 'Kio', 'Mio', 'Gio', 'Tio', 'Pio'];
-  const power = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
-  return `${(value / 1024 ** power).toFixed(power > 1 ? 2 : 0)} ${units[power]}`;
-};
-
 async function loadTrackers() {
   const data = await api('/api/trackers');
   const rules = Object.entries(data.rules);
@@ -194,11 +159,11 @@ async function loadTrackers() {
         class: 'btn sm', type: 'button',
         onclick: () => runJob('/api/trackers/rule', { keyword, min_seed_hours: hours.value, max_ratio: ratio.value }, loadTrackers),
       }, 'Enregistrer')));
-  }) : [el('tr', {}, el('td', { colspan: '4', class: 'muted' }, 'Aucun tracker : ajoutez un indexeur dans Prowlarr, puis synchronisez.'))]));
+  }) : [emptyRow(4, 'Aucun tracker : ajoutez un indexeur dans Prowlarr, puis synchronisez.')]));
   $('stats-list').replaceChildren(...(data.stats.length ? data.stats.map((s) => el('tr', {},
-    el('td', {}, s.tracker), el('td', {}, String(s.torrents)), el('td', {}, bytes(s.uploaded)), el('td', {}, bytes(s.downloaded)),
-    el('td', {}, s.ratio === null ? '-' : String(s.ratio)), el('td', {}, `${bytes(s.upspeed)}/s`)))
-    : [el('tr', {}, el('td', { colspan: '6', class: 'muted' }, 'Aucun torrent, ou qBittorrent arrêté.'))]));
+    el('td', {}, s.tracker), el('td', {}, String(s.torrents)), el('td', {}, fmtSize(s.uploaded)), el('td', {}, fmtSize(s.downloaded)),
+    el('td', {}, s.ratio === null ? '-' : String(s.ratio)), el('td', {}, `${fmtSize(s.upspeed)}/s`)))
+    : [emptyRow(6, 'Aucun torrent, ou qBittorrent arrêté.')]));
 }
 
 async function runCheck() {
@@ -207,7 +172,7 @@ async function runCheck() {
   $('check-summary').textContent = 'Contrôle en cours…';
   try {
     const result = await api('/api/check');
-    const marks = { ok: 'OK', warn: 'Alerte', fail: 'Échec' };
+    const marks = { ok: 'OK', warn: 'Attention', fail: 'Erreur' };
     const classes = { ok: 'ok', warn: 'warn', fail: 'err' };
     let group = null;
     const rows = [];
@@ -216,12 +181,12 @@ async function runCheck() {
         group = item.group;
         rows.push(el('li', { class: 'group' }, group));
       }
-      rows.push(el('li', {}, el('span', { class: `pill ${classes[item.status]}` }, marks[item.status]), ` ${item.label}`,
+      rows.push(el('li', {}, pill(marks[item.status], classes[item.status]), ` ${item.label}`,
         item.detail ? el('span', { class: 'muted' }, ` : ${item.detail}`) : null));
     }
     $('check-list').replaceChildren(...rows);
     const s = result.summary;
-    $('check-summary').textContent = `${s.ok} réussi(s), ${s.warn} alerte(s), ${s.fail} échec(s)`;
+    $('check-summary').textContent = `${s.ok} OK, ${s.warn} à surveiller, ${s.fail} en erreur`;
   } catch (error) {
     $('check-summary').textContent = '';
     showError(error);
@@ -268,7 +233,7 @@ function shareAction(name, action, label) {
     class: `btn sm${action === 'remove' ? ' danger' : ''}`, type: 'button',
     onclick: (event) => {
       const go = () => runJob(`/api/shares/${name}/${action}`, {}, loadShares);
-      return action === 'remove' ? confirmAction(event.target, 'Confirmer ?', go) : go();
+      return action === 'remove' ? confirmAction(event.currentTarget, `Le partage « ${name} » est retiré ; les fichiers qu’il contient ne sont pas effacés.`, go) : go();
     },
   }, label);
 }
@@ -284,8 +249,8 @@ async function loadShares() {
     el('td', {}, share.name, el('div', { class: 'muted small' }, KIND_LABEL[share.kind] + (share.version ? ` ${share.version}` : '')
       + (share.username ? ` - ${share.username}` : ''))),
     el('td', { class: 'secret' }, share.kind === 'disk' ? `${share.label || share.fstype} (${share.fstype})` : share.source),
-    el('td', {}, el('span', { class: `pill ${share.mounted ? 'ok' : 'err'}` }, share.mounted ? 'monté' : 'absent')),
-    el('td', {}, share.mounted ? `${bytes(share.free)} / ${bytes(share.total)}` : '-'),
+    el('td', {}, pill(share.mounted ? 'monté' : 'absent', share.mounted ? 'ok' : 'err')),
+    el('td', {}, share.mounted ? `${fmtSize(share.free)} / ${fmtSize(share.total)}` : '-'),
     el('td', { class: 'small' }, share.roles.map((r) => labels[r]).join(', ') || '-'),
     el('td', {}, el('div', { class: 'row' },
       share.mounted ? shareAction(share.name, 'umount', 'Démonter') : shareAction(share.name, 'mount', 'Monter'),
@@ -297,8 +262,8 @@ async function loadShares() {
           $('share-credentials').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         },
       }, 'Identifiants') : null,
-      share.roles.length ? null : shareAction(share.name, 'remove', 'Supprimer')))))
-    : [el('tr', {}, el('td', { colspan: '6', class: 'muted' }, 'Aucun partage : ajoutez-en un ci-dessous.'))]));
+      share.roles.length ? null : shareAction(share.name, 'remove', 'Retirer')))))
+    : [emptyRow(6, 'Aucun partage : ajoutez-en un ci-dessous.')]));
   const mounted = data.shares.filter((s) => s.mounted);
   $('roles-list').replaceChildren(...data.roles.map((role) => {
     const choice = el('select', {},
@@ -317,7 +282,7 @@ async function loadShares() {
       }, 'Appliquer')));
   }));
   $('share-disk').replaceChildren(...(data.disks.length ? data.disks.map((d) => el('option', { value: d.uuid },
-    `${d.device} - ${d.label || 'sans nom'} - ${d.fstype} - ${bytes(d.size)}`))
+    `${d.device} - ${d.label || 'sans nom'} - ${d.fstype} - ${fmtSize(d.size)}`))
     : [el('option', { value: '' }, 'Aucun disque libre détecté')]));
   const smb = data.shares.filter((s) => s.kind === 'smb');
   $('credentials-share').replaceChildren(...smb.map((s) => el('option', { value: s.name }, s.name)));
@@ -333,7 +298,7 @@ function renderSecrets(values) {
     return el('div', { class: 'card' }, el('h2', {}, name), el('dl', { class: 'kv' }, ...rows),
       rotation[name] ? el('button', {
         class: 'btn sm', type: 'button',
-        onclick: (event) => confirmAction(event.target, 'Confirmer ?', () => runJob(`/api/rotate/${rotation[name]}`, {})),
+        onclick: (event) => confirmAction(event.currentTarget, 'Le secret est remplacé et les applications qui en dépendent sont reconfigurées.', () => runJob(`/api/rotate/${rotation[name]}`, {})),
       }, 'Renouveler') : null);
   }));
 }
@@ -352,11 +317,10 @@ function readDays(container) {
   return chosen.length === 7 ? 'daily' : chosen.join(',');
 }
 
-const NEXT_FORMAT = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
 function nextRun(value) {
   // systemd renvoie « Sun 2026-11-08 03:30:00 CET » : date et heure suffisent
   const match = /(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/.exec(value || '');
-  return match ? `Prochain passage : ${NEXT_FORMAT.format(new Date(`${match[1]}T${match[2]}`))}` : 'Aucun passage planifié';
+  return match ? `Prochain passage : ${fmtFull(`${match[1]}T${match[2]}`)}` : 'Aucun passage planifié';
 }
 
 function fill(form, values) {
@@ -367,7 +331,7 @@ function fill(form, values) {
   }
 }
 
-const STATE_LABEL = { ok: ['OK', 'ok'], warn: ['À vérifier', 'warn'], fail: ['Anomalie', 'err'] };
+const STATE_LABEL = { ok: ['OK', 'ok'], warn: ['Attention', 'warn'], fail: ['Erreur', 'err'] };
 
 async function loadAudit() {
   $('audit-score').textContent = 'Audit en cours...';
@@ -375,7 +339,7 @@ async function loadAudit() {
   const { ok, warn, fail } = data.score;
   $('audit-score').textContent = `${ok} contrôle(s) conforme(s), ${warn} à vérifier, ${fail} anomalie(s)`;
   $('audit-list').replaceChildren(...data.checks.map((c) => el('tr', {},
-    el('td', {}, c.label), el('td', {}, el('span', { class: `pill ${STATE_LABEL[c.state][1]}` }, STATE_LABEL[c.state][0])),
+    el('td', {}, c.label), el('td', {}, pill(STATE_LABEL[c.state][0], STATE_LABEL[c.state][1])),
     el('td', { class: 'muted small' }, c.detail || ''))));
   const web = data.ports.base.web.join(', ');
   const extra = [...data.ports.extra.tcp.map(String), ...data.ports.extra.udp.map((p) => `${p}/udp`)];
@@ -391,11 +355,6 @@ let applianceTimer = null;
 let applianceWasRunning = false;
 const APPLIANCE_STATE = { running: 'en cours', rolled_back: 'annulée automatiquement', ok: 'terminée', partial: 'terminée, finalisation en arrière-plan', error: 'échec' };
 
-function applianceDate(text) {
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
-}
-
 function renderAppliance(data) {
   const { installed, check, status, config } = data;
   const running = status.state === 'running';
@@ -407,9 +366,9 @@ function renderAppliance(data) {
   if (check && check.error) rows.push(el('dt', {}, 'Dernier contrôle'), el('dd', {}, check.error));
   else if (check && check.remote) {
     rows.push(el('dt', {}, 'Dernière version'),
-      el('dd', {}, `${check.remote.short} du ${applianceDate(check.remote.date)} : ${check.remote.message}`),
+      el('dd', {}, `${check.remote.short} du ${fmtDateTime(check.remote.date)} : ${check.remote.message}`),
       el('dt', {}, 'État'), el('dd', {}, check.available ? 'mise à jour disponible' : check.reason),
-      el('dt', {}, 'Contrôle'), el('dd', {}, applianceDate(check.checked * 1000)));
+      el('dt', {}, 'Contrôle'), el('dd', {}, fmtDateTime(check.checked * 1000)));
   } else rows.push(el('dt', {}, 'État'), el('dd', {}, 'pas encore vérifié'));
   if (status.state) rows.push(el('dt', {}, 'Dernière opération'),
     el('dd', {}, `${status.action === 'rollback' ? 'retour arrière' : 'mise à jour'} ${APPLIANCE_STATE[status.state] || status.state}${status.phase && status.state !== 'error' ? ` : ${status.phase}` : ''}${status.error ? ` : ${status.error}` : ''}`));
@@ -428,7 +387,7 @@ function renderAppliance(data) {
   $('appliance-check').disabled = running;
   $('appliance-apply').disabled = running;
   $('appliance-rollback').disabled = running || !data.can_rollback;
-  $('appliance-apply').textContent = running ? 'En cours...' : check && check.available ? 'Mettre à jour' : 'Réinstaller la dernière version';
+  setLabel($('appliance-apply'), running ? 'En cours…' : check && check.available ? 'Mettre à jour' : 'Réinstaller la dernière version');
   if (document.activeElement !== $('appliance-repo')) $('appliance-repo').value = config.repo;
   if (document.activeElement !== $('appliance-ref')) $('appliance-ref').value = config.ref;
   const banner = $('appliance-banner');
@@ -491,7 +450,7 @@ async function loadAuth() {
   $('auth-form').elements.mode.value = data.mode;
   $('auth-users').replaceChildren(...data.users.map((u) => el('tr', {},
     el('td', {}, u.login), el('td', { class: 'muted' }, (ROLE_LABEL[u.role] || u.role).toLowerCase()),
-    el('td', {}, el('span', { class: `pill ${u.second_factor ? 'ok' : 'warn'}` }, u.second_factor ? 'enregistrée' : 'aucune')))));
+    el('td', {}, pill(u.second_factor ? 'enregistrée' : 'aucune', u.second_factor ? 'ok' : 'warn')))));
   $('auth-notif').textContent = data.notifications || 'Aucun code de vérification en attente.';
 }
 
@@ -520,25 +479,22 @@ const LEVEL_CLASS = { critical: 'err', warning: 'warn', ok: 'ok' };
 async function loadAlerts() {
   const data = await api('/api/alerts');
   fillNested($('alerts-form'), data.settings);
-  const rows = data.active.map((a) => el('li', {}, el('span', { class: `pill ${LEVEL_CLASS[a.level] || 'warn'}` }, a.notified ? 'signalé' : 'constaté'),
+  const rows = data.active.map((a) => el('li', {}, pill(a.notified ? 'signalé' : 'constaté', LEVEL_CLASS[a.level] || 'warn'),
     ` ${a.title}`, a.detail ? el('span', { class: 'muted' }, ` : ${a.detail}`) : null));
-  $('alerts-active').replaceChildren(...(rows.length ? rows : [el('li', { class: 'muted' }, 'Aucun problème constaté.')]));
+  $('alerts-active').replaceChildren(...(rows.length ? rows : [emptyItem('Aucun problème constaté.')]));
 }
 
 let viewTimer = null;
 let netPrev = null;
-const fmtRate = (bytes) => `${fmtSize(Math.max(0, bytes))}/s`;
-const fmtDuration = (s) => { const d = Math.floor(s / 86400); const h = Math.floor((s % 86400) / 3600); const m = Math.floor((s % 3600) / 60); return `${d ? `${d} j ` : ''}${h} h ${m} min`; };
 
 async function refreshSystem() {
   const data = await api('/api/system');
   $('sys-up').textContent = `En marche depuis ${fmtDuration(data.uptime)}`;
   const cpu = Math.min(100, Math.round((data.load[0] / data.cpus) * 100));
-  $('sys-cpu').value = cpu;
-  $('sys-cpu-t').textContent = `Charge ${data.load.map((v) => v.toFixed(2)).join(' / ')} sur ${data.cpus} cœur(s) : ${cpu} %`;
   const m = data.memory;
-  $('sys-mem').value = m.total ? Math.round((100 * m.used) / m.total) : 0;
-  $('sys-mem-t').textContent = `${fmtSize(m.used)} utilisés sur ${fmtSize(m.total)}${m.swap_total ? ` ; swap ${fmtSize(m.swap_used)} / ${fmtSize(m.swap_total)}` : ''}`;
+  const mem = m.total ? Math.round((100 * m.used) / m.total) : 0;
+  $('sys-cpu-g').replaceChildren(gauge(cpu, fmtPercent(cpu), `Charge ${data.load.map((v) => fmtNumber(v, 2)).join(' / ')} sur ${data.cpus} cœur(s)`));
+  $('sys-mem-g').replaceChildren(gauge(mem, fmtPercent(mem), `${fmtSize(m.used)} utilisés sur ${fmtSize(m.total)}${m.swap_total ? ` ; swap ${fmtSize(m.swap_used)} / ${fmtSize(m.swap_total)}` : ''}`));
   const n = data.network;
   if (netPrev && netPrev.interface === n.interface && data.time > netPrev.time) {
     const dt = data.time - netPrev.time;
@@ -546,21 +502,19 @@ async function refreshSystem() {
   } else $('sys-net').textContent = 'mesure en cours…';
   netPrev = { ...n, time: data.time };
   $('sys-net-t').textContent = n.interface ? `Interface ${n.interface} : ${fmtSize(n.rx)} reçus, ${fmtSize(n.tx)} émis depuis le démarrage` : '';
-  $('sys-disks').replaceChildren(...data.disks.map((d) => el('div', { class: 'disk' },
-    el('div', { class: 'row' }, el('strong', {}, d.label), el('span', { class: 'muted small' }, `${d.path} : ${fmtSize(d.used)} / ${fmtSize(d.total)} (${d.percent} %)`)),
-    el('progress', { max: '100', value: String(d.percent), class: d.percent >= 95 ? 'crit' : d.percent >= 85 ? 'warn' : '' }))));
+  $('sys-disks').replaceChildren(...data.disks.map((d) => gauge(d.percent, d.label, `${d.path} : ${fmtSize(d.used)} / ${fmtSize(d.total)} (${fmtPercent(d.percent)})`)));
   const smart = data.smart;
   $('sys-smart').replaceChildren(...(smart.available
-    ? (smart.disks.length ? smart.disks.map((d) => el('li', {}, el('span', { class: `pill ${!d.supported ? 'warn' : d.passed ? 'ok' : 'err'}` }, !d.supported ? 'SMART indisponible' : d.passed ? 'SMART OK' : 'SMART : alerte'),
+    ? (smart.disks.length ? smart.disks.map((d) => el('li', {}, pill(!d.supported ? 'SMART indisponible' : d.passed ? 'SMART OK' : 'SMART : alerte', !d.supported ? 'warn' : d.passed ? 'ok' : 'err'),
       ` /dev/${d.name} ${d.model || ''}`, d.supported ? el('span', { class: 'muted' }, ` ${d.temperature != null ? `${d.temperature} °C` : ''}${d.hours != null ? ` · ${d.hours} h de fonctionnement` : ''}`) : null))
-      : [el('li', { class: 'muted' }, 'Aucun disque physique détecté (machine virtuelle ?).')])
+      : [emptyItem('Aucun disque physique détecté (machine virtuelle ?).')])
     : [el('li', { class: 'muted' }, smart.reason)]));
 }
 
 async function refreshContainers() {
   const data = await api('/api/system/containers');
   $('sys-containers').replaceChildren(...data.containers.map((c) => el('tr', {},
-    el('td', {}, c.name), el('td', {}, `${c.cpu.toFixed(1)} %`), el('td', {}, `${fmtSize(c.memory)} (${c.memory_percent.toFixed(1)} %)`), el('td', { class: 'muted small' }, c.net))));
+    el('td', {}, c.name), el('td', {}, `${fmtNumber(c.cpu)} %`), el('td', {}, `${fmtSize(c.memory)} (${fmtNumber(c.memory_percent)} %)`), el('td', { class: 'muted small' }, c.net))));
 }
 
 async function loadLog() {
@@ -612,12 +566,6 @@ async function loadRemote() {
     : d.provider ? `Actif avec ${d.provider} : variables enregistrées (${d.variables.join(', ') || 'aucune'}).` : 'Défi HTTP (port 80) en service.';
 }
 
-function fmtSize(bytes) {
-  if (bytes >= 1 << 30) return `${(bytes / (1 << 30)).toFixed(1)} Go`;
-  if (bytes >= 1 << 20) return `${(bytes / (1 << 20)).toFixed(1)} Mo`;
-  return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
-}
-
 async function loadBackup() {
   const data = await api('/api/backup');
   fill($('backup-form'), data.settings);
@@ -625,16 +573,16 @@ async function loadBackup() {
   $('backup-warn').classList.toggle('hidden', data.destination_ok);
   $('backup-warn').textContent = `Le partage « ${data.settings.destination} » n'est pas monté : la sauvegarde automatique échouera tant qu'il est absent.`;
   const rows = data.backups.map((b) => el('tr', {},
-    el('td', {}, new Date(b.time * 1000).toLocaleString('fr-FR'), b.name.includes('-avant') ? el('span', { class: 'muted small' }, ' (avant restauration)') : null),
+    el('td', {}, fmtDateTime(b.time), b.name.includes('-avant') ? el('span', { class: 'muted small' }, ' (avant restauration)') : null),
     el('td', { class: 'muted' }, b.where === 'local' ? 'ce serveur' : b.where),
     el('td', { class: 'muted' }, fmtSize(b.size)),
     el('td', {}, el('div', { class: 'row' },
       el('a', { class: 'btn sm', href: `api/backup/download?name=${encodeURIComponent(b.name)}` }, 'Télécharger'),
-      el('button', { class: 'btn sm', type: 'button', onclick: (event) => confirmAction(event.target, 'Confirmer la restauration ?',
+      el('button', { class: 'btn sm', type: 'button', onclick: (event) => confirmAction(event.currentTarget, `La configuration est remplacée par celle de « ${b.name} » ; l’état actuel est sauvegardé avant.`,
         () => runJob('/api/backup/restore', { name: b.name }, loadBackup)) }, 'Restaurer'),
-      el('button', { class: 'btn sm danger', type: 'button', onclick: (event) => confirmAction(event.target, 'Confirmer ?',
+      el('button', { class: 'btn sm danger', type: 'button', onclick: (event) => confirmAction(event.currentTarget, `La sauvegarde « ${b.name} » est supprimée définitivement.`,
         () => runJob('/api/backup/delete', { name: b.name }, loadBackup)) }, 'Supprimer')))));
-  $('backup-list').replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colspan: '4', class: 'muted' }, 'Aucune sauvegarde pour le moment.'))]));
+  $('backup-list').replaceChildren(...(rows.length ? rows : [emptyRow(4, 'Aucune sauvegarde pour le moment.')]));
 }
 
 let catalogData = null;
@@ -653,7 +601,7 @@ function renderCatalog() {
     }
     const origin = app.source === 'intégré' ? 'intégré (relié)' : app.source === 'linuxserver' ? 'linuxserver.io (générique)' : 'votre catalogue';
     const button = app.installed
-      ? el('button', { class: 'btn sm danger', type: 'button', onclick: (event) => confirmAction(event.target, 'Confirmer le retrait ?',
+      ? el('button', { class: 'btn sm danger', type: 'button', onclick: (event) => confirmAction(event.currentTarget, `« ${app.name} » est arrêtée et retirée de la seedbox.`,
         () => runJob('/api/catalog/remove', { id: app.id }, loadCatalog)) }, 'Retirer')
       : el('button', { class: 'btn sm primary', type: 'button', onclick: () => runJob('/api/catalog/install', { id: app.id }, loadCatalog) }, 'Installer');
     nodes.push(el('tr', {},
@@ -664,7 +612,7 @@ function renderCatalog() {
       el('td', {}, button)));
   }
   if (rows.length > 300) nodes.push(el('tr', {}, el('td', { colspan: '5', class: 'muted' }, `${rows.length - 300} autres : affinez la recherche.`)));
-  if (!rows.length) nodes.push(el('tr', {}, el('td', { colspan: '5', class: 'muted' }, 'Aucune application.')));
+  if (!rows.length) nodes.push(emptyRow(5, 'Aucune application.'));
   $('catalog-list').replaceChildren(...nodes);
 }
 
@@ -676,7 +624,7 @@ function renderPacks() {
     el('p', { class: 'small muted' }, pack.description),
     el('p', { class: 'small' }, pack.apps.map((a) => `${a.name}${a.installed ? ' ✓' : ''}`).join(' · ')),
     pack.complete
-      ? el('span', { class: 'pill ok' }, 'installé')
+      ? pill('installé', 'ok')
       : el('button', { class: 'btn sm primary', type: 'button', onclick: () => runJob('/api/catalog/pack', { id: pack.id }, loadCatalog) }, 'Installer le pack'))));
   $('preset-card').classList.toggle('hidden', !catalogData.preset);
   if (catalogData.preset) $('preset-form').elements.value.value = catalogData.preset;
@@ -684,7 +632,7 @@ function renderPacks() {
 
 async function loadCatalog() {
   catalogData = await api('/api/catalog');
-  const when = catalogData.fetched ? new Date(catalogData.fetched * 1000).toLocaleString('fr-FR') : 'jamais';
+  const when = catalogData.fetched ? fmtDateTime(catalogData.fetched) : 'jamais';
   const sources = Object.entries(catalogData.sources || {}).map(([name, detail]) => `${name} : ${detail}`).join(' ; ');
   $('catalog-state').textContent = `Liste actualisée : ${when}${sources ? ` (${sources})` : ''}.`
     + (catalogData.rejected.length ? ` ${catalogData.rejected.length} entrée(s) de votre catalogue refusée(s) : ${catalogData.rejected.slice(0, 3).join(' ; ')}` : '');
@@ -705,13 +653,13 @@ async function loadVersions() {
     if (!svc.local) {
       actions.push(el('button', { class: 'btn sm', type: 'button', onclick: () => runJob('/api/versions/update', { service: svc.service }, loadVersions) }, 'Mettre à jour'));
       if (svc.previous.length) {
-        actions.push(choice, el('button', { class: 'btn sm danger', type: 'button', onclick: (event) => confirmAction(event.target, 'Revenir à cette version ?',
+        actions.push(choice, el('button', { class: 'btn sm danger', type: 'button', onclick: (event) => confirmAction(event.currentTarget, `« ${svc.service} » revient à la version choisie ; il est ensuite épinglé (plus de mise à jour automatique).`,
           () => runJob('/api/versions/rollback', { service: svc.service, to: choice.value }, loadVersions)) }, 'Revenir'));
       }
       if (svc.pinned) actions.push(el('button', { class: 'btn sm', type: 'button', onclick: () => runJob('/api/versions/unpin', { service: svc.service }, loadVersions) }, 'Libérer'));
     }
     return el('tr', {},
-      el('td', {}, svc.service, svc.pinned ? el('span', { class: 'pill warn' }, 'épinglé') : null, svc.running ? null : el('span', { class: 'pill err' }, 'arrêté')),
+      el('td', {}, svc.service, svc.pinned ? pill('épinglé', 'warn') : null, svc.running ? null : pill('arrêté', 'err')),
       el('td', { class: 'small' }, svc.version || svc.id),
       el('td', { class: 'small muted' }, (svc.created || '').slice(0, 10) || '—'),
       el('td', { class: 'small muted' }, svc.local ? 'image construite sur place' : svc.previous.length ? `${svc.previous.length}` : 'aucune'),
@@ -720,18 +668,24 @@ async function loadVersions() {
   $('versions-list').replaceChildren(...rows);
 }
 
-const VIEWS = { system: async () => { await loadSystem(); loadHistory().catch(showError); loadGpu().catch(showError); }, alerts: loadAlerts, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: loadSettings, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
+const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadGpu().catch(showError); }, alerts: loadAlerts, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: loadSettings, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
   guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal() };
 
 function route() {
-  const name = location.hash.slice(1) in VIEWS ? location.hash.slice(1) : 'apps';
+  const requested = location.hash.slice(1);
+  const name = requested in VIEWS ? requested : 'overview';
   for (const section of document.querySelectorAll('.view')) section.classList.add('hidden');
-  $(`view-${name}`).classList.remove('hidden');
-  for (const link of document.querySelectorAll('#nav a')) link.classList.toggle('active', link.hash === `#${name}`);
+  const view = $(`view-${name}`);
+  view.classList.remove('hidden');
+  setActiveNav(name);
+  document.title = `${NAV.flatMap((g) => g.items).find((i) => i.view === name).label} - SeedBoxBuntu`;
   clearInterval(viewTimer);
   clearInterval(containersTimer);
   clearInterval(featureTimer);
-  if (VIEWS[name]) VIEWS[name]().catch(showError);
+  window.scrollTo(0, 0);
+  if (!VIEWS[name]) return;
+  markLoading(view);
+  Promise.resolve().then(() => VIEWS[name]()).then(() => markLoaded(view), (error) => { markLoaded(view, error); showError(error); });
 }
 
 function formData(form) {
@@ -793,7 +747,7 @@ $('ts-form').addEventListener('submit', (event) => {
   event.preventDefault();
   runJob('/api/remote/tailscale', { mode: 'set', hostname: event.target.elements.hostname.value, key: event.target.elements.key.value }, () => { event.target.elements.key.value = ''; loadRemote(); });
 });
-$('ts-off').addEventListener('click', (event) => confirmAction(event.target, 'Confirmer ?', () => runJob('/api/remote/tailscale', { mode: 'disable' }, loadRemote)));
+$('ts-off').addEventListener('click', (event) => confirmAction(event.currentTarget, 'L’accès distant par Tailscale s’arrête.', () => runJob('/api/remote/tailscale', { mode: 'disable' }, loadRemote)));
 $('dns-form').addEventListener('submit', (event) => {
   event.preventDefault();
   runJob('/api/remote/dns', { mode: 'set', provider: $('dns-provider').value, variables: $('dns-vars').value }, () => { $('dns-vars').value = ''; loadRemote(); });
@@ -812,17 +766,18 @@ $('backup-key-show').addEventListener('click', async () => {
   try { $('backup-key').textContent = (await api('/api/backup/key')).key; } catch (error) { showError(error); }
 });
 $('steps-retry').addEventListener('click', () => runJob('/api/steps/retry', {}, loadSteps));
-$('upgrade-skip').addEventListener('click', (event) => confirmAction(event.target, 'Confirmer l’abandon ?', () => runJob('/api/steps/skip-upgrade', {}, loadSteps)));
+$('upgrade-skip').addEventListener('click', (event) => confirmAction(event.currentTarget, 'La mise à jour en attente est abandonnée : elle ne sera plus réessayée.', () => runJob('/api/steps/skip-upgrade', {}, loadSteps)));
 $('versions-load').addEventListener('click', () => loadVersions().catch(showError));
 $('appliance-check').addEventListener('click', async (event) => {
-  event.target.disabled = true;
-  event.target.textContent = 'Recherche...';
+  const button = event.currentTarget;
+  button.disabled = true;
+  setLabel(button, 'Recherche…');
   try { renderAppliance(await api('/api/appliance/check', {})); } catch (error) { showError(error); }
-  event.target.textContent = 'Rechercher une mise à jour';
-  event.target.disabled = false;
+  setLabel(button, 'Rechercher une mise à jour');
+  button.disabled = false;
 });
-$('appliance-apply').addEventListener('click', (event) => confirmAction(event.target, 'Confirmer la mise à jour ?', () => applianceAction('/api/appliance/apply', {})));
-$('appliance-rollback').addEventListener('click', (event) => confirmAction(event.target, 'Confirmer le retour arrière ?', () => applianceAction('/api/appliance/rollback', {})));
+$('appliance-apply').addEventListener('click', (event) => confirmAction(event.currentTarget, 'La nouvelle version est installée sans redémarrer le serveur ; cette console redémarre à la fin. Un retour arrière reste possible.', () => applianceAction('/api/appliance/apply', {})));
+$('appliance-rollback').addEventListener('click', (event) => confirmAction(event.currentTarget, 'La version précédente de l’appliance est rétablie ; cette console redémarre.', () => applianceAction('/api/appliance/rollback', {})));
 $('appliance-source-save').addEventListener('click', async () => {
   try {
     const token = $('appliance-token').value.trim();
@@ -865,17 +820,20 @@ $('share-credentials').addEventListener('submit', (event) => {
 });
 $('deploy').addEventListener('click', () => runJob('/api/deploy', {}, loadApps));
 $('trackers-sync').addEventListener('click', () => runJob('/api/trackers/sync', {}, loadTrackers));
-$('vpn-disable').addEventListener('click', (event) => confirmAction(event.target, 'Confirmer ?', () => runJob('/api/vpn/disable', {}, loadVpn)));
+$('vpn-disable').addEventListener('click', (event) => confirmAction(event.currentTarget, 'qBittorrent repasse en accès direct : son trafic ne passe plus par le tunnel VPN.', () => runJob('/api/vpn/disable', {}, loadVpn)));
 $('p2p-update').addEventListener('click', () => runJob('/api/p2p/update', {}, loadP2p));
 $('p2p-session').addEventListener('click', () => runJob('/api/p2p/session', {}, loadP2p));
 $('secrets-show').addEventListener('click', async () => {
   try { renderSecrets(await api('/api/credentials')); } catch (error) { showError(error); }
 });
 
+buildNav();
 initFeatures();
+initPages();
+watchDecorations();
 window.addEventListener('hashchange', route);
 api('/api/session').then((session) => {
-  $('who').textContent = session.user;
+  for (const node of document.querySelectorAll('.who')) node.textContent = session.user;
   $('version').textContent = session.version;
 }).catch(showError);
 route();

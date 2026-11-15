@@ -64,6 +64,14 @@ http:
         contentTypeNosniff: true
         referrerPolicy: same-origin
         customFrameOptionsValue: SAMEORIGIN
+    # Application arrêtée ou lente (502 à 504) : page d'erreur aux couleurs de la console, servie sans
+    # authentification par la console (texte fixe). Les autres statuts (404, 403...) restent ceux des applications.
+    error-pages:
+      errors:
+        status:
+          - "502-504"
+        service: console
+        query: "/errors/{status}"
     # Frein contre les essais de mots de passe sur les pages de connexion
     rate-limit:
       rateLimit:

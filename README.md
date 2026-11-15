@@ -37,7 +37,8 @@ templates/            modèles de configuration (Authelia, Traefik, Homepage…)
 p2p/                  correctifs appliqués à p2p-aggregator → …/p2p
 assets/               logos et favicon (sources, non embarqués)
 catalog-exemple.json  exemple de catalogue d'applications personnalisé
-tests/                tests sans Docker ni root ; tests/run.sh les lance tous
+docs/                 GLOSSAIRE.md : vocabulaire, verbes d'action, formats de la console
+tests/                tests sans Docker ni root ; tests/run.sh les lance tous (tests/visual/ : captures de référence)
 tools/                manifest.py : manifeste et signature d'une version publiée
 .github/workflows/    intégration continue (les mêmes tests)
 ```
@@ -98,10 +99,25 @@ Points d'attention :
 - **Journal d'audit** : aucun mot de passe, clé ni jeton n'y est écrit ; les empreintes chaînées font apparaître une modification maladroite, mais ne protègent pas d'un administrateur qui sait les refaire : exportez-le régulièrement.
 - **Import** : déposez les sauvegardes de l'ancienne seedbox dans `<stockage>/import`. Seule la base de données des applications est reprise (la clé d'API, le port et la connexion restent ceux de ce serveur), les chemins sont convertis d'après une table « ancien dossier → nouveau dossier », une sauvegarde complète est faite avant, et l'ancienne base est gardée. Les torrents sont ajoutés en pause.
 
+## Charte graphique de la console
+
+Toute l'interface (console, page d'invitation, pages d'erreur, connexion Authelia, Homepage) partage la même identité :
+
+- **Jetons** : `console/web/tokens.css` est l'unique source des couleurs, espacements, rayons, tailles, ombres et seuils (`--th-warn: 85`, `--th-crit: 95`). `app.css` ne contient aucune couleur en dur ; la densité, le contraste élevé et la taille du texte ne font que redéfinir ces jetons.
+- **Échelle d'états** : `ok`, `attention`, `erreur`, `information`, `inconnu`, toujours en icône + texte + couleur (pastilles, notices, notifications, tuiles, jauges).
+- **Navigation** par groupes (Services, Stockage, Réseau, Sécurité, Exploitation) : barre latérale sur ordinateur, barre du bas et feuille de navigation sur téléphone.
+- **Retour d'action** uniforme : notification pour une action courte, tiroir de tâche pour une opération longue, confirmation dans une boîte de dialogue pour tout ce qui détruit.
+- **Affichage** (menu « Affichage ») : clair / sombre / automatique, densité, contraste élevé, taille du texte ; mémorisés dans le navigateur.
+- **Pages** : « Vue d'ensemble » (mêmes tuiles que Homepage) et « Guide de style » (chaque composant avec les vrais styles, mesure de contraste AA en direct).
+- **Vocabulaire** : `docs/GLOSSAIRE.md` fixe les libellés, les verbes d'action et les formats de dates, tailles et durées ; `ui.js` en est l'unique implémentation.
+- **Hors console** : pages `/invite/…` et `/errors/50x` (Traefik, pour 502-504) sur les mêmes jetons ; logo et favicon Authelia (`templates/config/authelia/assets/`) ; `templates/config/homepage/custom.css`.
+
+Ajouter une page : une section `view-…` dans `index.html`, son entrée dans `NAV` de `ui.js` (groupe, libellé, icône), un chargeur dans `app.js`. Les tests refusent une couleur en dur, un bouton hors des classes `btn`/`tab`/`seg`/`icon-btn`/`tabbar-item` et un libellé qui contredit le glossaire.
+
 ## Tests
 
 ```
 tests/run.sh
 ```
 
-Contrôles statiques (Python, JavaScript, shell, YAML/JSON, identifiants de l'interface, CSP, unités systemd, modules `lib/`, droits produits par `gen_rootfs`), sauvegarde/restauration, alertes, catalogue et versions, rôles et règles Authelia, mise à jour N-1 → N, mise à jour depuis GitHub (faux GitHub local : installation, retour arrière, archives refusées, échec en cours d'écriture), copie hors serveur, historique et prévision, nettoyage, GPU, invitations (route publique comprise), audit, import, durcissement, migration. Nécessite `python3`, `pyyaml` et `node`. Les mêmes tests tournent sur GitHub (`.github/workflows/ci.yml`).
+Contrôles statiques (Python, JavaScript, shell, YAML/JSON, identifiants de l'interface, CSP, unités systemd, modules `lib/`, droits produits par `gen_rootfs`), sauvegarde/restauration, alertes, catalogue et versions, rôles et règles Authelia, mise à jour N-1 → N, mise à jour depuis GitHub (faux GitHub local : installation, retour arrière, archives refusées, échec en cours d'écriture), copie hors serveur, historique et prévision, nettoyage, GPU, invitations (route publique comprise), audit, import, durcissement, migration, jetons de style (`tokens_test.py`), et rendu réel de chaque page en clair, sombre et sur téléphone (`visual_test.py` : erreurs JavaScript, débordements, boutons, contraste AA, parcours, comparaison aux captures de `tests/visual/baseline/`). Nécessite `python3`, `pyyaml` et `node` ; le test visuel demande en plus `pip install playwright pillow` (ignoré sinon). Après un changement voulu du rendu : `python3 tests/visual_test.py --update`. La CI ne compare pas les captures (`VISUAL_COMPARE=off`, elles dépendent des polices du poste) mais garde tous les autres contrôles. Les mêmes tests tournent sur GitHub (`.github/workflows/ci.yml`).
