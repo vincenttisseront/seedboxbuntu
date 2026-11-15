@@ -31,6 +31,21 @@ SETTINGS_FILE = ctl.ETC / "maintenance.json"
 PORTS_FILE = ctl.ETC / "firewall.json"
 
 SSH_PORT = 22
+SSH_CONF = (
+    "# SeedBoxBuntu : durcissement SSH (vérifié par sshd -t ; retiré automatiquement s'il est refusé)\n"
+    "PermitRootLogin no\n"
+    "PermitEmptyPasswords no\n"
+    "MaxAuthTries 4\n"
+    "MaxSessions 6\n"
+    "LoginGraceTime 30\n"
+    "LogLevel VERBOSE\n"
+    "X11Forwarding no\n"
+    "AllowTcpForwarding no\n"
+    "AllowAgentForwarding no\n"
+    "PermitUserEnvironment no\n"
+    "ClientAliveInterval 300\n"
+    "ClientAliveCountMax 2\n"
+)
 # Applications publiées par Traefik : accès web, puis un port HTTPS dédié pour celles qui ne
 # fonctionnent pas dans un sous-chemin (Seerr, Dockge, p2p-aggregator)
 APP_PORTS = [80, 443, 5055, 5001, 3000]
@@ -464,15 +479,23 @@ def kernel_and_ssh():
     if not LIVE:
         return
     system("sysctl", "--system")
-    if shutil.which("sshd"):
-        test = system("sshd", "-t")
+    if shutil.which("sshd") or Path(SSHD_FALLBACK).exists():
+        conf = ROOT / "etc/ssh/sshd_config.d/50-seedboxbuntu.conf"
+        if not conf.exists():       # retiré par un ancien passage : on le remet, puis on le teste
+            conf.parent.mkdir(parents=True, exist_ok=True)
+            conf.write_text(SSH_CONF)
+        test = sshd("-t")
         if test.returncode == 0:
             system("systemctl", "reload", "ssh")
         else:
-            # Une configuration refusée par sshd ne doit jamais couper l'accès à distance
-            conf = Path("/etc/ssh/sshd_config.d/50-seedboxbuntu.conf")
-            conf.unlink(missing_ok=True)
-            say("SSH : configuration durcie refusée par sshd, retirée : " + (test.stderr or "").strip()[-200:])
+            # Une configuration refusée par sshd ne doit jamais couper l'accès à distance ; une erreur qui ne
+            # vient pas de notre fichier (dossier /run/sshd, clés d'hôte) ne justifie pas de le retirer
+            detail = (test.stderr or "").strip()
+            if conf.name in detail:
+                conf.unlink(missing_ok=True)
+                say("SSH : configuration durcie refusée par sshd, retirée : " + detail[-200:])
+            else:
+                say("SSH : test de sshd impossible, durcissement conservé : " + detail[-200:])
     if shutil.which("fail2ban-client"):
         system("systemctl", "enable", "--now", "fail2ban")
         system("systemctl", "restart", "fail2ban")
@@ -521,9 +544,52 @@ def published_ports():
     return result
 
 
+SSHD_FALLBACK = "/usr/sbin/sshd"
+
+
+def sshd(*args):
+    """sshd en test (-t, -T). Sur Ubuntu 24.04, SSH démarre à la demande (activation par socket) et
+    /run/sshd n'existe pas tant qu'il n'a pas tourné : sans ce dossier, sshd -t et -T refusent de répondre."""
+    if LIVE:
+        try:
+            Path("/run/sshd").mkdir(mode=0o755, parents=True, exist_ok=True)
+        except OSError:
+            pass
+    return system(shutil.which("sshd") or SSHD_FALLBACK, *args)
+
+
+def sshd_files_values():
+    """Valeurs lues directement dans les fichiers (repli quand sshd -T est muet). Pour sshd, la première
+    valeur rencontrée l'emporte ; les fichiers de sshd_config.d passent avant sshd_config (Include en tête)."""
+    base = ROOT / "etc/ssh"
+    files = sorted((base / "sshd_config.d").glob("*.conf")) + [base / "sshd_config"]
+    values = {}
+    for path in files:
+        try:
+            lines = path.read_text().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(None, 1)
+            keyword = parts[0].lower()
+            if keyword == "match":
+                break
+            if len(parts) == 2:
+                values.setdefault(keyword, parts[1].strip().strip('"').lower())
+    return values
+
+
 def sshd_effective():
-    out = system("sshd", "-T").stdout
-    return dict(line.split(None, 1) for line in out.splitlines() if " " in line)
+    """(valeurs, remarque) : sshd -T si possible, sinon les fichiers, avec la raison de l'échec."""
+    result = sshd("-T")
+    values = dict(line.split(None, 1) for line in result.stdout.splitlines() if " " in line)
+    if values:
+        return values, ""
+    reason = (result.stderr or "").strip().splitlines()[-1:] or ["aucune sortie"]
+    return sshd_files_values(), f"sshd -T indisponible ({reason[0][:120]}) : valeurs lues dans les fichiers"
 
 
 def security_audit():
@@ -559,12 +625,15 @@ def security_audit():
                        "" if not rogue else "bloqués : " + ", ".join(f"{p}/{proto} ({', '.join(sorted(n))})"
                                                                      for (proto, p), n in sorted(rogue.items()))))
     # SSH
-    effective = sshd_effective()
+    effective, note = sshd_effective()
     wanted_ssh = {"permitrootlogin": "no", "x11forwarding": "no", "permitemptypasswords": "no",
                   "allowtcpforwarding": "no", "allowagentforwarding": "no", "maxauthtries": "4"}
-    bad = [f"{k} = {effective.get(k, '?')}" for k, v in wanted_ssh.items() if effective.get(k) != v]
+    bad = [f"{k} = {effective.get(k, 'non défini')}" for k, v in wanted_ssh.items() if effective.get(k) != v]
+    detail = ", ".join(bad)
+    if bad and not (ROOT / "etc/ssh/sshd_config.d/50-seedboxbuntu.conf").exists():
+        detail += " ; fichier de durcissement absent : « seedboxctl harden » le recrée"
     checks.append(item("ssh", "SSH durci (pas de root, pas de redirection, 4 essais)", "ok" if not bad else "fail",
-                       ", ".join(bad)))
+                       "; ".join(filter(None, [detail, note if bad else ""]))))
     f2b = system("systemctl", "is-active", "fail2ban").stdout.strip()
     jail = system("fail2ban-client", "status", "sshd").stdout
     checks.append(item("fail2ban", "fail2ban protège SSH", "ok" if f2b == "active" and "sshd" in jail else "fail",

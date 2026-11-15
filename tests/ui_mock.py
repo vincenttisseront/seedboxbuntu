@@ -189,6 +189,9 @@ def route(p, q, role="admin", PREFS=None):
                                               "verify_tls": True, "temperature": 0.2, "has_token": False},
                                 "last": {"topic": "seeds", "at": now - 600, "model": "llama3.1:8b", "prompt_chars": 900,
                                          "text": "Le tracker A rapporte le plus : 70 torrents utiles pour 290 Go envoyés en 30 jours. Trois torrents attendus mais muets méritent une réannonce."}}
+    if p == "/api/network": return {"interfaces": [{"name": "enp1s0", "state": "up", "mac": "52:54:00:aa:bb:cc", "speed": "1000 Mb/s", "addresses": [{"cidr": "172.24.0.230/24", "dynamic": True}]}],
+        "route": {"gateway": "172.24.0.1", "dev": "enp1s0"}, "dns": ["172.24.0.1"], "hostname": "seedbox", "timeout": 120, "pending": None,
+        "configured": {"iface": "enp1s0", "mode": "dhcp", "address": "", "gateway": "", "dns": []}}
     if p == "/api/spacefore": return {"settings": {"warn_days": 30, "alert": True}, "volumes": [
         {"volume": "local", "free": 4.2e11, "total": 2e12, "points": 12, "slope_day": -1.5e10, "days_left": 28.0, "date": now + 86400 * 28, "level": "warn"},
         {"volume": "nas", "free": 3.1e12, "total": 8e12, "points": 12, "slope_day": 2e9, "days_left": None, "date": 0, "level": "ok"}]}
@@ -373,6 +376,8 @@ class H(http.server.BaseHTTPRequestHandler):
                                "/api/seedopt/rule", "/api/seedopt/unrule", "/api/seedopt/thresholds", "/api/llm/settings")): return self.send(200, {"settings": body})
         if self.path.endswith(("/api/spacefore/settings", "/api/libreport/settings", "/api/dormant/settings", "/api/integrity/settings", "/api/subsgap/settings", "/api/guestquota/settings",
                                "/api/energy/settings", "/api/trackerstats/settings", "/api/trackerstats/alias")): return self.send(200, {"settings": body})
+        if self.path.endswith("/api/network/apply"): return self.send(200, {"pending": {"seconds_left": 120, "deadline": now + 120, "new": {}}, "address": body.get("address", "").split("/")[0], "mode": body.get("mode", "")})
+        if self.path.endswith(("/api/network/confirm", "/api/network/revert")): return self.send(200, {"kept": True})
         if self.path.endswith("/api/libreport/send"): return self.send(200, {"sent": True})
         if self.path.endswith(("/api/dormant/unmonitor", "/api/renamer/apply")): return self.send(200, {"done": 1})
         if self.path.endswith(("/api/integrity/research", "/api/energy/standby", "/api/guestquota/quota", "/api/guestquota/resume")): return self.send(200, {"ok": True})

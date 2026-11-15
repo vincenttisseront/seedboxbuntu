@@ -284,6 +284,86 @@ async function saveTrackerAlias(event) {
   } catch (error) { showError(error); }
 }
 
+// --- réseau de l'appliance (page Adresse) --------------------------------------------------------------------------------
+let networkTimer = null;
+function networkAddressLink(pending) {
+  const next = pending && pending.new && pending.new.mode === 'static' ? pending.new.address.split('/')[0] : '';
+  return next && next !== location.hostname ? `https://${next}/console/#domain` : '';
+}
+function showNetworkPending(pending) {
+  const box = $('network-pending');
+  clearInterval(networkTimer);
+  box.classList.toggle('hidden', !pending);
+  if (!pending) return;
+  const link = networkAddressLink(pending);
+  const text = $('network-pending-text');
+  let left = pending.seconds_left;
+  const draw = () => {
+    text.replaceChildren(`Changement appliqué, en attente de confirmation : retour automatique dans ${left} s. `,
+      ...(link ? ['Ouvrez ', el('a', { href: link }, link), ' (connectez-vous de nouveau), puis cliquez sur « Confirmer ».'] : ['Cliquez sur « Confirmer » pour le conserver.']));
+  };
+  draw();
+  networkTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) { clearInterval(networkTimer); text.textContent = 'Délai écoulé : l’ancienne configuration revient, rechargez cette page dans une minute.'; return; }
+    draw();
+  }, 1000);
+}
+async function loadNetwork() {
+  const data = await api('/api/network');
+  const form = $('network-form');
+  const iface = form.elements.iface;
+  iface.replaceChildren(...data.interfaces.map((i) => el('option', { value: i.name }, `${i.name} · ${i.state || '?'}${i.speed ? ` · ${i.speed}` : ''}`)));
+  const saved = data.configured;
+  if (saved && data.interfaces.some((i) => i.name === saved.iface)) iface.value = saved.iface;
+  if (saved) {
+    form.elements.mode.value = saved.mode;
+    form.elements.address.value = saved.address;
+    form.elements.gateway.value = saved.gateway;
+    form.elements.dns.value = saved.dns.join(' ');
+  }
+  syncNetworkMode();
+  $('network-state').replaceChildren(...kvList([
+    ...data.interfaces.map((i) => [i.name, `${i.addresses.map((a) => a.cidr + (a.dynamic ? ' (DHCP)' : '')).join(', ') || 'aucune adresse'} · ${i.mac}`]),
+    ['Passerelle', data.route.gateway || '-'], ['DNS', data.dns.join(', ') || '-'], ['Nom de la machine', data.hostname || '-']]));
+  showNetworkPending(data.pending);
+}
+function syncNetworkMode() {
+  $('network-static').classList.toggle('hidden', $('network-form').elements.mode.value !== 'static');
+}
+async function applyNetwork(event) {
+  event.preventDefault();
+  const form = event.target;
+  const body = { iface: form.elements.iface.value, mode: form.elements.mode.value, address: form.elements.address.value.trim(),
+    gateway: form.elements.gateway.value.trim(), dns: form.elements.dns.value.split(/[\s,;]+/).filter(Boolean) };
+  try {
+    const result = await api('/api/network/apply', body);
+    toast('warn', 'Réseau en cours de changement : confirmez depuis la nouvelle adresse dans les 2 minutes.');
+    showNetworkPending({ ...result.pending, new: { mode: result.mode, address: result.address } });
+  } catch (error) { showError(error); }
+}
+async function keepNetwork() {
+  try {
+    await api('/api/network/confirm', {});
+    toast('ok', 'Changement réseau conservé.');
+    loadNetwork().catch(showError);
+  } catch (error) { showError(error); }
+}
+async function revertNetwork() {
+  try {
+    await api('/api/network/revert', {});
+    toast('ok', 'Ancienne configuration rétablie : la connexion peut se couper quelques secondes.');
+    loadNetwork().catch(showError);
+  } catch (error) { showError(error); }
+}
+function initNetwork() {
+  $('network-form').addEventListener('submit', applyNetwork);
+  $('network-form').elements.mode.addEventListener('change', syncNetworkMode);
+  $('network-keep').addEventListener('click', keepNetwork);
+  $('network-revert').addEventListener('click', (event) => confirmAction(event.currentTarget,
+    'La configuration réseau précédente est rétablie et le serveur peut changer d’adresse.', revertNetwork));
+}
+
 function initOps5() {
   $('care-refresh').addEventListener('click', () => loadCare().catch(showError));
   $('spacefore-form').addEventListener('submit', saveSpacefore);

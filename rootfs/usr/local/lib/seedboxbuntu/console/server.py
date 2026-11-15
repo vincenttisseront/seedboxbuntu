@@ -509,6 +509,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
         if path in CARE_GET:
             return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
+        if path == "/api/network":
+            return self.send_json(ctl.netconf().overview())
         if path == "/api/push":
             return self.send_json(ctl.webpush().status(self.headers.get("Remote-User", "")))
         if path == "/api/messages-language":
@@ -684,6 +686,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.titleshare().remove(str(data.get("id", ""))))
         if path == "/api/vpnwatch/settings":
             return self.send_json({"settings": ctl.vpnwatch().save(data)})
+        if path == "/api/network/apply":
+            who = self.headers.get("Remote-User", "")[:30] or "console"
+            return self.send_json(ctl.netconf().apply(str(data.get("iface", "")), str(data.get("mode", "")), str(data.get("address", "")),
+                                                      str(data.get("gateway", "")), data.get("dns", []), by=who))
+        if path == "/api/network/confirm":
+            return self.send_json(ctl.netconf().confirm(self.headers.get("Remote-User", "")[:30] or "console"))
+        if path == "/api/network/revert":
+            return self.send_json(ctl.netconf().revert(self.headers.get("Remote-User", "")[:30] or "console"))
         if path.startswith(CARE_POST):
             who = self.headers.get("Remote-User", "")[:30] or "console"
             ids = [x for x in data.get("ids", [])] if isinstance(data.get("ids"), list) else []

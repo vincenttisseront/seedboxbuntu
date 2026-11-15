@@ -62,6 +62,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl relocate show|move               déplacer les titres inactifs entre partages
   seedboxctl seedopt show|rule|retire|...     optimisation des seeds, analyse par tracker
   seedboxctl llm show|set|test|explain        connecteur vers un serveur Ollama externe
+  seedboxctl network show|set|confirm|revert  réseau de l'appliance (IP fixe ou DHCP, passerelle, DNS)
   seedboxctl spacefore show|sample|set        prévision de saturation des volumes
   seedboxctl libreport show|send|set          rapport hebdomadaire des bibliothèques
   seedboxctl dormant show|scan|unmonitor|set  titres jamais lus et séries abandonnées
@@ -453,6 +454,10 @@ def llm():
 
 def spacefore():
     return _lazy("spacefore")
+
+
+def netconf():
+    return _lazy("netconf")
 
 
 def libreport():
@@ -3084,6 +3089,17 @@ def main():
             sub = care.add_parser(action)
             for argument, options in arguments:
                 sub.add_argument(argument, **options)
+    net = commands.add_parser("network", help="réseau de l'appliance : IP fixe ou DHCP, passerelle, DNS").add_subparsers(dest="action", required=True)
+    net.add_parser("show")
+    net_set = net.add_parser("set", help="network set CARTE dhcp | network set CARTE static 192.168.1.50/24 192.168.1.1 1.1.1.1 9.9.9.9")
+    net_set.add_argument("iface")
+    net_set.add_argument("mode", choices=("dhcp", "static"))
+    net_set.add_argument("address", nargs="?", default="")
+    net_set.add_argument("gateway", nargs="?", default="")
+    net_set.add_argument("dns", nargs="*")
+    net_set.add_argument("--timeout", type=int, default=0, help="secondes avant le retour arrière sans confirmation")
+    net.add_parser("confirm", help="conserve le changement en attente")
+    net.add_parser("revert", help="rétablit la configuration précédente")
     cfg_cmd = commands.add_parser("config", help="export et import des réglages de la console").add_subparsers(dest="action", required=True)
     cfg_export = cfg_cmd.add_parser("export")
     cfg_export.add_argument("--secrets", action="store_true", help="inclut les secrets des canaux d'alerte")
@@ -3754,6 +3770,15 @@ def main():
             print(module.explain(args.topic)["text"])
     elif args.command in CARE_COMMANDS:
         run_care(args)
+    elif args.command == "network":
+        module = netconf()
+        if args.action == "show":
+            out = module.overview()
+        elif args.action == "set":
+            out = locked(module.apply)(args.iface, args.mode, args.address, args.gateway, args.dns, by="cli", timeout=args.timeout)
+        else:
+            out = {"confirm": module.confirm, "revert": module.revert}[args.action]()
+        print(json.dumps(out, indent=2, ensure_ascii=False, default=str))
     elif args.command == "netcheck":
         netcheck().show()
     elif args.command == "vacation":

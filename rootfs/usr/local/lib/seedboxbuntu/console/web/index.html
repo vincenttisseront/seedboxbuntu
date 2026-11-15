@@ -319,6 +319,25 @@
       <div class="row"><a class="btn" href="api/ca.crt">Télécharger l'autorité locale</a></div>
       <p class="muted small">À installer sur vos appareils pour éviter l'alerte du navigateur en mode auto-signé.</p>
     </div>
+    <div class="card form" id="network-card">
+      <h2>Réseau de l'appliance</h2>
+      <p class="muted small">Adresse IP, passerelle et DNS de la carte réseau (fichier netplan, le même que le menu texte). Après « Appliquer », ouvrez la nouvelle adresse et cliquez sur « Confirmer » dans les 2 minutes : sans confirmation, l'ancienne configuration revient toute seule.</p>
+      <div id="network-pending" class="notice warn hidden" role="status">
+        <div><p id="network-pending-text"></p>
+        <div class="row"><button id="network-keep" class="btn primary" type="button">Confirmer</button><button id="network-revert" class="btn" type="button">Revenir</button></div></div>
+      </div>
+      <dl id="network-state" class="kv"></dl>
+      <form id="network-form">
+        <label>Carte réseau<select name="iface"></select></label>
+        <label>Adressage<select name="mode"><option value="dhcp">Automatique (DHCP)</option><option value="static">Adresse IP fixe</option></select></label>
+        <div id="network-static">
+          <label>Adresse et masque<input name="address" placeholder="192.168.1.50/24" autocomplete="off"></label>
+          <label>Passerelle<input name="gateway" placeholder="192.168.1.1" autocomplete="off"></label>
+          <label>Serveurs DNS (séparés par des espaces)<input name="dns" placeholder="1.1.1.1 9.9.9.9" autocomplete="off"></label>
+        </div>
+        <button class="btn primary" type="submit">Appliquer</button>
+      </form>
+    </div>
     <form id="domain-form" class="card form">
       <h2>Nom personnalisé</h2>
       <label>Nom<input name="domain" placeholder="seedbox.exemple.fr" autocomplete="off"></label>

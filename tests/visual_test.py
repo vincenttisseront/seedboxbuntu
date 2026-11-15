@@ -481,6 +481,22 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(400)
     if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/renamer/apply") and body.get("app") == "sonarr" and body.get("ids") == [9]]:
         fail("parcours : le renommage n'envoie pas le titre coché")
+    page.goto(base + "#domain")
+    settle(page, "domain")
+    page.wait_for_timeout(500)
+    if "172.24.0.230/24" not in page.inner_text("#network-state"):
+        fail("parcours : la carte réseau n'affiche pas l'adresse actuelle")
+    page.select_option('#network-form select[name="mode"]', "static")
+    page.fill('#network-form input[name="address"]', "172.24.0.231/24")
+    page.fill('#network-form input[name="gateway"]', "172.24.0.1")
+    page.fill('#network-form input[name="dns"]', "1.1.1.1 9.9.9.9")
+    ui_mock.CALLS.clear()
+    page.click('#network-form button[type="submit"]')
+    page.wait_for_timeout(500)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/network/apply") and body.get("mode") == "static" and body.get("address") == "172.24.0.231/24" and body.get("dns") == ["1.1.1.1", "9.9.9.9"]]:
+        fail("parcours : « Appliquer » n'envoie pas la configuration réseau saisie")
+    if "https://172.24.0.231/console/#domain" not in page.inner_text("#network-pending"):
+        fail("parcours : le changement en attente n'indique pas la nouvelle adresse à ouvrir")
     page.goto(base + "#guests")
     settle(page, "guests")
     page.wait_for_timeout(500)
