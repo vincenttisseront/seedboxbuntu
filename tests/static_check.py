@@ -27,6 +27,29 @@ for path in python_files:
         broken.append(f"{path.name}: {error}")
 check(f"{len(python_files)} fichiers Python compilent", not broken, broken)
 
+# Une variable locale qui porte le nom d'une fonction du module la masque dans toute la fonction :
+# l'appel placé plus haut échoue alors avec UnboundLocalError (c'était le cas de « report » dans main()).
+shadowed = []
+for path in python_files:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    module_names = {n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    module_names |= {a.asname or a.name.split(".")[0] for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+    module_names |= {t.id for n in tree.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        params = {a.arg for a in fn.args.args + fn.args.kwonlyargs + fn.args.posonlyargs}
+        declared = {name for n in ast.walk(fn) if isinstance(n, (ast.Global, ast.Nonlocal)) for name in n.names}
+        first_load, first_store = {}, {}
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Name):
+                target = first_store if isinstance(n.ctx, ast.Store) else first_load
+                target[n.id] = min(target.get(n.id, n.lineno), n.lineno)
+        for name, stored in first_store.items():
+            if name in module_names and name not in params and name not in declared and first_load.get(name, 10**9) < stored:
+                shadowed.append(f"{path.name}:{fn.name} « {name} » lu ligne {first_load[name]}, écrit ligne {stored}")
+check("Python : aucune variable locale ne masque un nom du module lu plus haut", not shadowed, shadowed)
+
 web = SRC / "rootfs/usr/local/lib/seedboxbuntu/console/web"
 for script in (web / "app.js", web / "ui.js", web / "features.js", web / "pages.js", web / "display.js", web / "invite.js", web / "sw.js"):
     result = subprocess.run(["node", "--check", str(script)], capture_output=True, text=True)
@@ -208,7 +231,7 @@ enabled = set(re.findall(r"(seedbox-[a-z-]+\.timer)", post))
 check("minuteries activées : unités présentes", all((units / t).exists() for t in enabled), sorted(t for t in enabled if not (units / t).exists()))
 for timer in ("seedbox-appliance", "seedbox-restoretest", "seedbox-metrics", "seedbox-report", "seedbox-vulnscan"):
     check(f"unité {timer} : service et minuterie", (units / f"{timer}.service").exists() and (units / f"{timer}.timer").exists() and f"{timer}.timer" in post)
-for name in ("offsite", "metrics", "cleanup", "gpu", "guests", "audit", "importer", "appliance", "notifications", "assistant", "report", "resources", "maintwindow", "sandbox", "activity", "texts", "vulnscan", "netcheck", "vacation", "webpush", "configbundle", "smarthist", "bandwidth", "ratiogoals", "rollout", "emergency", "catalogexport", "backupdiff", "diagnose", "myspace", "telecommande", "changelog", "restoredrill", "diskusage", "rotation", "mediaquality", "linkcheck", "peoplereport", "titleshare", "vpnwatch", "house", "libscan", "libmap", "copyaudit", "replacer", "mediaslim", "shareprofile", "relocate", "seedopt", "llm"):
+for name in ("offsite", "metrics", "cleanup", "gpu", "guests", "audit", "importer", "appliance", "notifications", "assistant", "report", "resources", "maintwindow", "sandbox", "activity", "texts", "vulnscan", "netcheck", "vacation", "webpush", "configbundle", "smarthist", "bandwidth", "ratiogoals", "rollout", "emergency", "catalogexport", "backupdiff", "diagnose", "myspace", "telecommande", "changelog", "restoredrill", "diskusage", "rotation", "mediaquality", "linkcheck", "peoplereport", "titleshare", "vpnwatch", "house", "libscan", "libmap", "copyaudit", "replacer", "mediaslim", "shareprofile", "relocate", "seedopt", "llm", "spacefore", "libreport", "dormant", "integrity", "renamer", "subsgap", "guestquota", "energy", "trackerstats"):
     check(f"module {name}.py présent", (SRC / f"rootfs/usr/local/lib/seedboxbuntu/{name}.py").exists())
 check("rclone installé par l'ISO", "rclone" in (SRC / "lib/60-autoinstall.sh").read_text())
 check("outil de manifeste et workflow de publication", (SRC / "tools/manifest.py").exists() and (SRC / ".github/workflows/release.yml").exists())

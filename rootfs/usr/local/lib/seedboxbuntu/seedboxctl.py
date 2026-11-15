@@ -3599,9 +3599,9 @@ def main():
         if args.action == "show":
             print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
         else:
-            report = module.run(args.name, only=args.only)
-            print(json.dumps(report, indent=2, ensure_ascii=False))
-            if not report["ok"]:
+            outcome = module.run(args.name, only=args.only)
+            print(json.dumps(outcome, indent=2, ensure_ascii=False))
+            if not outcome["ok"]:
                 sys.exit(1)
     elif args.command == "diskusage":
         module = diskusage()
@@ -3622,10 +3622,10 @@ def main():
         else:
             print(json.dumps(module.upgrade(args.app, args.count, by="cli"), ensure_ascii=False))
     elif args.command == "linkcheck":
-        report = linkcheck().run()
-        for item in report["items"]:
+        outcome = linkcheck().run()
+        for item in outcome["items"]:
             print(f"{item['state']:5} {item['title']} : {item['detail']}")
-        if report["errors"]:
+        if outcome["errors"]:
             sys.exit(1)
     elif args.command == "peoplereport":
         module = peoplereport()
