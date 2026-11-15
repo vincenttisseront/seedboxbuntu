@@ -29,6 +29,7 @@ interdit n'apparaît dans un libellé de bouton.
 | Synchroniser | `refresh` | Mettre deux éléments d’accord entre eux. |
 | Vérifier | `check-circle` | Lancer un contrôle qui ne modifie rien. |
 | Tester | `check-circle` | Essayer une connexion ou un réglage sans l’appliquer. |
+| Comparer | `search` | Mettre deux états côte à côte pour voir ce qui diffère. |
 | Simuler | `play` | Montrer ce que ferait une opération sans la faire. |
 | Rechercher | `search` | Chercher dans des données. |
 | Filtrer | `search` | Réduire une liste. |

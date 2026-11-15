@@ -671,9 +671,10 @@ async function loadVersions() {
   $('versions-list').replaceChildren(...rows);
 }
 
-const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadResources().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: async () => { await loadAlerts(); loadMessageLanguage().catch(showError); loadPush().catch(showError); }, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: async () => { await loadSettings(); loadWindow().catch(showError); }, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
+const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadResources().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: async () => { await loadAlerts(); loadMessageLanguage().catch(showError); loadPush().catch(showError); }, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); loadBackupDiff().catch(showError); }, catalog: loadCatalog, settings: async () => { await loadSettings(); loadWindow().catch(showError); }, apps: async () => { await loadApps(); loadRollout().catch(showError); }, users: async () => { await loadUsers(); loadEmergency().catch(showError); }, trackers: async () => { await loadTrackers(); loadRatio().catch(showError); }, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
   guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal(), setup: loadSetup, report: loadReport,
-  activity: loadActivity, vulns: loadVulns, netcheck: loadNetcheck, vacation: loadVacation };
+  activity: loadActivity, vulns: loadVulns, netcheck: loadNetcheck, vacation: loadVacation,
+  disks: loadDisks, bandwidth: loadBandwidth, diagnose: loadDiagnose, medialist: loadMedialist, telecommande: loadTelecommande };
 
 function route() {
   const requested = location.hash.slice(1);
@@ -847,6 +848,7 @@ async function start() {
   initPages();
   initExtras();
   initOps();
+  initOps2();
   watchDecorations();
   window.addEventListener('hashchange', route);
   route();

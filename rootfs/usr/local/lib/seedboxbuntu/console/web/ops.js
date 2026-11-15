@@ -10,9 +10,9 @@ const dateInput = (seconds) => new Date(seconds * 1000).toISOString().slice(0, 1
 //  Ressources par conteneur
 // ---------------------------------------------------------------------------------------------------------------
 const DRIFT_LABEL = { memory: 'Mémoire presque saturée', leak: 'Mémoire en forte hausse', cpu: 'Processeur saturé' };
-function sparkline(values) {
+function sparkline(values, label = 'Tendance de la mémoire', unit = ' %') {
   const width = 90; const height = 24;
-  const root = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, class: 'spark', role: 'img', 'aria-label': `Tendance de la mémoire : ${values.length ? `${values[values.length - 1]} %` : 'aucune mesure'}` });
+  const root = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, class: 'spark', role: 'img', 'aria-label': `${label} : ${values.length ? `${values[values.length - 1]}${unit}` : 'aucune mesure'}` });
   if (values.length > 1) {
     const hi = Math.max(...values, 1); const lo = Math.min(...values);
     const span = Math.max(hi - lo, 1);

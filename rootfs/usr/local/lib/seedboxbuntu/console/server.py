@@ -36,7 +36,7 @@ JOBS_LOCK = threading.Lock()
 PUBLIC_JOBS = set()                      # tâches lancées par une personne invitée : seul leur état est visible publiquement
 ATTEMPTS = {}                            # adresse -> instants des essais d'invitation (limite de débit)
 ATTEMPTS_LOCK = threading.Lock()
-PUBLIC_FILES = {"app.css", "tokens.css", "display.js", "i18n.js", "lang-en.js", "invite.js", "logo.svg", "favicon.ico", "icon-192.png"}
+PUBLIC_FILES = {"app.css", "tokens.css", "display.js", "i18n.js", "lang-en.js", "invite.js", "me.js", "logo.svg", "favicon.ico", "icon-192.png"}
 # Pages d'erreur de Traefik (statuts 502 à 504, application arrêtée ou lente) : texte fixe, sans donnée
 ERROR_PAGES = {"502": ("Application indisponible", "L'application ne répond pas correctement. Elle démarre peut-être encore : réessayez dans une minute."),
                "503": ("Service indisponible", "Le service est arrêté ou en cours de redémarrage : réessayez dans une minute."),
@@ -293,6 +293,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # --- « Mon espace » : lecture seule, uniquement les informations du compte connecté --------------------
+    def me_get(self, path):
+        expected = ctl.env_read().get("CONSOLE_PROXY_SECRET", "")
+        if not expected or not hmac.compare_digest(expected, self.headers.get("X-Seedbox-Me-Secret", "")):
+            return self.send_json({"error": "accès direct refusé"}, 403)
+        if "X-Seedbox-Proxy-Secret" in self.headers or "X-Seedbox-Public-Secret" in self.headers:
+            return self.send_json({"error": "accès refusé"}, 403)             # cette route ne porte jamais le secret de l'administration
+        login = self.headers.get("Remote-User", "")
+        if not ctl.VALID_LOGIN.match(login):
+            return self.send_json({"error": "accès refusé"}, 403)
+        module = ctl.myspace()
+        if module.throttled(login):
+            return self.send_json({"error": "trop de requêtes, réessayez dans une minute"}, 429)
+        match = re.fullmatch(r"/me/static/((?:fonts/)?[A-Za-z0-9._-]+)", path)
+        if match:
+            return self.send_public_file(match.group(1))
+        if path == "/me/api/overview":
+            try:
+                return self.send_json(module.overview(login))
+            except (ctl.SeedboxError, OSError, ValueError, KeyError):
+                return self.send_json({"error": "informations indisponibles pour le moment"}, 503)
+        if path in ("/me", "/me/"):
+            body = (WEB / "me.html").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_json({"error": "introuvable"}, 404)
+
     def do_GET(self):
         self.role = "observer"                       # refus par défaut : authorized() fixe le rôle à chaque requête
         path = self.path.split("?", 1)[0]
@@ -301,6 +335,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_error_page(error.group(1))
         if path == "/invite" or path.startswith("/invite/"):
             return self.public_get(path)
+        if path == "/me" or path.startswith("/me/"):
+            return self.me_get(path)
         if self.public_request():                    # un en-tête public n'ouvre jamais l'administration
             return self.send_json({"error": "accès refusé"}, 403)
         if not self.authorized() or not self.observer_allows("GET", path):
@@ -317,6 +353,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.body_read = False
         self.last_status, self.last_payload = 0, {}
         path = self.path.split("?", 1)[0]
+        if path == "/me" or path.startswith("/me/"):
+            return self.send_json({"error": "« Mon espace » est en lecture seule"}, 405)
         if path == "/invite" or path.startswith("/invite/"):
             try:
                 return self.public_post(path)
@@ -403,6 +441,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.netcheck().run())
         if path == "/api/vacation":
             return self.send_json(ctl.vacation().overview())
+        if path == "/api/smart":
+            return self.send_json(ctl.smarthist().overview())
+        if path == "/api/bandwidth":
+            return self.send_json(ctl.bandwidth().overview())
+        if path == "/api/ratio":
+            return self.send_json(ctl.ratiogoals().overview())
+        if path == "/api/rollout":
+            return self.send_json(ctl.rollout().overview())
+        if path == "/api/backupdiff":
+            return self.send_json(ctl.backupdiff().listing())
+        if path == "/api/diagnose":
+            return self.send_json(ctl.diagnose().overview())
+        if path == "/api/diagnose/run":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            return self.send_json(ctl.diagnose().run(query.get("service", [""])[0]))
+        if path == "/api/emergency":
+            return self.send_json(ctl.emergency().status())
+        if path == "/api/catalogexport":
+            return self.send_json(ctl.catalogexport().overview())
+        if path == "/api/catalogexport/download":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            module = ctl.catalogexport()
+            bundle = module.load(query.get("name", [""])[0] or None)
+            if query.get("format", ["json"])[0] == "csv":
+                return self.send_text(module.to_csv(bundle), "text/csv; charset=utf-8", bundle["name"].replace(".json", ".csv"))
+            return self.send_text(json.dumps(bundle, ensure_ascii=False, indent=1), "application/json", bundle["name"])
+        if path == "/api/remote-control":
+            return self.send_json(ctl.telecommande().overview())
         if path == "/api/push":
             return self.send_json(ctl.webpush().status(self.headers.get("Remote-User", "")))
         if path == "/api/messages-language":
@@ -519,6 +585,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                                        self.headers.get("Remote-User", "")[:30] or "console"])})
         if path == "/api/vacation/stop":
             return self.send_json({"job": start_job("Reprise après les vacances", ["vacation", "stop"])})
+        if path == "/api/smart/sample":
+            return self.send_json({"job": start_job("Lecture SMART des disques", ["smarthist", "sample"])})
+        if path == "/api/bandwidth/settings":
+            module = ctl.bandwidth()
+            saved = module.save(data)
+            module.tick()
+            return self.send_json({"settings": saved})
+        if path == "/api/ratio/settings":
+            return self.send_json({"settings": ctl.ratiogoals().save(data)})
+        if path == "/api/rollout/run":
+            only = [str(x) for x in data.get("only", []) if ctl.versions().SERVICE.match(str(x))]
+            argv = ["rollout", "run"] + (["--only", *only] if only else []) + (["--continue"] if data.get("keep_going") else [])
+            return self.send_json({"job": start_job("Mise à jour par lots", argv)})
+        if path == "/api/backupdiff/compare":
+            return self.send_json(ctl.backupdiff().diff(str(data.get("older", "")), str(data.get("newer", ""))))
+        if path == "/api/emergency/init":
+            return self.send_json({"code": ctl.emergency().init(self.headers.get("Remote-User", "") or "console"),
+                                   "status": ctl.emergency().status()})
+        if path == "/api/catalogexport/settings":
+            return self.send_json({"settings": ctl.catalogexport().save(data)})
+        if path == "/api/catalogexport/run":
+            return self.send_json({"job": start_job("Export du catalogue", ["catalogexport", "run"])})
+        if path == "/api/catalogexport/plan":
+            module = ctl.catalogexport()
+            return self.send_json(module.plan(module.load(str(data.get("name", "")) or None)))
+        if path == "/api/catalogexport/apply":
+            module = ctl.catalogexport()
+            name = module.load(str(data.get("name", "")) or None)["name"]
+            return self.send_json({"job": start_job("Réimport du catalogue", ["catalogexport", "apply", name])})
+        if path == "/api/remote-control/pause":
+            return self.send_json({"paused": ctl.telecommande().pause()})
+        if path == "/api/remote-control/resume":
+            return self.send_json({"resumed": ctl.telecommande().resume()})
         if path == "/api/backup/check":
             return self.send_json(ctl.sandbox().check(str(data.get("name", "")) or None))
         if path == "/api/config/import":

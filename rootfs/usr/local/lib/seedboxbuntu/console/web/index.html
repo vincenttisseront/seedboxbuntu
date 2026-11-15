@@ -94,6 +94,16 @@
         <tbody id="versions-list"></tbody>
       </table></div>
     </div>
+    <div class="card" id="rollout-card">
+      <div class="card-head"><h2>Mise à jour par lots</h2><button id="rollout-run" class="btn primary" type="button">Mettre à jour</button></div>
+      <p class="muted small">Met à jour les services un par un : après chacun, la console attend qu’il réponde, le revérifie quelques secondes plus tard, et le ramène à sa version précédente s’il ne tient pas. Au premier échec, le lot s’arrête. Le test vaut ce que vaut le contrôle d’état de l’image : sans lui, le service est seulement vu « en marche ».</p>
+      <label class="check"><input id="rollout-continue" type="checkbox">Continuer après un échec</label>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Service</th><th>Contrôle d’état</th><th>Dernier lot</th></tr></thead>
+        <tbody id="rollout-list"></tbody>
+      </table></div>
+      <p id="rollout-apart" class="muted small"></p>
+    </div>
   </section>
 
   <section id="view-catalog" class="view hidden">
@@ -148,6 +158,16 @@
       </label>
       <button class="btn primary" type="submit">Créer le compte</button>
     </form>
+      <div class="card" id="emergency-card">
+      <div class="card-head"><h2>Accès de secours</h2><button id="emergency-init" class="btn" type="button">Créer un code</button></div>
+      <p class="muted small">Si le seul administrateur perd son mot de passe et sa seconde étape, ce code (imprimé, rangé sous clé) permet de reprendre la main depuis la console de la machine ou en SSH : <code>seedboxctl emergency use IDENTIFIANT</code>, ou le menu texte (Comptes). Il redonne un mot de passe temporaire, retire les secondes étapes du compte, ne sert qu’une fois, et il est remplacé par un nouveau. Cinq codes faux verrouillent l’accès quinze minutes ; chaque essai est dans le journal d’audit.</p>
+      <dl id="emergency-state" class="kv"></dl>
+      <div id="emergency-code" class="notice ok hidden">
+        <p class="small">Code de secours — il n’est affiché qu’une seule fois : imprimez-le et rangez-le sous clé.</p>
+        <p class="secret" id="emergency-code-text"></p>
+        <div class="row"><button id="emergency-copy" class="btn sm" type="button">Copier</button></div>
+      </div>
+    </div>
   </section>
 
   <section id="view-trackers" class="view hidden">
@@ -166,6 +186,19 @@
         <thead><tr><th>Tracker</th><th>Torrents</th><th>Envoyé</th><th>Reçu</th><th>Ratio</th><th>Débit</th></tr></thead>
         <tbody id="stats-list"></tbody>
       </table></div>
+    </div>
+      <div class="card" id="ratio-card">
+      <h2>Objectifs de ratio</h2>
+      <p class="muted small">Un ratio minimal par tracker : la console prévient avant de passer dessous. Le ratio vient des statistiques de qBittorrent pour les torrents qu’il connaît encore ; après un import ou un nettoyage il peut différer de celui que le tracker affiche, qui seul fait foi.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tracker</th><th>Ratio</th><th>Objectif</th><th>État</th><th>Cette semaine</th></tr></thead>
+        <tbody id="ratio-list"></tbody>
+      </table></div>
+      <form id="ratio-form" class="row">
+        <label>Alerte à moins de (%) au-dessus de l’objectif<input name="margin" type="number" min="0" max="100"></label>
+        <label>Volume reçu minimal (Go)<input name="min_gb" type="number" min="0" max="100000"></label>
+        <button class="btn primary" type="submit">Enregistrer</button>
+      </form>
     </div>
   </section>
 
@@ -463,6 +496,16 @@
         <button id="sandbox-run" class="btn primary" type="button">Vérifier</button></div>
       <div id="sandbox-result" class="hidden"></div>
     </div>
+    <div class="card" id="backupdiff-card">
+      <h2>Comparer deux sauvegardes</h2>
+      <p class="muted small">Qu’est-ce qui a changé entre deux dates ? Les fichiers de réglages modifiés sont montrés ligne par ligne ; les bases de données sont seulement signalées. Les mots de passe, clés et jetons ne s’affichent jamais : un repère indique si une valeur a changé. Rien n’est restauré.</p>
+      <div class="row">
+        <label>Ancienne<select id="backupdiff-old" aria-label="Sauvegarde la plus ancienne"></select></label>
+        <label>Récente<select id="backupdiff-new" aria-label="Sauvegarde la plus récente"></select></label>
+        <button id="backupdiff-run" class="btn primary" type="button">Comparer</button>
+      </div>
+      <div id="backupdiff-result" class="hidden"></div>
+    </div>
     <div class="card" id="config-card">
       <h2>Réglages de la console</h2>
       <p class="muted small">Exportez les réglages de cette console (alertes, rapport, fenêtre de maintenance, seuils, préférences d’affichage) dans un petit fichier, pour les réappliquer sur un autre serveur. Les comptes, les médias et les applications n’en font pas partie ; les secrets des canaux d’alerte ne sont inclus que si vous le demandez.</p>
@@ -512,7 +555,7 @@
   </section>
 
   <section id="view-guests" class="view hidden">
-    <header class="page-head"><div><h1>Invités</h1><p class="sub">Invitez quelqu’un par un lien à usage limité : il choisit son identifiant et son mot de passe, sans que vous ayez à créer le compte. Chaque compte peut avoir une échéance, un nombre d’écrans simultanés, un débit maximal et des quotas de demandes Seerr.</p></div></header>
+    <header class="page-head"><div><h1>Invités</h1><p class="sub">Invitez quelqu’un par un lien à usage limité : il choisit son identifiant et son mot de passe, sans que vous ayez à créer le compte. Chaque compte peut avoir une échéance, un nombre d’écrans simultanés, un débit maximal et des quotas de demandes Seerr. Chacun retrouve ses limites, ses quotas et l’état de ses demandes sur sa page <a href="/me/">Mon espace</a>.</p></div></header>
     <div id="guest-link" class="notice ok hidden">
       <p class="small">Lien d’invitation — il n’est affiché qu’une seule fois :</p>
       <p class="secret" id="guest-link-text"></p>
@@ -805,6 +848,92 @@
       <button id="vacation-stop" class="btn danger" type="button">Désactiver</button>
     </div>
   </section>
+  <section id="view-disks" class="view hidden">
+    <header class="page-head"><div><h1>Santé des disques</h1><p class="sub">Les attributs SMART de chaque disque sont relevés toutes les heures et gardés dans l’historique : un disque qui réalloue des secteurs depuis des semaines est à remplacer, même si son état global affiche encore « réussi ». Une machine virtuelle ou un RAID matériel ne laisse pas voir les disques réels.</p></div><div class="actions"><button id="disks-sample" class="btn" type="button">Analyser</button></div></header>
+    <div id="disks-state" class="notice info"></div>
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Disque</th><th>État</th><th>Réalloués (30 jours)</th><th>En attente</th><th>Température</th><th>Usure</th><th>Tendance</th></tr></thead>
+        <tbody id="disks-list"></tbody>
+      </table></div>
+      <ul id="disks-notes" class="checks"></ul>
+    </div>
+  </section>
+
+  <section id="view-bandwidth" class="view hidden">
+    <header class="page-head"><div><h1>Débit par plages horaires</h1><p class="sub">Limitez qBittorrent aux heures où la connexion sert à d’autres usages, et laissez-le libre la nuit. La limite est posée dans qBittorrent (débits globaux) : elle ne freine ni Jellyfin ni les autres applications. Un réglage fait à la main dans qBittorrent est conservé jusqu’au prochain changement de plage.</p></div></header>
+    <div id="bandwidth-state" class="notice info"></div>
+    <form id="bandwidth-form" class="card form">
+      <h2>Plages</h2>
+      <label class="check"><input name="enabled" type="checkbox">Appliquer ces plages à qBittorrent</label>
+      <div class="split">
+        <label>Débit descendant hors plage (ko/s, 0 : illimité)<input name="default_down" type="number" min="0" max="10000000"></label>
+        <label>Débit montant hors plage (ko/s, 0 : illimité)<input name="default_up" type="number" min="0" max="10000000"></label>
+      </div>
+      <div id="bandwidth-slots" class="stack"></div>
+      <div class="row"><button id="bandwidth-add" class="btn" type="button">Ajouter une plage</button><button class="btn primary" type="submit">Enregistrer</button></div>
+      <p class="muted small">La première plage qui correspond à l’heure s’applique. Une plage peut passer minuit (22:00 → 06:00) : elle couvre alors la nuit qui suit les jours cochés.</p>
+    </form>
+  </section>
+
+  <section id="view-diagnose" class="view hidden">
+    <header class="page-head"><div><h1>Dépannage</h1><p class="sub">De l’alerte à la cause probable : état et code de sortie, redémarrages en boucle, contrôle d’état, mémoire, espace disque, services dont il dépend, dernières lignes du journal. L’assistant propose des actions ; il n’en exécute aucune, chacune reste un clic confirmé.</p></div></header>
+    <div class="card" id="diagnose-alerts-card">
+      <h2>Services en alerte</h2>
+      <ul id="diagnose-alerts" class="checks"></ul>
+    </div>
+    <div class="card">
+      <h2>Analyser un service</h2>
+      <div class="row"><label>Service<select id="diagnose-service" aria-label="Service à analyser"></select></label><button id="diagnose-run" class="btn primary" type="button">Analyser</button></div>
+    </div>
+    <div id="diagnose-result" class="hidden">
+      <div id="diagnose-summary" class="notice"></div>
+      <div class="card"><h2>Vérifications</h2><ul id="diagnose-steps" class="checks"></ul></div>
+      <div class="card" id="diagnose-actions-card"><h2>Actions proposées</h2><ul id="diagnose-actions" class="checks"></ul></div>
+      <div class="card"><h2>Journal du service</h2><pre id="diagnose-log" class="log"></pre></div>
+    </div>
+  </section>
+
+  <section id="view-medialist" class="view hidden">
+    <header class="page-head"><div><h1>Liste des médias</h1><p class="sub">Les films et séries suivis par Radarr et Sonarr (titres, identifiants, suivi, qualité, dossier) sont exportés chaque semaine et joints aux sauvegardes. Si la bibliothèque disparaît, la liste permet de la reconstituer ; les fichiers vidéo, eux, ne sont pas dans cet export.</p></div><div class="actions"><button id="medialist-run" class="btn primary" type="button">Créer un export</button></div></header>
+    <div id="medialist-state" class="notice info"></div>
+    <div class="card">
+      <h2>Exports</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Films</th><th>Séries</th><th>Taille</th><th></th></tr></thead>
+        <tbody id="medialist-list"></tbody>
+      </table></div>
+    </div>
+    <div id="medialist-plan-card" class="card hidden">
+      <h2>Réimport à blanc</h2>
+      <p class="muted small">Ce que ferait l’import : seuls les titres absents sont ajoutés, avec leur suivi d’origine et sans lancer de recherche.</p>
+      <div id="medialist-plan"></div>
+      <div class="row"><button id="medialist-apply" class="btn primary" type="button">Importer</button></div>
+    </div>
+    <form id="medialist-form" class="card form half">
+      <h2>Export planifié</h2>
+      <label class="check"><input name="enabled" type="checkbox">Exporter automatiquement</label>
+      <div class="split"><label>Tous les (jours)<input name="days" type="number" min="1" max="90"></label><label>Exports conservés<input name="keep" type="number" min="1" max="20"></label></div>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+  </section>
+
+  <section id="view-telecommande" class="view hidden">
+    <header class="page-head"><div><h1>Télécommande</h1><p class="sub">L’essentiel pour un téléphone : alertes, téléchargements, mode vacances et la pause générale. Installez cette page comme une application depuis le menu du navigateur ; hors de la maison, elle n’est joignable que par le domaine de la console ou Tailscale.</p></div></header>
+    <div id="remote-alerts" class="notice ok"></div>
+    <div class="card">
+      <h2>Téléchargements</h2>
+      <dl id="remote-downloads" class="kv"></dl>
+      <div class="row"><button id="remote-pause" class="btn primary" type="button">Tout mettre en pause</button><button id="remote-resume" class="btn" type="button">Tout reprendre</button></div>
+      <p class="muted small">La reprise ne relance que les torrents mis en pause ici : un torrent arrêté à la main reste arrêté.</p>
+    </div>
+    <div class="card">
+      <h2>Mode vacances</h2>
+      <p id="remote-vacation" class="small"></p>
+      <p><a class="btn" href="#vacation">Régler</a></p>
+    </div>
+  </section>
+
   <section id="view-styleguide" class="view hidden">
     <header class="page-head"><div><h1>Guide de style</h1><p class="sub">Chaque composant de la console, tel qu’il est réellement rendu. Une nouvelle page se construit uniquement avec ces éléments et les jetons de tokens.css.</p></div>
       <div class="actions"><button id="sg-display" class="btn" type="button" data-icon="sun">Affichage</button></div></header>
@@ -889,6 +1018,7 @@
 <script src="pages.js"></script>
 <script src="extras.js"></script>
 <script src="ops.js"></script>
+<script src="ops2.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

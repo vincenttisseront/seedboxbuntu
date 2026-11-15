@@ -283,6 +283,7 @@ const GLOSSARY = [
   ['Synchroniser', 'refresh', 'Mettre deux éléments d’accord entre eux.'],
   ['Vérifier', 'check-circle', 'Lancer un contrôle qui ne modifie rien.'],
   ['Tester', 'check-circle', 'Essayer une connexion ou un réglage sans l’appliquer.'],
+  ['Comparer', 'search', 'Mettre deux états côte à côte pour voir ce qui diffère.'],
   ['Simuler', 'play', 'Montrer ce que ferait une opération sans la faire.'],
   ['Rechercher', 'search', 'Chercher dans des données.'],
   ['Filtrer', 'search', 'Réduire une liste.'],
@@ -345,16 +346,18 @@ const NAV = [
     { view: 'trackers', label: 'Trackers', icon: 'target' }, { view: 'p2p', label: 'P2P Aggregator', icon: 'share' }] },
   { id: 'storage', label: 'Stockage', icon: 'disk', items: [
     { view: 'shares', label: 'Partages', icon: 'folder' }, { view: 'backup', label: 'Sauvegardes', icon: 'download' },
-    { view: 'cleanup', label: 'Nettoyage', icon: 'trash' }] },
+    { view: 'cleanup', label: 'Nettoyage', icon: 'trash' }, { view: 'disks', label: 'Santé des disques', icon: 'disk' },
+    { view: 'medialist', label: 'Liste des médias', icon: 'file' }] },
   { id: 'network', label: 'Réseau', icon: 'globe', items: [
-    { view: 'vpn', label: 'VPN', icon: 'shield' }, { view: 'domain', label: 'Adresse', icon: 'globe' }, { view: 'netcheck', label: 'Diagnostic', icon: 'check-circle' }] },
+    { view: 'vpn', label: 'VPN', icon: 'shield' }, { view: 'domain', label: 'Adresse', icon: 'globe' }, { view: 'netcheck', label: 'Diagnostic', icon: 'check-circle' }, { view: 'bandwidth', label: 'Débit', icon: 'activity' }] },
   { id: 'security', label: 'Sécurité', icon: 'lock', items: [
     { view: 'users', label: 'Comptes', icon: 'users' }, { view: 'guests', label: 'Invités', icon: 'user-plus' },
     { view: 'secrets', label: 'Identifiants', icon: 'key' }, { view: 'activity', label: 'Activité', icon: 'activity' },
     { view: 'vulns', label: 'Vulnérabilités', icon: 'shield' }] },
   { id: 'ops', label: 'Exploitation', icon: 'activity', items: [
     { view: 'system', label: 'Système', icon: 'monitor' }, { view: 'alerts', label: 'Alertes', icon: 'bell' },
-    { view: 'report', label: 'Rapport', icon: 'file' }, { view: 'vacation', label: 'Vacances', icon: 'sun' }, { view: 'setup', label: 'Assistant', icon: 'check-circle' },
+    { view: 'report', label: 'Rapport', icon: 'file' }, { view: 'vacation', label: 'Vacances', icon: 'sun' }, { view: 'diagnose', label: 'Dépannage', icon: 'help' },
+    { view: 'telecommande', label: 'Télécommande', icon: 'play' }, { view: 'setup', label: 'Assistant', icon: 'check-circle' },
     { view: 'journal', label: 'Journal', icon: 'file' }, { view: 'settings', label: 'Paramètres', icon: 'sliders' },
     { view: 'styleguide', label: 'Guide de style', icon: 'palette' }] },
 ];

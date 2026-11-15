@@ -107,6 +107,26 @@ http:
         referrerPolicy: no-referrer
         customFrameOptionsValue: DENY
 
+    # « Mon espace » (/me) : après Authelia, pour tous les comptes. La route ne transmet PAS le secret de
+    # l'administration (effacé) mais un secret propre à cette page, que la console n'accepte que pour /me/.
+    me-headers:
+      headers:
+        customRequestHeaders:
+          X-Seedbox-Me-Secret: "@@CONSOLE_PROXY_SECRET@@"
+          X-Seedbox-Proxy-Secret: ""
+          X-Seedbox-Public-Secret: ""
+    me-limit:
+      rateLimit:
+        average: 60
+        period: 1m
+        burst: 30
+    me-secure:
+      headers:
+        stsSeconds: 31536000
+        contentTypeNosniff: true
+        referrerPolicy: no-referrer
+        customFrameOptionsValue: DENY
+
   routers:
     other-hosts:
       rule: "@@OTHER_HOSTS_RULE@@"
@@ -140,6 +160,18 @@ http:
         - invite-limit
         - invite-headers
         - invite-public
+
+    me:
+      rule: Path(`/me`) || PathPrefix(`/me/`)
+      entryPoints:
+        - websecure
+      service: console
+      middlewares:
+        - slash
+        - authelia
+        - me-limit
+        - me-secure
+        - me-headers
 
   services:
     console:

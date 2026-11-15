@@ -263,6 +263,72 @@ def journeys_ops(page, base):
         fail("parcours : les ressources par conteneur n'affichent pas 3 lignes dont une dérive")
 
 
+def journeys_ops2(page, base):
+    """Santé des disques, débit, ratio, lots, comparaison, dépannage, accès de secours, liste des médias, télécommande."""
+    page.goto(base + "#disks")
+    settle(page, "disks")
+    if page.locator("#disks-list tr").count() != 2 or not page.locator("#disks-list .pill.warn").count() or not page.locator("#disks-list svg.spark").count():
+        fail("parcours : la santé des disques n'affiche pas 2 disques dont un à surveiller avec sa tendance")
+    page.goto(base + "#bandwidth")
+    settle(page, "bandwidth")
+    if page.locator("#bandwidth-slots .slot").count() != 1 or not page.inner_text("#bandwidth-state").strip():
+        fail("parcours : le débit n'affiche pas sa plage et son état")
+    page.click("#bandwidth-add")
+    ui_mock.CALLS.clear()
+    page.click("#bandwidth-form button[type=submit]")
+    page.wait_for_timeout(400)
+    sent = [b for path, b in ui_mock.CALLS if path.endswith("/api/bandwidth/settings")]
+    if not sent or len(sent[-1].get("slots", [])) != 2 or sent[-1]["slots"][0].get("days") != [0, 1, 2, 3, 4] or sent[-1]["slots"][0].get("up") != 1000:
+        fail(f"parcours : le débit n'envoie pas ses plages ({sent})")
+    page.goto(base + "#trackers")
+    settle(page, "trackers")
+    page.wait_for_timeout(300)
+    if page.locator("#ratio-list tr").count() != 3 or not page.locator("#ratio-list .pill.err").count():
+        fail("parcours : les objectifs de ratio n'affichent pas 3 trackers dont un sous l'objectif")
+    page.goto(base + "#apps")
+    settle(page, "apps")
+    page.wait_for_timeout(300)
+    if page.locator("#rollout-list tr").count() != 2 or "traefik" not in page.inner_text("#rollout-apart"):
+        fail("parcours : la mise à jour par lots n'affiche pas son lot et les services à part")
+    page.goto(base + "#backup")
+    settle(page, "backup")
+    page.wait_for_timeout(300)
+    page.click("#backupdiff-run")
+    page.wait_for_selector("#backupdiff-result:not(.hidden) details")
+    if "[masqué:" not in page.inner_text("#backupdiff-result") and page.locator("#backupdiff-result details").first.evaluate("(d) => { d.open = true; return d.textContent; }").find("[masqué:") < 0:
+        fail("parcours : la comparaison de sauvegardes n'affiche pas de valeur masquée")
+    page.goto(base + "#diagnose")
+    settle(page, "diagnose")
+    page.click("#diagnose-run")
+    page.wait_for_selector("#diagnose-result:not(.hidden)")
+    if page.locator("#diagnose-steps li").count() != 2 or page.locator("#diagnose-actions li").count() != 2:
+        fail("parcours : le dépannage n'affiche pas ses vérifications et ses actions")
+    page.goto(base + "#users")
+    settle(page, "users")
+    page.wait_for_timeout(300)
+    ui_mock.CALLS.clear()
+    page.click("#emergency-init")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_selector("#emergency-code:not(.hidden)")
+    if "ABCD-" not in page.inner_text("#emergency-code-text"):
+        fail("parcours : le code de secours n'est pas affiché")
+    page.goto(base + "#medialist")
+    settle(page, "medialist")
+    page.wait_for_timeout(300)
+    page.click("#medialist-list button")
+    page.wait_for_selector("#medialist-plan-card:not(.hidden)")
+    if "12 à ajouter" not in page.inner_text("#medialist-plan") or page.locator("#medialist-apply").is_disabled():
+        fail("parcours : la simulation du réimport n'affiche pas ce qui serait ajouté")
+    page.goto(base + "#telecommande")
+    settle(page, "telecommande")
+    ui_mock.CALLS.clear()
+    page.click("#remote-pause")
+    page.wait_for_timeout(400)
+    if not [1 for path, _ in ui_mock.CALLS if path.endswith("/api/remote-control/pause")]:
+        fail("parcours : la télécommande n'envoie pas la pause générale")
+
+
 def observer_run(browser):
     """Compte « observateur » : navigation réduite, aucun bouton d'action actif, aucune erreur."""
     server = ui_mock.serve(8774, background=True, role="observer")
@@ -347,11 +413,11 @@ def main():
                     shrink(path)
                     compare(name, path)
                 if not ONLY:
-                    for extra, route in (("invite", "invite/TOKEN"), ("erreur", "errors/503")):
+                    for extra, route in (("invite", "invite/TOKEN"), ("erreur", "errors/503"), ("moi", "me/")):
                         print(f"{tag}-{extra}")
                         page.goto(base.replace("console/", route))
                         page.wait_for_timeout(500)
-                        page.wait_for_selector("main.invite .card:not(.hidden)")
+                        page.wait_for_selector("#me-content:not(.hidden)" if extra == "moi" else "main.invite .card:not(.hidden)")
                         check_extra(page, f"{tag}-{extra}", errors)
                         path = CURRENT / f"{tag}-{extra}.png"
                         page.screenshot(path=path, full_page=True)
@@ -364,6 +430,7 @@ def main():
                     journeys(page, base)
                     journeys_extra(page, base)
                     journeys_ops(page, base)
+                    journeys_ops2(page, base)
                 if tag == "m" and not ONLY:
                     journey_mobile(page, base)
                 context.close()

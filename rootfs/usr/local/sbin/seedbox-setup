@@ -388,13 +388,15 @@ menu_accounts() {
   while :; do
     list=$(seedboxctl user list 2>/dev/null | python3 -c 'import json,sys
 for u in json.load(sys.stdin): print("  %s (%s)" % (u["login"], u["role"]))')
-    c=$(W --title "Comptes" --ok-button "Valider" --cancel-button "Retour" --menu "Comptes de l'appliance :\n$list" 20 76 5 \
+    c=$(W --title "Comptes" --ok-button "Valider" --cancel-button "Retour" --menu "Comptes de l'appliance :\n$list" 22 76 7 \
       show "Afficher les identifiants" \
       add "Créer un compte" \
       passwd "Changer un mot de passe web" \
       del "Supprimer un compte" \
       role "Changer le rôle d'un compte" \
-      system "Mot de passe du compte système seedbox (SSH, console)") || return 0
+      system "Mot de passe du compte système seedbox (SSH, console)" \
+      secours "Accès de secours : créer ou renouveler le code" \
+      reprise "Accès de secours : reprendre un compte administrateur") || return 0
     case $c in
       show) seedboxctl credentials 2>/dev/null | python3 -c 'import json,sys
 for name, items in json.load(sys.stdin).items():
@@ -414,6 +416,10 @@ for name, items in json.load(sys.stdin).items():
             ask "Suppression" "Supprimer le compte $login sur toutes les applications ?" && ctl_box "Suppression" seedboxctl user del "$login" ;;
       system) ask_new_password "Compte seedbox" || continue
             printf '%s:%s\n' "$SYSTEM_USER" "$NEW_PASS" | chpasswd && msg "Compte seedbox" "Mot de passe modifié." 8 ;;
+      secours) ask "Code de secours" "Créer un nouveau code ? L'ancien ne fonctionnera plus. Le nouveau n'est affiché qu'une fois : notez-le." && ctl_box "Code de secours" seedboxctl emergency init --by menu ;;
+      reprise) login=$(input "Accès de secours" "Compte administrateur à reprendre :" "admin") || continue
+            code=$(pass "Code de secours" "Code de secours imprimé :") || continue
+            printf '%s\n' "$code" | ctl_box "Accès de secours" seedboxctl emergency use "$login" ;;
     esac
   done
 }
@@ -497,6 +503,7 @@ menu_tools() {   # sauvegarde, versions des services, double authentification
     c=$(W --title "Sauvegarde, versions et sécurité" --ok-button "Valider" --cancel-button "Retour" --menu "Outils d'exploitation de l'appliance." 22 78 11 \
       backup "Créer une sauvegarde chiffrée maintenant" \
       versions "Mettre à jour un service ou revenir à sa version précédente" \
+      rollout "Mettre à jour tous les services par lots (test de santé et retour arrière)" \
       steps "Réessayer les étapes de configuration en échec" \
       check "Contrôle de santé des applications" \
       twofa "Double authentification (aucune, administrateurs, tous)" \
@@ -526,6 +533,7 @@ import os; d=json.load(sys.stdin); print("Lien (affiché une seule fois) :\n\nht
       twofa)  mode=$(W --title "Double authentification" --menu "Mode actuel : $(seedboxctl auth show 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])')" 12 76 3 \
                 none "Aucune" admins "Administrateurs seulement" all "Tous les comptes") || continue
               ctl_box "Double authentification" seedboxctl auth 2fa "$mode" ;;
+      rollout) ask "Mise à jour par lots" "Mettre à jour les services un par un, avec test de santé et retour arrière au premier échec ?" && ctl_box "Mise à jour par lots" seedboxctl rollout run ;;
       versions)
         mapfile -t items < <(seedboxctl versions list 2>/dev/null | python3 -c 'import json,sys
 for s in json.load(sys.stdin)["services"]:

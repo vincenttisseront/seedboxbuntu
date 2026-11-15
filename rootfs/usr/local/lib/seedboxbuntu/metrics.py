@@ -91,6 +91,11 @@ def read_sources():
         values.update(ctl.resources().sample())               # processeur et mémoire de chaque conteneur
     except Exception:                                         # noqa: BLE001 - Docker arrêté : pas de mesure, rien d'autre
         pass
+    for loader in (ctl.smarthist, ctl.ratiogoals):            # santé des disques, ratio par tracker : une lecture par heure au plus
+        try:
+            values.update(loader().sample())
+        except Exception:                                     # noqa: BLE001 - une source en panne ne bloque pas les autres mesures
+            pass
     try:
         LAST_FILE.write_text(json.dumps(counters))
     except OSError:
@@ -150,7 +155,7 @@ def history(range_name="24h", now=None):
     seconds = RANGES[range_name]
     series = {}
     for key in keys():
-        if key.startswith(("disktotal:", "ctr.")):
+        if key.startswith(("disktotal:", "ctr.", "smart.", "trk.")):
             continue                                          # séries des conteneurs : page « Ressources » (resources.py)
         series[key] = points(key, seconds, now)
     totals = {}

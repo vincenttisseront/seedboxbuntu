@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Mon espace - SeedBoxBuntu</title>
+<meta name="theme-color" content="#020617">
+<link rel="icon" type="image/svg+xml" href="/me/static/logo.svg">
+<link rel="stylesheet" href="/me/static/tokens.css">
+<link rel="stylesheet" href="/me/static/app.css">
+<script src="/me/static/display.js"></script>
+<script src="/me/static/i18n.js"></script>
+<script src="/me/static/lang-en.js"></script>
+</head>
+<body>
+<main class="invite">
+  <div class="brand"><img src="/me/static/logo.svg" alt="" width="34" height="34"><span class="brand-name">SeedBox<b>Buntu</b></span></div>
+  <div id="me-loading" class="card"><p class="muted">Chargement de votre espace…</p></div>
+  <div id="me-error" class="card hidden"><h2>Espace indisponible</h2><p id="me-error-text" class="muted">Réessayez dans un instant.</p></div>
+
+  <div id="me-content" class="hidden">
+    <div class="card">
+      <h2>Mon compte</h2>
+      <dl id="me-account" class="kv"></dl>
+      <p id="me-expiry" class="notice info hidden"></p>
+    </div>
+    <div class="card">
+      <h2>Mes limites</h2>
+      <p id="me-limits" class="muted small"></p>
+    </div>
+    <div id="me-requests-card" class="card hidden">
+      <h2>Mes demandes</h2>
+      <div id="me-quota-movie" class="hidden"><p class="small"><span>Films</span> · <b id="me-quota-movie-text"></b></p><progress id="me-quota-movie-bar" max="100" value="0"></progress></div>
+      <div id="me-quota-tv" class="hidden"><p class="small"><span>Séries</span> · <b id="me-quota-tv-text"></b></p><progress id="me-quota-tv-bar" max="100" value="0"></progress></div>
+      <p id="me-no-quota" class="muted small hidden">Aucune limite de demandes sur votre compte.</p>
+      <ul id="me-requests" class="stack"></ul>
+      <p id="me-no-requests" class="muted small hidden">Vous n'avez fait aucune demande pour le moment.</p>
+    </div>
+    <p class="row"><a class="btn primary" href="/">Ouvrir le tableau de bord</a><a class="btn" href="/jellyfin/">Ouvrir Jellyfin</a></p>
+  </div>
+</main>
+<script src="/me/static/me.js"></script>
+</body>
+</html>

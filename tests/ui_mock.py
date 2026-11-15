@@ -69,6 +69,28 @@ def route(p, q, role="admin", PREFS=None):
         {"id": "certificate", "title": "Certificat HTTPS", "state": "warn", "detail": "Le certificat expire dans 9 jours (R3).", "hint": "Un renouvellement automatique est attendu ; vérifiez que les ports 80 et 443 sont joignables."},
         {"id": "port", "title": "Port entrant", "state": "warn", "detail": "Aucun port entrant annoncé.", "hint": "Le fournisseur doit accepter la redirection de port (NAT-PMP pour Proton)."},
         {"id": "vpn", "title": "Tunnel VPN", "state": "error", "detail": "Le tunnel n'est pas en marche (état : exited).", "hint": "Vérifiez le fournisseur et les identifiants VPN ; arrêtez qBittorrent tant que ce n'est pas réglé."}]}
+    if p == "/api/smart": return {"available": True, "reason": "", "last": now - 1200, "every_minutes": 55, "disks": [
+        {"name": "sda", "model": "WDC WD40EFRX", "level": "warning", "notes": ["Secteurs réalloués : +3 sur 30 jours (total 8) : la surface se dégrade."], "values": {"realloc": 8, "pending": 0, "temp": 41, "hours": 21000}, "peak_temp_24h": 43, "realloc_growth_30d": 3,
+         "series": {"temp": [[now - 3600 * (40 - i), 38 + (i % 6)] for i in range(40)], "realloc": []}},
+        {"name": "nvme0n1", "model": "Samsung 970", "level": "ok", "notes": [], "values": {"temp": 36, "wear": 6, "uncorrect": 0}, "peak_temp_24h": 38, "realloc_growth_30d": 0,
+         "series": {"temp": [[now - 3600 * (40 - i), 34 + (i % 4)] for i in range(40)], "realloc": []}}]}
+    if p == "/api/bandwidth": return {"settings": {"enabled": True, "default_down": 0, "default_up": 5000, "slots": [{"days": [0, 1, 2, 3, 4], "start": "18:00", "end": "23:00", "down": 0, "up": 1000}]}, "max_slots": 8, "qbittorrent": True,
+        "now": {"down": 0, "up": 5000, "slot": None}, "applied": True, "since": now - 7200, "next": {"at": now + 3 * 3600, "down": 0, "up": 1000}}
+    if p == "/api/ratio": return {"qbittorrent": True, "settings": {"goals": {"tracker-a": 1.0, "tracker-b": 1.0}, "margin": 10, "min_gb": 5}, "trackers": [
+        {"tracker": "tracker-a", "torrents": 214, "uploaded": 4.2e12, "downloaded": 1.1e12, "ratio": 3.82, "goal": 1.0, "status": "ok", "missing": 0, "week_up": 8e10, "week_down": 1e10},
+        {"tracker": "tracker-b", "torrents": 12, "uploaded": 3e10, "downloaded": 4e10, "ratio": 0.75, "goal": 1.0, "status": "below", "missing": 1e10, "week_up": 1e9, "week_down": 2e9},
+        {"tracker": "tracker-c", "torrents": 2, "uploaded": 1e8, "downloaded": 2e8, "ratio": 0.5, "goal": None, "status": "none", "missing": 0, "week_up": 0, "week_down": 0}]}
+    if p == "/api/rollout": return {"plan": {"batch": [{"service": "radarr", "running": True, "healthcheck": True}, {"service": "sonarr", "running": True, "healthcheck": False}], "apart": [{"service": "traefik", "running": True, "healthcheck": True}], "skipped": [{"service": "jackett", "reason": "épinglé"}]},
+        "last": {"items": [{"service": "radarr", "result": "mis à jour", "detail": "", "seconds": 40}, {"service": "sonarr", "result": "retour arrière", "detail": "ne répond plus après la mise à jour", "seconds": 80}]}}
+    if p == "/api/backupdiff": return {"current": "courant", "backups": [{"name": "seedbox-20261111-023000.tar.gz.enc", "where": "local", "time": now - 86400, "size": 1e8}, {"name": "seedbox-20261104-023000.tar.gz.enc", "where": "local", "time": now - 86400 * 8, "size": 9e7}]}
+    if p == "/api/diagnose": return {"services": ["radarr", "sonarr", "traefik"]}
+    if p == "/api/diagnose/run": return {"service": q.get("service", ["radarr"])[0], "level": "fail", "summary": "Redémarre en boucle : il s'arrête dès qu'il démarre.", "steps": [
+        {"key": "state", "title": "État du conteneur", "level": "fail", "detail": "Redémarre en boucle."}, {"key": "disk", "title": "Espace disque", "level": "ok", "detail": "72 % utilisé."}],
+        "actions": [{"id": "restart", "label": "Redémarrer", "why": "Règle les blocages passagers."}, {"id": "rollback", "label": "Revenir à la version précédente", "why": "La version a changé hier."}], "log": ["ligne 1", "ligne 2"]}
+    if p == "/api/emergency": return {"configured": True, "created": now - 86400 * 30, "by": "vincent", "last_used": 0, "locked_seconds": 0, "fails": 0, "max_fails": 5, "lock_minutes": 15}
+    if p == "/api/catalogexport": return {"settings": {"enabled": True, "days": 7, "keep": 4}, "retention": 4, "apps": {"radarr": True, "sonarr": True}, "exports": [{"name": "catalogue-20261110-030000.json", "created": now - 86400 * 5, "movies": 412, "series": 38, "bytes": 123456}]}
+    if p == "/api/remote-control": return {"alerts": [{"title": "Radarr ne répond plus", "level": "critical"}], "alerts_total": 1, "vacation": {"active": False, "until": 0}, "paused_by_remote": 0,
+        "downloads": {"available": True, "active": 3, "paused": 1, "down": 4e6, "up": 1e6}}
     if p == "/api/vacation": return {"active": False, "until": 0, "started": 0, "by": "", "paused": 0, "max_days": 120, "qbittorrent": True}
     if p == "/api/push": return {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 2}
     if p == "/api/messages-language": return {"notify": "fr", "choices": ["fr", "en"]}
@@ -157,6 +179,16 @@ class H(http.server.BaseHTTPRequestHandler):
             return self.send(200, f.read_bytes(), types.get(f.suffix, "application/octet-stream")) if f.is_file() else self.send(404, {})
         if p == "/invite/api/info":
             return self.send(200, {"valid": True, "label": "Marie, cousine", "profile": {"account_days": 30, "max_sessions": 2, "bitrate_mbps": 8, "seerr_movie_limit": 5, "seerr_movie_days": 7}})
+        if p.startswith("/me/static/"):
+            f = WEB / p[len("/me/static/"):]
+            types = {".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2"}
+            return self.send(200, f.read_bytes(), types.get(f.suffix, "application/octet-stream")) if f.is_file() else self.send(404, {})
+        if p == "/me/api/overview":
+            return self.send(200, {"login": "marie", "role": "user", "expires": now + 86400 * 12, "days_left": 12, "limits": {"sessions": 2, "bitrate_mbps": 8, "downloads": False},
+                                   "quota": {"movie": {"limit": 5, "used": 3, "remaining": 2, "days": 7}, "tv": None}, "requests_available": True,
+                                   "requests": [{"kind": "film", "title": "Alien", "status": "Disponible", "date": "2026-11-02"}, {"kind": "série", "title": "Severance", "status": "En attente d'approbation", "date": "2026-11-09"}]})
+        if p in ("/me", "/me/"):
+            return self.send(200, (WEB / "me.html").read_bytes(), "text/html; charset=utf-8")
         if p.startswith("/invite/"):
             return self.send(200, (WEB / "invite.html").read_bytes(), "text/html; charset=utf-8")
         if p.startswith("/errors/"):
@@ -185,6 +217,16 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith("/api/backup/check"): return self.send(200, {"ok": False, "name": "seedbox-20261111-023000.tar.gz.enc", "files": 412, "databases": 9, "configs": 31, "seconds": 2.4, "at": now,
             "problems": [{"file": "/var/lib/seedboxbuntu/guests.json", "problem": "JSON illisible"}], "changes": {"same": 380, "changed": 31, "added": 1, "sample": [{"path": "/etc/seedboxbuntu/alerts.json", "change": "changed"}]}})
         if self.path.endswith("/api/config/import"): return self.send(200, {"sections": [{"section": "alerts", "title": "Alertes", "state": "modifiée", "detail": ""}, {"section": "report", "title": "Rapport hebdomadaire", "state": "inchangée", "detail": ""}, {"section": "window", "title": "Fenêtre de maintenance", "state": "refusée", "detail": "heure HH:MM attendue"}]})
+        if self.path.endswith("/api/backupdiff/compare"): return self.send(200, {"summary": {"added": 1, "removed": 0, "changed": 1, "binary": 1, "same": 30}, "omitted": 0, "older": "a", "newer": "b", "files": [
+            {"path": "/etc/seedboxbuntu/alerts.json", "change": "changed", "kind": "texte", "diff": ["-  \"disk_percent\": 90", "+  \"disk_percent\": 85", "+  \"token\": \"[masqué:ab12]\""], "more": 0},
+            {"path": "/etc/seedboxbuntu/bandwidth.json", "change": "added", "kind": "texte", "diff": [], "more": 0}, {"path": "/var/lib/authelia/db.sqlite3", "change": "changed", "kind": "binaire", "diff": [], "more": 0}]})
+        if self.path.endswith("/api/emergency/init"): return self.send(200, {"code": "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ", "status": {"configured": True, "created": now, "by": "vincent", "last_used": 0, "locked_seconds": 0, "fails": 0}})
+        if self.path.endswith("/api/catalogexport/plan"): return self.send(200, {"name": "catalogue-20261110-030000.json", "rejected": 0, "apps": {
+            "radarr": {"ok": True, "error": "", "total": 412, "already": 400, "to_add": 12, "replaced": 2, "sample": [{"title": "Alien", "year": 1979, "notes": []}, {"title": "Heat", "year": 1995, "notes": ["profil remplacé"]}]},
+            "sonarr": {"ok": True, "error": "", "total": 38, "already": 38, "to_add": 0, "replaced": 0, "sample": []}}})
+        if self.path.endswith("/api/remote-control/pause"): return self.send(200, {"paused": 3})
+        if self.path.endswith("/api/remote-control/resume"): return self.send(200, {"resumed": 3})
+        if self.path.endswith(("/api/bandwidth/settings", "/api/ratio/settings", "/api/catalogexport/settings")): return self.send(200, {"settings": body})
         if self.path.endswith("/api/push/unsubscribe"): return self.send(200, {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 1})
         if self.path.endswith("/guests/invite"): return self.send(200, {"id": "ab12", "token": "T" * 32, "path": "/invite/" + "T" * 32, "expires": now + 86400 * 7})
         if "/jobs/" in self.path: return self.send(200, {})

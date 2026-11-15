@@ -1,9 +1,9 @@
 // Service worker de la console : garde l'interface (HTML, CSS, JS, polices, icônes) pour qu'elle
 // s'ouvre même sans réseau. Les données (/api) ne sont jamais mises en cache : elles viennent
 // toujours du serveur, et sans réseau l'interface le dit.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE = `seedbox-console-${VERSION}`;
-const SHELL = ['./', 'tokens.css', 'app.css', 'display.js', 'i18n.js', 'lang-en.js', 'ui.js', 'features.js', 'pages.js', 'extras.js', 'ops.js', 'app.js', 'icons.svg', 'logo.svg', 'icon-192.png', 'manifest.webmanifest'];
+const SHELL = ['./', 'tokens.css', 'app.css', 'display.js', 'i18n.js', 'lang-en.js', 'ui.js', 'features.js', 'pages.js', 'extras.js', 'ops.js', 'ops2.js', 'app.js', 'icons.svg', 'logo.svg', 'icon-192.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()).catch(() => self.skipWaiting()));

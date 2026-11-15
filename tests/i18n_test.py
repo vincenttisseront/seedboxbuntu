@@ -79,7 +79,7 @@ def main():
     data = json.loads(node.stdout)
     dictionary_en = data["dict"]
     # 1. couverture du HTML statique
-    for page in ("index.html", "invite.html"):
+    for page in ("index.html", "invite.html", "me.html"):
         parser = Collect()
         parser.feed((WEB / page).read_text())
         texts = list(dict.fromkeys(parser.texts))
@@ -139,6 +139,8 @@ def main():
     finally:
         server.shutdown()
     check(not errors, f"erreurs JavaScript en anglais : {errors[:2]}")
+    if len(left) > CEILING:
+        print("  restées en français :", *[f"[{view}] {text}" for text, view in left.items()], sep="\n    ")
     check(len(left) <= CEILING, f"{len(left)} phrases restées en français (plafond {CEILING}) : {list(left.items())[:6]}")
     print(f"  navigateur : {len(left)} phrase(s) restée(s) en français sur {len(views)} pages (données de démonstration comprises)")
     return report()

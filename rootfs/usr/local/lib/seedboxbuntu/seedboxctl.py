@@ -35,6 +35,16 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl vacation show|start|stop|tick   mode vacances
   seedboxctl push show|test                    notifications push dans le navigateur
   seedboxctl config export|import            export et import des réglages de la console
+  seedboxctl smarthist show|sample           santé des disques dans le temps (SMART)
+  seedboxctl bandwidth show|tick             débit de qBittorrent par plages horaires
+  seedboxctl ratiogoals show|set|unset       objectifs de ratio par tracker
+  seedboxctl rollout plan|run                mise à jour des applications par lots, avec test de santé
+  seedboxctl backupdiff list|diff            comparaison de deux sauvegardes (secrets masqués)
+  seedboxctl diagnose list|run SERVICE       assistant de dépannage d'un service
+  seedboxctl emergency show|init|use         accès de secours (code imprimé, usage unique, local)
+  seedboxctl catalogexport show|run|plan|apply   liste de la médiathèque : export et réimport
+  seedboxctl myspace show LOGIN              ce que voit un compte dans « Mon espace »
+  seedboxctl remote-control show|pause|resume    télécommande : pause générale des torrents
 """
 import argparse
 import base64
@@ -315,6 +325,46 @@ def activity():
 
 def configbundle():
     return _lazy("configbundle")
+
+
+def smarthist():
+    return _lazy("smarthist")
+
+
+def ratiogoals():
+    return _lazy("ratiogoals")
+
+
+def bandwidth():
+    return _lazy("bandwidth")
+
+
+def catalogexport():
+    return _lazy("catalogexport")
+
+
+def rollout():
+    return _lazy("rollout")
+
+
+def backupdiff():
+    return _lazy("backupdiff")
+
+
+def diagnose():
+    return _lazy("diagnose")
+
+
+def emergency():
+    return _lazy("emergency")
+
+
+def myspace():
+    return _lazy("myspace")
+
+
+def telecommande():
+    return _lazy("telecommande")
 
 
 def sandbox():
@@ -2674,6 +2724,47 @@ def main():
     vac_start.add_argument("--by", default="cli", help="compte à l'origine de la demande (journal)")
     for name in ("show", "stop", "tick"):
         vac.add_parser(name)
+    sm = commands.add_parser("smarthist", help="santé des disques dans le temps").add_subparsers(dest="action", required=True)
+    for name in ("show", "sample"):
+        sm.add_parser(name)
+    bw = commands.add_parser("bandwidth", help="débit de qBittorrent par plages horaires").add_subparsers(dest="action", required=True)
+    for name in ("show", "tick"):
+        bw.add_parser(name)
+    rg = commands.add_parser("ratiogoals", help="objectifs de ratio par tracker").add_subparsers(dest="action", required=True)
+    rg.add_parser("show")
+    rg_set = rg.add_parser("set")
+    rg_set.add_argument("tracker")
+    rg_set.add_argument("ratio", type=float)
+    rg.add_parser("unset").add_argument("tracker")
+    ro = commands.add_parser("rollout", help="mise à jour par lots").add_subparsers(dest="action", required=True)
+    ro.add_parser("plan")
+    ro_run = ro.add_parser("run")
+    ro_run.add_argument("--only", nargs="*", default=None, help="services à traiter (tous ceux du lot par défaut)")
+    ro_run.add_argument("--continue", dest="keep_going", action="store_true", help="ne pas s'arrêter au premier échec")
+    bd = commands.add_parser("backupdiff", help="comparaison de deux sauvegardes").add_subparsers(dest="action", required=True)
+    bd.add_parser("list")
+    bd_diff = bd.add_parser("diff")
+    bd_diff.add_argument("older")
+    bd_diff.add_argument("newer", help="nom d'une sauvegarde, ou « courant » pour le serveur actuel")
+    dg = commands.add_parser("diagnose", help="assistant de dépannage").add_subparsers(dest="action", required=True)
+    dg.add_parser("list")
+    dg.add_parser("run").add_argument("service")
+    em = commands.add_parser("emergency", help="accès de secours").add_subparsers(dest="action", required=True)
+    em.add_parser("show")
+    em_init = em.add_parser("init", help="génère un nouveau code de secours (affiché une seule fois)")
+    em_init.add_argument("--by", default="cli")
+    em_use = em.add_parser("use", help="réinitialise un administrateur ; le code est lu sur l'entrée standard")
+    em_use.add_argument("login")
+    em_use.add_argument("--keep-2fa", action="store_true", help="ne retire pas les secondes étapes enregistrées")
+    ce = commands.add_parser("catalogexport", help="liste de la médiathèque (Radarr, Sonarr)").add_subparsers(dest="action", required=True)
+    for name in ("show", "run"):
+        ce.add_parser(name)
+    for name in ("plan", "apply"):
+        ce.add_parser(name).add_argument("name", nargs="?", default=None)
+    commands.add_parser("myspace", help="vue d'un compte dans « Mon espace »").add_subparsers(dest="action", required=True).add_parser("show").add_argument("login")
+    rc = commands.add_parser("remote-control", help="télécommande").add_subparsers(dest="action", required=True)
+    for name in ("show", "pause", "resume"):
+        rc.add_parser(name)
     cfg_cmd = commands.add_parser("config", help="export et import des réglages de la console").add_subparsers(dest="action", required=True)
     cfg_export = cfg_cmd.add_parser("export")
     cfg_export.add_argument("--secrets", action="store_true", help="inclut les secrets des canaux d'alerte")
@@ -3093,6 +3184,89 @@ def main():
             locked(module.scan)()
         else:
             locked(module.auto)()
+    elif args.command == "smarthist":
+        module = smarthist()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            values = module.sample(force=True)
+            metrics().collect(values)                                  # enregistre ces mesures dans l'historique
+            print(json.dumps(values, indent=2, ensure_ascii=False))
+    elif args.command == "bandwidth":
+        module = bandwidth()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            locked(module.tick)()
+    elif args.command == "ratiogoals":
+        module = ratiogoals()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            module.save({"goals": {**module.settings()["goals"], args.tracker: args.ratio}})
+        else:
+            goals = dict(module.settings()["goals"])
+            goals.pop(args.tracker.lower(), None)
+            module.save({"goals": goals})
+    elif args.command == "rollout":
+        module = rollout()
+        if args.action == "plan":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            locked(module.run)(args.only, not args.keep_going)
+    elif args.command == "backupdiff":
+        module = backupdiff()
+        if args.action == "list":
+            print(json.dumps(module.listing(), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(module.diff(args.older, args.newer), indent=2, ensure_ascii=False))
+    elif args.command == "diagnose":
+        module = diagnose()
+        if args.action == "list":
+            print("\n".join(module.services()))
+        else:
+            result = module.run(args.service)
+            marks = {"ok": "[OK]  ", "info": "[i]   ", "warn": "[!]   ", "fail": "[ECHEC]"}
+            print(f"{args.service} : {result['summary']}\n")
+            for item in result["steps"]:
+                print(f"{marks[item['level']]} {item['title']} : {item['detail']}")
+            for action in result["actions"]:
+                print(f"-> proposé : {action['label']} ({action['why']})")
+    elif args.command == "emergency":
+        module = emergency()
+        if args.action == "show":
+            print(json.dumps(module.status(), indent=2, ensure_ascii=False))
+        elif args.action == "init":
+            code = locked(module.init)(args.by)
+            print(f"Code de secours (à imprimer et ranger sous clé, il ne sera plus affiché) :\n\n    {code}\n")
+        else:
+            code = sys.stdin.readline().strip() if not sys.stdin.isatty() else getpass.getpass("Code de secours : ")
+            result = locked(module.use)(args.login, code, args.keep_2fa)
+            print(f"Compte : {result['login']}\nMot de passe temporaire (à changer après connexion) : {result['password']}\n"
+                  f"Secondes étapes retirées : {result['removed']}\n"
+                  f"NOUVEAU code de secours (l'ancien est périmé, notez celui-ci) : {result['new_code']}")
+            for warning in result["warnings"]:
+                print("attention : " + warning)
+    elif args.command == "catalogexport":
+        module = catalogexport()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "run":
+            module.run()
+        elif args.action == "plan":
+            print(json.dumps(module.plan(module.load(args.name)), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(locked(module.apply)(module.load(args.name)), indent=2, ensure_ascii=False))
+    elif args.command == "myspace":
+        print(json.dumps(myspace().overview(args.login), indent=2, ensure_ascii=False))
+    elif args.command == "remote-control":
+        module = telecommande()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "pause":
+            print(locked(module.pause)())
+        else:
+            print(locked(module.resume)())
     elif args.command == "netcheck":
         netcheck().show()
     elif args.command == "vacation":
