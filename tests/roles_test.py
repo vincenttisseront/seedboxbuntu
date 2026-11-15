@@ -55,6 +55,10 @@ cases = [
     (["managers"], "/", "one_factor"), (["managers"], "/jellyfin/", "one_factor"),
     (["users"], "/radarr/", "deny"), (["users"], "/console/", "deny"), (["users"], "/", "one_factor"), (["users"], "/jellyfin/", "one_factor"),
     ([], "/", "deny"),
+    (["observers"], "/console/", "one_factor"), (["observers"], "/console/api/status", "one_factor"), (["observers"], "/console", "one_factor"),
+    (["observers"], "/radarr/", "deny"), (["observers"], "/traefik/", "deny"), (["observers"], "/dockge/", "deny"),
+    (["observers"], "/jackett/", "deny"), (["observers"], "/autobrr/", "deny"), (["observers"], "/", "one_factor"),
+    (["observers"], "/consolex/", "deny"),
 ]
 for groups, path, expected in cases:
     got = decide(groups, path)
@@ -67,8 +71,11 @@ ctl.USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
 ctl.users_store_add("alice", "motdepasse1", "manager")
 ctl.users_store_add("bob", "motdepasse1", "user")
 ctl.users_store_add("root1", "motdepasse1", "admin")
+ctl.users_store_add("obs1", "motdepasse1", "observer")
 roles = {u["login"]: u["role"] for u in ctl.user_list()}
-check("rôles enregistrés et relus", roles == {"alice": "manager", "bob": "user", "root1": "admin"}, roles)
+check("rôles enregistrés et relus", roles == {"alice": "manager", "bob": "user", "root1": "admin", "obs1": "observer"}, roles)
+check("groupe Authelia observers", ctl.users_load()["obs1"]["groups"] == ["observers"])
+check("observateur : droits Seerr comme un utilisateur", ctl.SEERR_PERMISSIONS["observer"] == ctl.SEERR_PERMISSIONS["user"])
 check("groupe Authelia managers", "managers" in ctl.users_load()["alice"]["groups"])
 try:
     ctl.user_add("carl", "motdepasse1", "dieu"); check("rôle invalide refusé", False)

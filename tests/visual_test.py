@@ -159,6 +159,91 @@ def journeys(page, base):
     page.evaluate("Display.reset()")
 
 
+def journeys_extra(page, base):
+    """Recherche Ctrl+K, notifications, personnalisation de la vue d'ensemble avec annulation, mode kiosque, anglais."""
+    page.goto(base + "#overview")
+    settle(page, "overview")
+    page.keyboard.press("Control+k")
+    page.wait_for_selector("#palette[open]")
+    page.fill("#palette-input", "sauveg")
+    if not page.locator("#palette-list [role=option]").count():
+        fail("parcours : la recherche ne propose rien pour « sauveg »")
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(300)
+    if "backup" not in page.url or page.locator("#palette[open]").count():
+        fail(f"parcours : la recherche n'ouvre pas la page Sauvegardes ({page.url})")
+    page.goto(base + "#overview")
+    settle(page, "overview")
+    page.locator("[data-notif-open]:visible").first.click()
+    page.wait_for_selector("#notif-dialog[open]")
+    if not page.locator("#notif-list li").count():
+        fail("parcours : le centre de notifications est vide")
+    page.keyboard.press("Escape")
+    # personnalisation : masquer une tuile, puis défaire
+    page.click("#overview-customize")
+    page.click("[data-tile-act=hide-backup]")
+    if not page.evaluate("document.getElementById('tile-backup').hasAttribute('data-hidden')"):
+        fail("parcours : la tuile Sauvegardes n'est pas marquée masquée après « masquer »")
+    page.click("#toasts .toast button")
+    page.wait_for_timeout(300)
+    if page.evaluate("document.getElementById('tile-backup').hasAttribute('data-hidden')"):
+        fail("parcours : « Défaire » ne réaffiche pas la tuile")
+    page.click("#overview-customize")
+    # kiosque
+    page.click("#overview-kiosk")
+    try:
+        page.wait_for_function("document.body.classList.contains('kiosk')", timeout=3000)
+        if page.locator("#kiosk-bar:visible").count() != 1:
+            fail("parcours : la barre du mode kiosque n'est pas affichée")
+        page.click("#kiosk-exit")
+        page.wait_for_function("!document.body.classList.contains('kiosk')", timeout=3000)
+    except Exception:  # noqa: BLE001
+        fail("parcours : le mode kiosque ne s'active ou ne se quitte pas")
+    # anglais, puis retour
+    page.evaluate("Display.set({ lang: 'en' })")
+    page.reload()                                                    # la langue s'applique au chargement de la page
+    settle(page, "overview")
+    if page.evaluate("document.querySelector('h1').textContent.trim()") != "Overview":
+        fail("parcours : la page ne passe pas en anglais")
+    page.evaluate("Display.reset()")
+    page.reload()
+
+
+def observer_run(browser):
+    """Compte « observateur » : navigation réduite, aucun bouton d'action actif, aucune erreur."""
+    server = ui_mock.serve(8774, background=True, role="observer")
+    base = "http://127.0.0.1:8774/console/"
+    try:
+        context = browser.new_context(viewport={"width": 1180, "height": 900}, color_scheme="dark", locale="fr-FR", reduced_motion="reduce")
+        page = context.new_page()
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        allowed = ["overview", "apps", "system", "alerts", "report"]
+        page.goto(base + "#overview")
+        page.reload()
+        settle(page, "overview")
+        shown = page.evaluate("[...document.querySelectorAll('#nav a[data-view]')].map((a) => a.dataset.view)")
+        if sorted(shown) != sorted(allowed):
+            fail(f"observateur : navigation {shown}, attendu {allowed}")
+        for view in allowed:
+            page.goto(base + "#" + view)
+            page.reload()
+            settle(page, view)
+            active = page.evaluate(f"""[...document.querySelectorAll('#view-{view} .actions button, #view-{view} form button[type=submit]')]
+                .filter((b) => b.getBoundingClientRect().width > 0 && !b.disabled && !['overview-refresh', 'overview-customize', 'overview-kiosk'].includes(b.id)
+                  && !/Actualiser|Rafraîchir|Voir/.test(b.textContent)).map((b) => b.id || b.textContent.trim().slice(0, 25))""")
+            if active:
+                fail(f"observateur : {view} garde des boutons d'action actifs : {active}")
+            check_page(page, view, "obs", errors)
+        page.goto(base + "#users")                                     # page interdite : retour à la vue d'ensemble, sans erreur
+        page.wait_for_timeout(500)
+        if page.evaluate("document.getElementById('view-users') && !document.getElementById('view-users').classList.contains('hidden')"):
+            fail("observateur : la page Comptes reste accessible")
+        context.close()
+    finally:
+        server.shutdown()
+
+
 def journey_mobile(page, base):
     page.goto(base + "#overview")
     settle(page, "overview")
@@ -215,9 +300,12 @@ def main():
                     settle(page, "overview")
                     contrast_modes(page)
                     journeys(page, base)
+                    journeys_extra(page, base)
                 if tag == "m" and not ONLY:
                     journey_mobile(page, base)
                 context.close()
+            if not ONLY:
+                observer_run(browser)
             browser.close()
     finally:
         server.shutdown()

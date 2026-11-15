@@ -42,6 +42,8 @@ interdit n'apparaît dans un libellé de bouton.
 | Restaurer | `undo` | Remettre des données depuis une sauvegarde. |
 | Copier | `copy` | Copier dans le presse-papiers. |
 | Afficher | `eye` | Montrer une information masquée ou la suite d’une liste. |
+| Régler | `sliders` | Ouvrir la page qui règle un point de configuration. |
+| Défaire | `undo` | Annuler une action qui vient d’être faite : notification avec retour immédiat. |
 | Installer | `play` | Mettre en place une application. |
 | Activer | `play` | Mettre une fonction en service. |
 | Désactiver | `ban` | Mettre une fonction hors service. |

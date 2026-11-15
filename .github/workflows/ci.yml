@@ -18,6 +18,7 @@ jobs:
       - name: Dépendances
         run: |
           pip install pyyaml playwright pillow
+          npm install --no-save axe-core@4.10.2
           playwright install --with-deps chromium
       # Contrôles statiques, puis tests unitaires, dont la mise à jour N-1 -> N (sans Docker)
       - name: Tests

@@ -3,6 +3,7 @@
 // tiroir de tâches, confirmation, navigation) est dans ui.js ; les pages récentes dans features.js.
 
 async function api(path, body) {
+  if (body !== undefined && readonlyMode() && path !== '/api/prefs') throw new Error(tr('Lecture seule : cette action est réservée aux administrateurs.'));
   const options = body === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   };
@@ -91,7 +92,7 @@ async function loadSteps() {
 }
 
 async function loadApps() {
-  loadSteps().catch(showError);
+  if (!readonlyMode()) loadSteps().catch(showError);
   api('/api/appliance').then((data) => renderAppliance(data)).catch(() => {});
   const status = await api('/api/status');
   const notice = $('apps-state');
@@ -124,7 +125,7 @@ async function loadUsers() {
   const { users } = await api('/api/users');
   const session = await api('/api/session');
   $('users-list').replaceChildren(...users.map((user) => {
-    const input = el('input', { type: 'password', minlength: '8', placeholder: 'Nouveau mot de passe', autocomplete: 'new-password' });
+    const input = el('input', { type: 'password', minlength: '8', placeholder: 'Nouveau mot de passe', autocomplete: 'new-password', 'aria-label': `Nouveau mot de passe de ${user.login}` });
     const change = el('button', {
       class: 'btn sm', type: 'button',
       onclick: () => {
@@ -152,8 +153,8 @@ async function loadTrackers() {
   const data = await api('/api/trackers');
   const rules = Object.entries(data.rules);
   $('rules-list').replaceChildren(...(rules.length ? rules.map(([keyword, rule]) => {
-    const hours = el('input', { type: 'number', min: '0', value: rule.min_seed_hours ?? 0 });
-    const ratio = el('input', { type: 'number', step: '0.1', min: '-1', value: rule.max_ratio ?? -1 });
+    const hours = el('input', { type: 'number', min: '0', value: rule.min_seed_hours ?? 0, 'aria-label': `Durée minimale de partage en heures, ${rule.name || keyword}` });
+    const ratio = el('input', { type: 'number', step: '0.1', min: '-1', value: rule.max_ratio ?? -1, 'aria-label': `Ratio maximal, ${rule.name || keyword}` });
     return el('tr', {}, el('td', {}, rule.name || keyword), el('td', {}, hours), el('td', {}, ratio),
       el('td', {}, el('button', {
         class: 'btn sm', type: 'button',
@@ -266,11 +267,11 @@ async function loadShares() {
     : [emptyRow(6, 'Aucun partage : ajoutez-en un ci-dessous.')]));
   const mounted = data.shares.filter((s) => s.mounted);
   $('roles-list').replaceChildren(...data.roles.map((role) => {
-    const choice = el('select', {},
+    const choice = el('select', { 'aria-label': `Emplacement : ${role.label}` },
       el('option', { value: '' }, role.local ? 'Stockage local' : 'Désactivé'),
       ...mounted.map((s) => el('option', { value: s.name }, `Partage ${s.name}`)));
     choice.value = role.share;
-    const sub = el('input', { value: role.path, placeholder: role.path });
+    const sub = el('input', { value: role.path, placeholder: role.path, 'aria-label': `Sous-dossier : ${role.label}` });
     const toggle = () => { sub.disabled = !choice.value; };
     choice.addEventListener('change', toggle);
     toggle();
@@ -478,7 +479,7 @@ function fillNested(form, values) {
 const LEVEL_CLASS = { critical: 'err', warning: 'warn', ok: 'ok' };
 async function loadAlerts() {
   const data = await api('/api/alerts');
-  fillNested($('alerts-form'), data.settings);
+  if (data.settings) fillNested($('alerts-form'), data.settings);
   const rows = data.active.map((a) => el('li', {}, pill(a.notified ? 'signalé' : 'constaté', LEVEL_CLASS[a.level] || 'warn'),
     ` ${a.title}`, a.detail ? el('span', { class: 'muted' }, ` : ${a.detail}`) : null));
   $('alerts-active').replaceChildren(...(rows.length ? rows : [emptyItem('Aucun problème constaté.')]));
@@ -530,6 +531,7 @@ async function loadSystem() {
   netPrev = null;
   await refreshSystem();
   refreshContainers().catch(showError);
+  if (readonlyMode()) { clearInterval(viewTimer); viewTimer = setInterval(() => { refreshSystem().catch(() => {}); }, 5000); setInterval_containers(); return; }
   const sources = await api('/api/system/sources');
   const previous = $('log-source').value;
   $('log-source').replaceChildren(
@@ -668,17 +670,21 @@ async function loadVersions() {
   $('versions-list').replaceChildren(...rows);
 }
 
-const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadGpu().catch(showError); }, alerts: loadAlerts, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: loadSettings, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
-  guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal() };
+const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: loadAlerts, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); }, catalog: loadCatalog, settings: loadSettings, apps: loadApps, users: loadUsers, trackers: loadTrackers, shares: loadShares, vpn: loadVpn, domain: async () => { await loadApps(); await loadRemote(); }, p2p: loadP2p, secrets: null,
+  guests: loadGuests, cleanup: loadCleanup, journal: () => loadJournal(), setup: loadSetup, report: loadReport };
 
 function route() {
   const requested = location.hash.slice(1);
-  const name = requested in VIEWS ? requested : 'overview';
+  // #kiosk : la vue d'ensemble en grand, sans menu ; tout autre chemin quitte le mode kiosque
+  if (requested === 'kiosk') enterKiosk(); else exitKiosk();
+  const target = requested === 'kiosk' ? 'overview' : requested;
+  const name = target in VIEWS && (!readonlyMode() || OBSERVER_VIEWS.includes(target)) ? target : 'overview';
+  setCustomizing(false);
   for (const section of document.querySelectorAll('.view')) section.classList.add('hidden');
   const view = $(`view-${name}`);
   view.classList.remove('hidden');
   setActiveNav(name);
-  document.title = `${NAV.flatMap((g) => g.items).find((i) => i.view === name).label} - SeedBoxBuntu`;
+  document.title = `${tr(NAV.flatMap((g) => g.items).find((i) => i.view === name).label)} - SeedBoxBuntu`;
   clearInterval(viewTimer);
   clearInterval(containersTimer);
   clearInterval(featureTimer);
@@ -827,16 +833,22 @@ $('secrets-show').addEventListener('click', async () => {
   try { renderSecrets(await api('/api/credentials')); } catch (error) { showError(error); }
 });
 
-buildNav();
-initFeatures();
-initPages();
-watchDecorations();
-window.addEventListener('hashchange', route);
-api('/api/session').then((session) => {
-  for (const node of document.querySelectorAll('.who')) node.textContent = session.user;
-  $('version').textContent = session.version;
-}).catch(showError);
-route();
+async function start() {
+  try {
+    const session = await loadSession();
+    for (const node of document.querySelectorAll('.who')) node.textContent = session.user;
+    $('version').textContent = session.version;
+    if (adoptAccountLanguage()) return;
+  } catch (error) { showError(error); }
+  buildNav();
+  initFeatures();
+  initPages();
+  initExtras();
+  watchDecorations();
+  window.addEventListener('hashchange', route);
+  route();
+}
+start();
 
 // Application installable (PWA) : l'interface reste ouverte sans réseau, les données non
 function showOffline() { $('offline').classList.toggle('hidden', navigator.onLine); }

@@ -22,6 +22,8 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl gpu show|set|apply|test   transcodage matériel de Jellyfin (GPU)
   seedboxctl cleanup scan|show|trash|restore|empty   assistant de nettoyage avec corbeille
   seedboxctl metrics collect|show|forecast   historique des ressources, prévision de saturation des disques
+  seedboxctl report show|build|send|set|auto  rapport hebdomadaire (canaux d'alerte)
+  seedboxctl assistant show                  liste de contrôle de la configuration
   seedboxctl offsite show|set|connection|push|restore-test   sauvegarde hors du serveur (rclone)
   seedboxctl appliance status|check|apply|rollback|source|auto|signer   mise à jour de l'appliance depuis GitHub (sans ISO)
 """
@@ -68,12 +70,13 @@ SESSION_IMAGE = "seedbox/tracker-session"
 TRAEFIK_IP = "172.30.0.2"
 P2P_SERVICE_USER = "seedbox-service"
 
-ROLES = ("admin", "manager", "user")
+ROLES = ("admin", "manager", "user", "observer")
 # Groupe Authelia de chaque rôle. « manager » : Radarr, Sonarr, Prowlarr, qBittorrent et les applications
-# reliées du catalogue, sans la console, Traefik, Dockge, Jackett ni autobrr.
-ROLE_GROUPS = {"admin": "admins", "manager": "managers", "user": "users"}
+# reliées du catalogue, sans la console, Traefik, Dockge, Jackett ni autobrr. « observer » : comme un utilisateur, plus la
+# console en lecture seule (vue d'ensemble, applications, système, alertes, rapport) ; jamais d'action ni de secret.
+ROLE_GROUPS = {"admin": "admins", "manager": "managers", "user": "users", "observer": "observers"}
 # Droits Seerr : ADMIN = 2 ; gestionnaire = MANAGE_REQUESTS (16) + REQUEST (32) + AUTO_APPROVE (128) ; utilisateur = REQUEST (32)
-SEERR_PERMISSIONS = {"admin": 2, "manager": 16 | 32 | 128, "user": 32}
+SEERR_PERMISSIONS = {"admin": 2, "manager": 16 | 32 | 128, "user": 32, "observer": 32}
 VALID_LOGIN = re.compile(r"^[a-z][a-z0-9_.-]{1,30}$")
 MIN_PASSWORD = 8
 
@@ -257,6 +260,33 @@ def cleanup():
     if here not in sys.path:
         sys.path.insert(0, here)
     import cleanup as module
+    return module
+
+
+def weekly_report():
+    """Rapport hebdomadaire, chargé à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import report as module
+    return module
+
+
+def assistant():
+    """Assistant de première installation (liste de contrôle), chargé à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import assistant as module
+    return module
+
+
+def notifications():
+    """Journal d'événements et préférences d'interface, chargés à la demande."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import notifications as module
     return module
 
 
@@ -1793,7 +1823,8 @@ def vpn_port():
 # ----------------------------------------------------------------------------
 def user_list():
     users = users_load()
-    return [{"login": login, "role": "admin" if "admins" in user["groups"] else "manager" if "managers" in user["groups"] else "user"}
+    return [{"login": login, "role": "admin" if "admins" in user["groups"] else "manager" if "managers" in user["groups"]
+            else "observer" if "observers" in user["groups"] else "user"}
             for login, user in sorted(users.items())]
 
 
@@ -1860,7 +1891,7 @@ def p2p_user_id(login, cookie):
 def user_add(login, password, role="user"):
     validate_account(login, password)
     if role not in ROLES:
-        raise SeedboxError("rôle invalide : admin, manager ou user")
+        raise SeedboxError("rôle invalide : admin, manager, user ou observer")
     if login in users_load():
         raise SeedboxError(f"le compte {login} existe déjà")
     warnings = []
@@ -1900,7 +1931,7 @@ def user_add(login, password, role="user"):
 def user_set_role(login, role):
     """Change le rôle d'un compte existant partout : Authelia, Jellyfin, Seerr, p2p-aggregator."""
     if role not in ROLES:
-        raise SeedboxError("rôle invalide : admin, manager ou user")
+        raise SeedboxError("rôle invalide : admin, manager, user ou observer")
     users = users_load()
     if login not in users:
         raise SeedboxError(f"compte {login} inconnu")
@@ -2620,6 +2651,10 @@ def main():
     met.add_parser("forecast")
     met_show = met.add_parser("show")
     met_show.add_argument("--range", default="24h")
+    rep = commands.add_parser("report", help="rapport hebdomadaire de l'état du serveur").add_subparsers(dest="action", required=True)
+    for name in ("show", "build", "send", "set", "auto"):
+        rep.add_parser(name)
+    commands.add_parser("assistant", help="liste de contrôle de la configuration").add_subparsers(dest="action", required=True).add_parser("show")
     off = commands.add_parser("offsite", help="sauvegarde hors du serveur (rclone) et test de restauration").add_subparsers(
         dest="action", required=True)
     for name in ("show", "set", "connection", "push", "clear"):
@@ -2930,6 +2965,20 @@ def main():
             locked(module.empty)(args.days)
         else:
             locked(module.docker_prune)()
+    elif args.command == "report":
+        module = weekly_report()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "build":
+            print(module.build_and_store()["text"])
+        elif args.action == "send":
+            locked(module.send)()
+        elif args.action == "set":
+            module.save(json.loads(sys.stdin.read() or "{}"))
+        else:
+            module.auto()
+    elif args.command == "assistant":
+        assistant().show()
     elif args.command == "metrics":
         module = metrics()
         if args.action == "collect":

@@ -54,6 +54,13 @@ access_control:
       policy: @@POLICY_USERS@@
       subject:
         - 'group:managers'
+    # Observateurs : la console seulement ; le serveur de la console n'accepte d'eux que des lectures sans secret
+    - domain: @@AUTH_DOMAINS@@
+      resources:
+        - '^/console(/|$)'
+      policy: @@POLICY_USERS@@
+      subject:
+        - 'group:observers'
     # Indispensable : un compte hors du groupe admins (ou gestionnaire sur ce chemin) passerait sinon à la règle suivante
     - domain: @@AUTH_DOMAINS@@
       resources:
@@ -66,6 +73,7 @@ access_control:
         - 'group:admins'
         - 'group:managers'
         - 'group:users'
+        - 'group:observers'
 
 # Sessions dans Redis (mot de passe : AUTHELIA_SESSION_REDIS_PASSWORD) : elles survivent au redémarrage d'Authelia
 session:

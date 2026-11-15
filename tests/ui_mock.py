@@ -25,8 +25,31 @@ def metrics(rng):
         "forecast": [{"path": "/mnt/storage", "total": 4e12, "used": 2.9e12, "per_day": 3.1e10, "days": 35, "full_on": "2026-12-16", "reliable": True, "r2": .93, "span_days": 14},
                      {"path": "/", "total": 120e9, "used": 40e9, "per_day": 0, "days": None, "full_on": "", "reliable": False, "r2": 0, "span_days": 1}]}
 STATE = {"import_scanned": True}
-def route(p, q):
-    if p == "/api/session": return {"user": "vincent", "version": "2026.11.11-1600"}
+# role « observer » : le serveur de maquette refuse comme le vrai serveur ce qui n'est pas de la lecture
+OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance", "/api/metrics", "/api/notifications", "/api/prefs", "/api/report"}
+REPORT = {"generated": now - 3600, "sent": now - 3500, "level": "warning", "title": "Rapport hebdomadaire : points à regarder",
+          "text": "seedbox - semaine du 30/10/2026 au 06/11/2026\n\nÀ REGARDER\n- Services à l'arrêt ou en difficulté : Radarr\n- Stockage : 72 % utilisé\n\nServices : 4 / 6 fonctionnent\nDisque Stockage : 72 % (2,9 To sur 4 To)\nSauvegardes : 1 (dernière : 06/11/2026), copie hors serveur oui\nVersion : 2026.11.10-0945 (mise à jour disponible)\nIncidents cette semaine : 2 (Radarr ne répond plus)\nInvitations actives : 1"}
+def route(p, q, role="admin", PREFS=None):
+    PREFS = {} if PREFS is None else PREFS
+    if p == "/api/session":
+        return {"user": "vincent", "version": "2026.11.11-1600", "role": role, "readonly": role != "admin", "prefs": PREFS}
+    if p == "/api/prefs": return PREFS
+    if p == "/api/notifications": return {"now": now, "seen": PREFS.get("notif_seen", 0), "items": [
+        {"id": "a-radarr", "t": now - 720, "level": "critical", "title": "Radarr ne répond plus", "detail": "depuis 12 minutes", "active": True, "view": "alerts"},
+        {"id": "e-1", "t": now - 3600, "level": "ok", "title": "Sauvegarde : terminé", "detail": "", "active": False, "view": ""},
+        {"id": "e-2", "t": now - 86400, "level": "ok", "title": "Rétabli : Disque « Stockage » à 88 %", "detail": "", "active": False, "view": "alerts"}]}
+    if p == "/api/assistant": return {"todo": 4, "total": 10, "secure": False, "items": [
+        {"id": "deployed", "group": "Base", "title": "Services déployés", "state": "ok", "detail": "Tous les services sont déployés.", "view": "apps"},
+        {"id": "address", "group": "Base", "title": "Adresse d’accès", "state": "info", "detail": "Adresse automatique (IP du serveur) : un nom de domaine donne un certificat reconnu.", "view": "domain"},
+        {"id": "accounts", "group": "Sécurité", "title": "Comptes personnels", "state": "ok", "detail": "3 comptes.", "view": "users"},
+        {"id": "twofa", "group": "Sécurité", "title": "Double authentification", "state": "warn", "detail": "La double authentification est désactivée : un mot de passe volé suffit à entrer.", "view": "users"},
+        {"id": "storage", "group": "Stockage", "title": "Stockage et partages", "state": "ok", "detail": "2 partage(s) configuré(s).", "view": "shares"},
+        {"id": "backup", "group": "Données", "title": "Sauvegarde automatique", "state": "ok", "detail": "Sauvegarde automatique activée.", "view": "backup"},
+        {"id": "offsite", "group": "Données", "title": "Copie hors serveur", "state": "ok", "detail": "Copie hors serveur configurée.", "view": "backup"},
+        {"id": "alerts", "group": "Exploitation", "title": "Alertes", "state": "warn", "detail": "Aucun canal d’alerte : un service en panne ne vous préviendra pas.", "view": "alerts"},
+        {"id": "updates", "group": "Exploitation", "title": "Mises à jour", "state": "info", "detail": "Mise à jour de l’appliance manuelle : activez-la ou vérifiez régulièrement.", "view": "settings"},
+        {"id": "report", "group": "Exploitation", "title": "Rapport hebdomadaire", "state": "unknown", "detail": "Contrôle impossible : exemple.", "view": "report"}]}
+    if p == "/api/report": return {"settings": {"enabled": True, "day": 0, "send": True}, "days": ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"], "last": REPORT, "channels": ["ntfy"]}
     if p == "/api/metrics": return metrics(q.get("range", ["24h"])[0])
     if p == "/api/system": return {"uptime": 900000, "load": [1.1, 1.0, .9], "cpus": 4, "memory": {"total": 16e9, "used": 7e9, "swap_total": 0, "swap_used": 0}, "network": {"interface": "eth0", "rx": 1e12, "tx": 5e11}, "disks": [{"label": "Stockage", "path": "/mnt/storage", "used": 2.9e12, "total": 4e12, "percent": 72}], "smart": {"available": False, "reason": "VM", "disks": []}, "time": now}
     if p == "/api/system/containers": return {"containers": []}
@@ -117,7 +140,13 @@ class H(http.server.BaseHTTPRequestHandler):
         if p.startswith("/errors/"):
             body = (WEB / "error.html").read_text().replace("{{status}}", "503").replace("{{title}}", "Service indisponible").replace("{{text}}", "Le service est arrêté ou en cours de redémarrage : réessayez dans une minute.")
             return self.send(200, body.encode(), "text/html; charset=utf-8")
-        if p.startswith("/console/api/"): return self.send(200, route(p[len("/console"):], urllib.parse.parse_qs(u.query)))
+        if p.startswith("/console/api/"):
+            api = p[len("/console"):]
+            if self.role == "observer" and api not in OBSERVER_GET:
+                return self.send(403, {"error": "lecture seule : cette action est réservée aux administrateurs"})
+            body = route(api, urllib.parse.parse_qs(u.query), self.role, self.prefs)
+            if self.role == "observer" and api == "/api/alerts": body = {k: body[k] for k in ("active",)} | {"channels": []}
+            return self.send(200, body)
         rel = p[len("/console/"):] or "index.html"
         f = WEB / rel
         if f.is_file():
@@ -127,11 +156,16 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0); body = json.loads(self.rfile.read(n) or b"{}")
         CALLS.append((self.path, body))
+        if self.role == "observer" and not self.path.endswith("/api/prefs"):
+            return self.send(403, {"error": "lecture seule : cette action est réservée aux administrateurs"})
+        if self.path.endswith("/api/prefs"): self.prefs.update(body); return self.send(200, self.prefs)
+        if self.path.endswith("/api/report/build"): return self.send(200, REPORT)
         if self.path.endswith("/guests/invite"): return self.send(200, {"id": "ab12", "token": "T" * 32, "path": "/invite/" + "T" * 32, "expires": now + 86400 * 7})
         if "/jobs/" in self.path: return self.send(200, {})
         self.send(200, {"job": "j1"})
-def serve(port=8766, background=False):
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), H)
+def serve(port=8766, background=False, role="admin", prefs=None):
+    handler = type("Handler", (H,), {"role": role, "prefs": dict(prefs or {})})
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
     if background:
         threading.Thread(target=server.serve_forever, daemon=True).start()
         return server

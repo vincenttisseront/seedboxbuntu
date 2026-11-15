@@ -6,12 +6,13 @@
 // (navigation privée, données bloquées) les valeurs par défaut s'appliquent.
 (() => {
   const KEY = 'sb.display';
-  const DEFAULTS = { theme: 'auto', density: 'comfortable', contrast: 'normal', text: 'normal' };
+  const DEFAULTS = { theme: 'auto', density: 'comfortable', contrast: 'normal', text: 'normal', lang: 'fr' };
   const CHOICES = {
     theme: ['auto', 'light', 'dark'],
     density: ['comfortable', 'compact'],
     contrast: ['normal', 'high'],
     text: ['normal', 'large', 'xlarge'],
+    lang: ['fr', 'en'],
   };
   const THEME_COLOR = { dark: '#020617', light: '#f1f5f9' };
   const dark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
@@ -32,6 +33,7 @@
     root.dataset.contrast = settings.contrast;
     root.dataset.density = settings.density;
     root.dataset.text = settings.text;
+    root.lang = settings.lang;
     const meta = document.querySelector('meta[name=theme-color]');
     if (meta) meta.setAttribute('content', THEME_COLOR[scheme]);
   }
@@ -44,8 +46,11 @@
   apply(current);
   if (dark && dark.addEventListener) dark.addEventListener('change', () => apply(current));
 
+  // La langue n'est « choisie » que si elle a été enregistrée : sinon, la préférence du compte (serveur) peut s'appliquer
+  const chosen = (key) => { try { return key in JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (error) { return false; } };
+
   window.Display = {
-    CHOICES, DEFAULTS,
+    CHOICES, DEFAULTS, chosen,
     get: () => ({ ...current }),
     set(patch) { current = { ...current, ...patch }; apply(current); save(current); return { ...current }; },
     reset() { current = { ...DEFAULTS }; apply(current); save(current); return { ...current }; },

@@ -1,0 +1,11 @@
+[Unit]
+Description=SeedBoxBuntu - rapport hebdomadaire (envoyé le jour choisi dans la console)
+After=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl report auto
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=10min

@@ -69,11 +69,29 @@ async function overviewGuests() {
     `${accounts} compte(s) invité(s)${next ? ` · prochaine échéance ${fmtDay(next)}` : ''}`, active.length ? 'Information' : 'OK');
 }
 
+// Toujours chargés : ils alimentent aussi les cartes « Disques » et « Problèmes en cours » sous les tuiles
+const OVERVIEW_ALWAYS = new Set(['space', 'alerts']);
+function overviewJobs() {
+  const loaders = { health: overviewHealth, space: overviewSpace, updates: overviewUpdates, alerts: overviewAlerts, backup: overviewBackup, guests: overviewGuests, setup: overviewSetup };
+  const shown = new Set(visibleTiles());
+  return Object.entries(loaders).filter(([id]) => (shown.has(id) || OVERVIEW_ALWAYS.has(id)) && tileLayout().some((t) => t.id === id)).map(([id, run]) => [`tile-${id}`, run]);
+}
+
+let overviewFailures = 0;
+async function refreshOverview() {
+  applyTileLayout();
+  const results = await Promise.all(overviewJobs().map(([id, run]) => run().then(() => true, (error) => { tileFailed(id, error); return false; })));
+  overviewFailures = results.every((ok) => !ok) ? overviewFailures + 1 : 0;
+  if (kioskActive()) {
+    kioskUpdated(overviewFailures === 0);
+    if (overviewFailures >= 5) location.reload();                 // session expirée ou réseau coupé : retour à la connexion
+  }
+}
+
 async function loadOverview() {
-  const jobs = [['tile-health', overviewHealth], ['tile-space', overviewSpace], ['tile-updates', overviewUpdates], ['tile-alerts', overviewAlerts], ['tile-guests', overviewGuests]];
-  await Promise.all(jobs.map(([id, run]) => run().catch((error) => tileFailed(id, error))));
+  await refreshOverview();
   clearInterval(viewTimer);
-  viewTimer = setInterval(() => Promise.all(jobs.map(([id, run]) => run().catch((error) => tileFailed(id, error)))), 30000);
+  viewTimer = setInterval(() => { refreshOverview().catch(() => {}); }, 30000);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -144,7 +162,12 @@ function initPages() {
   });
   for (const button of document.querySelectorAll('#display-open, [data-display-open], #sg-display')) button.addEventListener('click', openDisplay);
   $('display-close').addEventListener('click', () => $('display-dialog').close());
-  $('display-reset').addEventListener('click', () => { window.Display.reset(); refreshDisplay(); renderContrastIfOpen(); });
+  $('display-reset').addEventListener('click', () => {
+    const before = window.Display.get();
+    window.Display.reset(); refreshDisplay(); renderContrastIfOpen();
+    if (before.lang !== window.Display.get().lang) { languageChanged(window.Display.get().lang); return; }
+    undoToast('Affichage réinitialisé.', () => { window.Display.set(before); refreshDisplay(); renderContrastIfOpen(); });
+  });
   $('display-dialog').addEventListener('close', renderContrastIfOpen);
   $('display-dialog').addEventListener('click', renderContrastIfOpen);
   $('sg-contrast-run').addEventListener('click', renderContrast);

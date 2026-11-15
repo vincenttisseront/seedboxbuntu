@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 *.iso
 *.sha256
+tests/visual/current/
+node_modules/

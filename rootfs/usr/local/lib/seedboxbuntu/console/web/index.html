@@ -15,8 +15,11 @@
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="app.css">
 <script src="display.js"></script>
+<script src="i18n.js"></script>
+<script src="lang-en.js"></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Aller au contenu</a>
 <div id="offline" class="notice warn hidden" role="status">Hors connexion : les données affichées peuvent être périmées et les actions sont indisponibles.</div>
 <div class="shell">
 <aside class="side">
@@ -25,6 +28,8 @@
   <nav id="nav" aria-label="Navigation principale"></nav>
   <div class="side-foot">
     <span class="who"></span>
+    <button class="btn sm" type="button" data-icon="search" data-palette-open aria-keyshortcuts="Control+K Meta+K">Rechercher <kbd>Ctrl K</kbd></button>
+    <button class="btn sm" type="button" data-icon="bell" data-notif-open>Notifications<span class="badge hidden" data-notif-badge></span></button>
     <button id="display-open" class="btn sm" type="button" data-icon="sun">Affichage</button>
   </div>
 </aside>
@@ -32,19 +37,24 @@
 <header class="top">
   <a class="brand" href="#overview"><img src="logo.svg" alt="" width="28" height="28"><span class="brand-name">SeedBox<b>Buntu</b></span></a>
   <span class="who"></span>
-  <button class="btn sm" type="button" data-icon="sun" data-display-open>Affichage</button>
+  <button class="icon-btn" type="button" data-palette-open aria-label="Rechercher"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-search"/></svg></button>
+  <button class="icon-btn" type="button" data-notif-open aria-label="Notifications"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-bell"/></svg><span class="badge hidden" data-notif-badge></span></button>
+  <button class="icon-btn" type="button" data-display-open aria-label="Affichage"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-sun"/></svg></button>
 </header>
 
-<main>
+<main id="main" tabindex="-1">
   <section id="view-overview" class="view hidden">
     <header class="page-head"><div><h1>Vue d’ensemble</h1><p class="sub">L’état de la seedbox en un coup d’œil : santé des services, espace, mises à jour, alertes et invitations.</p></div>
-      <div class="actions"><button id="overview-refresh" class="btn" type="button">Actualiser</button></div></header>
-    <div class="tiles">
+      <div class="actions"><button id="overview-customize" class="btn" type="button" data-icon="sliders" aria-pressed="false">Personnaliser</button><button id="overview-kiosk" class="btn" type="button" data-icon="monitor">Mode kiosque</button><button id="overview-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <div id="tiles-hidden" class="notice info hidden"></div>
+    <div class="tiles" id="tiles">
       <article id="tile-health" class="card tile"><div class="tile-head"><h2>Santé</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#apps">Voir les applications</a></article>
       <article id="tile-space" class="card tile"><div class="tile-head"><h2>Espace</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#system">Voir le système</a></article>
       <article id="tile-updates" class="card tile"><div class="tile-head"><h2>Mises à jour</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#settings">Voir les paramètres</a></article>
       <article id="tile-alerts" class="card tile"><div class="tile-head"><h2>Alertes</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#alerts">Voir les alertes</a></article>
+      <article id="tile-backup" class="card tile"><div class="tile-head"><h2>Sauvegardes</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#backup">Voir les sauvegardes</a></article>
       <article id="tile-guests" class="card tile"><div class="tile-head"><h2>Invitations</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#guests">Voir les invités</a></article>
+      <article id="tile-setup" class="card tile"><div class="tile-head"><h2>Configuration</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#setup">Ouvrir l’assistant</a></article>
     </div>
     <div class="card half"><h2>Disques</h2><div id="overview-disks"></div></div>
     <div class="card half"><h2>Problèmes en cours</h2><ul id="overview-alerts" class="checks"></ul></div>
@@ -654,6 +664,29 @@
       <button class="btn primary" type="submit">Appliquer</button>
     </form>
   </section>
+  <section id="view-setup" class="view hidden">
+    <header class="page-head"><div><h1>Assistant de configuration</h1><p class="sub">Les points à régler pour une seedbox sûre. Chaque ligne est calculée sur l’état réel du serveur et mène à la page qui la règle.</p></div>
+      <div class="actions"><button id="setup-dismiss" class="btn" type="button" data-icon="ban">Ne plus me le rappeler</button><button id="setup-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <div id="setup-summary" class="notice info"></div>
+    <div class="table-wrap card"><table>
+      <thead><tr><th>Point</th><th>État</th><th>Détail</th><th></th></tr></thead>
+      <tbody id="setup-list"></tbody>
+    </table></div>
+  </section>
+  <section id="view-report" class="view hidden">
+    <header class="page-head"><div><h1>Rapport hebdomadaire</h1><p class="sub">Un résumé de la semaine (services, disques, sauvegardes, mises à jour, incidents), envoyé sur vos canaux d’alerte.</p></div>
+      <div class="actions"><button id="report-build" class="btn" type="button">Actualiser</button><button id="report-send" class="btn primary" type="button" data-icon="send">Envoyer</button></div></header>
+    <div id="report-channels" class="notice hidden"></div>
+    <form id="report-form" class="card form half">
+      <h2>Envoi automatique</h2>
+      <label class="check"><input type="checkbox" name="enabled">Envoyer un rapport chaque semaine</label>
+      <label>Jour d’envoi<select name="day" id="report-day"></select></label>
+      <label class="check"><input type="checkbox" name="send">Envoyer sur les canaux d’alerte (sinon le rapport reste visible ici)</label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+    <div class="card half"><div class="card-head"><h2 id="report-title">Dernier rapport</h2><span id="report-state"></span></div>
+      <p class="muted small" id="report-date"></p><pre id="report-text" class="log"></pre></div>
+  </section>
   <section id="view-styleguide" class="view hidden">
     <header class="page-head"><div><h1>Guide de style</h1><p class="sub">Chaque composant de la console, tel qu’il est réellement rendu. Une nouvelle page se construit uniquement avec ces éléments et les jetons de tokens.css.</p></div>
       <div class="actions"><button id="sg-display" class="btn" type="button" data-icon="sun">Affichage</button></div></header>
@@ -680,7 +713,7 @@
       <label>Zone de texte<textarea rows="2" spellcheck="false">ligne 1</textarea></label>
       <label class="check"><input type="checkbox" checked>Case à cocher</label>
       <div class="demo-row"><div class="segmented" role="group" aria-label="Exemple"><button class="seg active" type="button">24 h</button><button class="seg" type="button">7 j</button><button class="seg" type="button">30 j</button></div></div>
-      <div class="tabs" role="tablist"><button class="tab active" type="button">Onglet actif</button><button class="tab" type="button">Autre onglet</button></div></form>
+      <div class="tabs" role="tablist"><button class="tab active" type="button" role="tab" aria-selected="true">Onglet actif</button><button class="tab" type="button" role="tab" aria-selected="false">Autre onglet</button></div></form>
     <div class="card half"><h2>Tableau</h2><div class="table-wrap"><table>
       <thead><tr><th>Application</th><th>État</th><th></th></tr></thead>
       <tbody><tr><td>Jellyfin</td><td id="sg-row-ok"></td><td><button class="btn sm" type="button">Redémarrer</button></td></tr><tr><td>Radarr</td><td id="sg-row-warn"></td><td><button class="btn sm" type="button">Redémarrer</button></td></tr></tbody>
@@ -721,9 +754,22 @@
   <div class="display-controls"></div>
   <div class="dialog-actions"><button id="display-reset" class="btn" type="button" data-icon="undo">Réinitialiser</button><button id="display-close" class="btn primary" type="button">Fermer</button></div>
 </dialog>
+<dialog id="palette" aria-label="Rechercher une page ou une action">
+  <input id="palette-input" type="search" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" aria-label="Rechercher une page ou une action" placeholder="Page, action ou application…" autocomplete="off" spellcheck="false">
+  <ul id="palette-list" role="listbox" aria-label="Résultats"></ul>
+  <p class="muted small palette-hint">↑ ↓ pour choisir · Entrée pour ouvrir · Échap pour fermer</p>
+</dialog>
+<dialog id="notif-dialog" aria-labelledby="notif-title" class="wide">
+  <div class="card-head"><h2 id="notif-title">Notifications</h2><button id="notif-close" class="icon-btn" type="button" aria-label="Fermer"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-x"/></svg></button></div>
+  <ul id="notif-list" class="notif-list"></ul>
+  <div class="dialog-actions"><button id="notif-read" class="btn" type="button" data-icon="check">Tout marquer comme lu</button></div>
+</dialog>
+<div id="kiosk-bar" class="kiosk-bar hidden"><time id="kiosk-clock"></time><span id="kiosk-updated" class="muted"></span>
+  <button id="kiosk-exit" class="btn sm" type="button" data-icon="x">Quitter le mode kiosque</button></div>
 <script src="ui.js"></script>
 <script src="features.js"></script>
 <script src="pages.js"></script>
+<script src="extras.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -505,7 +505,9 @@ menu_tools() {   # sauvegarde, versions des services, double authentification
       restoretest "Tester une restauration (copie distante si configurée)" \
       invite "Créer un lien d'invitation (7 jours, 1 utilisation)" \
       cleanup "Analyser l'espace récupérable (rien n'est supprimé)" \
-      journal "Dernières actions et connexions (journal d'audit)") || return 0
+      journal "Dernières actions et connexions (journal d'audit)" \
+      report "Rapport de la semaine (affiché ici, envoyé par les canaux d'alerte)" \
+      assistant "Liste de contrôle de la configuration (sécurité, sauvegardes, alertes)") || return 0
     case $c in
       backup) ctl_box "Sauvegarde" seedboxctl backup create ;;
       steps)  ctl_box "Étapes" seedboxctl steps retry ;;
@@ -518,6 +520,8 @@ menu_tools() {   # sauvegarde, versions des services, double authentification
 import os; d=json.load(sys.stdin); print("Lien (affiché une seule fois) :\n\nhttps://" + os.environ["HOST_ADDR"] + d["path"])' > "/run/seedbox-invite.$$" 2>&1
                    W --title "Invitation" --textbox "/run/seedbox-invite.$$" 12 78; rm -f "/run/seedbox-invite.$$" ;;
       cleanup)     ctl_box "Analyse" seedboxctl cleanup scan ;;
+      report)      ctl_box "Rapport de la semaine" seedboxctl report build ;;
+      assistant)   ctl_box "Liste de contrôle" seedboxctl assistant show ;;
       journal)     seedboxctl audit show --limit 40 > "/run/seedbox-audit.$$" 2>&1; W --title "Journal d'audit" --scrolltext --textbox "/run/seedbox-audit.$$" 22 110; rm -f "/run/seedbox-audit.$$" ;;
       twofa)  mode=$(W --title "Double authentification" --menu "Mode actuel : $(seedboxctl auth show 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])')" 12 76 3 \
                 none "Aucune" admins "Administrateurs seulement" all "Tous les comptes") || continue

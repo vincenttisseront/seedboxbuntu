@@ -438,7 +438,10 @@ async function loadCleanup() {
         el('button', { class: 'btn sm', type: 'button', onclick: (event) => {
           const ids = checkedIds(card);
           if (!ids.length) { showError(new Error('Cochez au moins un élément')); return; }
-          confirmAction(event.currentTarget, c.trashable ? `${ids.length} élément(s) iront dans la corbeille ; ils pourront être restaurés tant qu’elle n’est pas vidée.` : `${ids.length} élément(s) seront supprimés définitivement, sans corbeille.`, () => runJob('/api/cleanup/trash', { ids }, loadCleanup));
+          confirmAction(event.currentTarget, c.trashable ? `${ids.length} élément(s) iront dans la corbeille ; ils pourront être restaurés tant qu’elle n’est pas vidée.` : `${ids.length} élément(s) seront supprimés définitivement, sans corbeille.`, () => runJob('/api/cleanup/trash', { ids }, () => {
+            loadCleanup();
+            if (c.trashable) undoToast(`${ids.length} élément(s) mis à la corbeille.`, () => runJob('/api/cleanup/restore', { ids }, loadCleanup));
+          }));
         } }, verb)),
       el('p', { class: 'muted small' }, c.hint + (c.count > c.items.length ? ` (les ${c.items.length} plus gros sont listés)` : '')),
       el('div', { class: 'table-wrap' }, table));

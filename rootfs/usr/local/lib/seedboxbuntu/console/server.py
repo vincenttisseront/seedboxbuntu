@@ -36,7 +36,7 @@ JOBS_LOCK = threading.Lock()
 PUBLIC_JOBS = set()                      # tâches lancées par une personne invitée : seul leur état est visible publiquement
 ATTEMPTS = {}                            # adresse -> instants des essais d'invitation (limite de débit)
 ATTEMPTS_LOCK = threading.Lock()
-PUBLIC_FILES = {"app.css", "tokens.css", "display.js", "invite.js", "logo.svg", "favicon.ico", "icon-192.png"}
+PUBLIC_FILES = {"app.css", "tokens.css", "display.js", "i18n.js", "lang-en.js", "invite.js", "logo.svg", "favicon.ico", "icon-192.png"}
 # Pages d'erreur de Traefik (statuts 502 à 504, application arrêtée ou lente) : texte fixe, sans donnée
 ERROR_PAGES = {"502": ("Application indisponible", "L'application ne répond pas correctement. Elle démarre peut-être encore : réessayez dans une minute."),
                "503": ("Service indisponible", "Le service est arrêté ou en cours de redémarrage : réessayez dans une minute."),
@@ -67,9 +67,16 @@ def start_job(title, argv, stdin=None):
         for line in process.stdout:
             job["log"] = (job["log"] + line)[-20000:]
         job["state"] = "ok" if process.wait() == 0 else "error"
+        ctl.notifications().record("job", f"{job['title']} : " + ("terminé" if job["state"] == "ok" else "échec"), "",
+                                   "ok" if job["state"] == "ok" else "warning")
 
     threading.Thread(target=worker, daemon=True).start()
     return identifier
+
+
+# Routes de lecture ouvertes aux observateurs (rôle « observer ») : aucun secret, aucun journal, aucun réglage
+OBSERVER_GET = {"/api/session", "/api/status", "/api/system", "/api/system/containers", "/api/alerts", "/api/appliance",
+                "/api/metrics", "/api/notifications", "/api/prefs", "/api/report"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -86,6 +93,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.last_payload = payload if isinstance(payload, dict) else {}
         body = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
+        if status >= 400 and self.command == "POST" and not getattr(self, "body_read", False):
+            # Refus avant lecture du corps : la connexion persistante ne doit pas lire ce reste comme une requête
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -128,10 +139,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({"error": "accès direct refusé"}, 403)
             return False
         groups = [g.strip() for g in self.headers.get("Remote-Groups", "").split(",")]
-        if "admins" not in groups:
-            self.send_json({"error": "réservé aux administrateurs"}, 403)
-            return False
-        return True
+        if "admins" in groups:
+            self.role = "admin"
+            return True
+        if "observers" in groups:                     # lecture seule : voir observer_allows()
+            self.role = "observer"
+            return True
+        self.send_json({"error": "réservé aux administrateurs"}, 403)
+        return False
+
+    def observer_allows(self, method, path):
+        """Un observateur ne fait que lire une liste fixe de routes sans secret ; il règle seulement ses préférences."""
+        if getattr(self, "role", "observer") != "observer":
+            return True
+        if method == "GET":
+            ok = not path.startswith("/api/") or path in OBSERVER_GET
+        else:
+            ok = path == "/api/prefs"
+        if not ok:
+            self.send_json({"error": "lecture seule : cette action est réservée aux administrateurs"}, 403)
+        return ok
+
+    def observer_view(self, path, payload):
+        """Retire ce qu'un observateur n'a pas à voir (réglages des alertes, source et journaux de mise à jour)."""
+        if getattr(self, "role", "observer") != "observer":
+            return payload
+        if path == "/api/alerts":
+            return {"active": payload["active"], "channels": payload["channels"]}
+        if path == "/api/appliance":
+            return {key: payload[key] for key in ("installed", "check", "status")}
+        return payload
 
     def body(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -140,6 +177,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
             # Un formulaire d'un autre site ne peut pas envoyer ce type sans contrôle CORS
             raise ctl.SeedboxError("type de contenu refusé")
+        self.body_read = True
         return json.loads(self.rfile.read(length) or b"{}")
 
     # --- routes -------------------------------------------------------------------
@@ -255,6 +293,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        self.role = "observer"                       # refus par défaut : authorized() fixe le rôle à chaque requête
         path = self.path.split("?", 1)[0]
         error = re.fullmatch(r"/errors/(50[234])", path)
         if error:                                    # appelée par Traefik (middleware errors) : aucune donnée, aucun accès
@@ -263,7 +302,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.public_get(path)
         if self.public_request():                    # un en-tête public n'ouvre jamais l'administration
             return self.send_json({"error": "accès refusé"}, 403)
-        if not self.authorized():
+        if not self.authorized() or not self.observer_allows("GET", path):
             return
         if not path.startswith("/api/"):
             return self.send_file(path)
@@ -273,6 +312,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({"error": str(error)}, 400)
 
     def do_POST(self):
+        self.role = "observer"
+        self.body_read = False
         self.last_status, self.last_payload = 0, {}
         path = self.path.split("?", 1)[0]
         if path == "/invite" or path.startswith("/invite/"):
@@ -282,7 +323,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json({"error": "requête invalide"}, 400)
         if self.public_request():
             return self.send_json({"error": "accès refusé"}, 403)
-        if not self.authorized():
+        if not self.authorized() or not self.observer_allows("POST", path):
             return
         data = {}
         try:
@@ -303,7 +344,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def route_get(self, path):
         if path == "/api/session":
-            return self.send_json({"user": self.headers.get("Remote-User", ""), "version": ctl.version()})
+            role = getattr(self, "role", "observer")
+            return self.send_json({"user": self.headers.get("Remote-User", ""), "version": ctl.version(),
+                                   "role": role, "readonly": role != "admin",
+                                   "prefs": ctl.notifications().prefs_get(self.headers.get("Remote-User", ""))})
+        if path == "/api/prefs":
+            return self.send_json(ctl.notifications().prefs_get(self.headers.get("Remote-User", "")))
+        if path == "/api/notifications":
+            feed = ctl.notifications().feed()
+            feed["seen"] = ctl.notifications().prefs_get(self.headers.get("Remote-User", "")).get("notif_seen", 0)
+            return self.send_json(feed)
+        if path == "/api/assistant":
+            return self.send_json(ctl.assistant().checklist())
+        if path == "/api/report":
+            return self.send_json(ctl.weekly_report().overview())
         if path == "/api/status":
             return self.send_json(ctl.status())
         if path == "/api/credentials":
@@ -333,7 +387,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             lines = int(query.get("lines", ["200"])[0] or 200)
             return self.send_json(ctl.sysinfo().logs(query.get("source", [""])[0], lines))
         if path == "/api/alerts":
-            return self.send_json(ctl.alerts().overview())
+            return self.send_json(self.observer_view(path, ctl.alerts().overview()))
         if path == "/api/backup":
             return self.send_json(ctl.backup().overview())
         if path == "/api/guests":
@@ -389,7 +443,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/shares":
             return self.send_json(ctl.shares().overview())
         if path == "/api/appliance":
-            return self.send_json(ctl.appliance().overview())
+            return self.send_json(self.observer_view(path, ctl.appliance().overview()))
         if path == "/api/settings/updates":
             return self.send_json(ctl.maintenance().updates_overview())
         if path == "/api/security":
@@ -424,6 +478,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def route_post(self, path, data):
+        if path == "/api/prefs":
+            return self.send_json(ctl.notifications().prefs_set(self.headers.get("Remote-User", ""), data))
+        if path == "/api/report/settings":
+            return self.send_json({"settings": ctl.weekly_report().save(data)})
+        if path == "/api/report/build":
+            return self.send_json(ctl.weekly_report().build_and_store())
+        if path == "/api/report/send":
+            return self.send_json({"job": start_job("Rapport hebdomadaire", ["report", "send"])})
         if path == "/api/users":
             ctl.validate_account(data["login"], data["password"])
             return self.send_json({"job": start_job(f"Création du compte {data['login']}", [

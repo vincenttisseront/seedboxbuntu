@@ -286,13 +286,15 @@ def check():
     now = time.time()
     state, found, sent = load_state(), findings(cfg), 0
     for key, (title, detail, level) in found.items():
-        entry = state.setdefault(key, {"seen": 0, "notified": 0, "title": title})
+        entry = state.setdefault(key, {"seen": 0, "notified": 0, "title": title, "since": now})
         entry.update(seen=entry["seen"] + 1, title=title, detail=detail, level=level)
         due = entry["notified"] == 0 and entry["seen"] >= CONFIRM_AFTER
         if entry["notified"] and now - entry["notified"] >= cfg["repeat_hours"] * 3600:
             due = True
         if due:
             notify(title, detail, level)
+            if entry["notified"] == 0:
+                ctl.notifications().record("alert", title, detail, level, "alerts")
             entry["notified"] = now
             sent += 1
             say(f"alerte : {title}")
@@ -300,6 +302,7 @@ def check():
         entry = state.pop(key)
         if entry.get("notified"):
             notify(f"Rétabli : {entry.get('title', key)}", "Le problème signalé n'est plus constaté.", "ok")
+            ctl.notifications().record("alert", f"Rétabli : {entry.get('title', key)}", "", "ok", "alerts")
             sent += 1
             say(f"rétabli : {entry.get('title', key)}")
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)

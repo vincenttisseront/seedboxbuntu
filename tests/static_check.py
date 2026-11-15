@@ -206,9 +206,9 @@ units = SRC / "rootfs/etc/systemd/system"
 post = (SRC / "rootfs/usr/local/lib/seedboxbuntu/postinstall.sh").read_text()
 enabled = set(re.findall(r"(seedbox-[a-z-]+\.timer)", post))
 check("minuteries activées : unités présentes", all((units / t).exists() for t in enabled), sorted(t for t in enabled if not (units / t).exists()))
-for timer in ("seedbox-appliance", "seedbox-restoretest", "seedbox-metrics"):
+for timer in ("seedbox-appliance", "seedbox-restoretest", "seedbox-metrics", "seedbox-report"):
     check(f"unité {timer} : service et minuterie", (units / f"{timer}.service").exists() and (units / f"{timer}.timer").exists() and f"{timer}.timer" in post)
-for name in ("offsite", "metrics", "cleanup", "gpu", "guests", "audit", "importer", "appliance"):
+for name in ("offsite", "metrics", "cleanup", "gpu", "guests", "audit", "importer", "appliance", "notifications", "assistant", "report"):
     check(f"module {name}.py présent", (SRC / f"rootfs/usr/local/lib/seedboxbuntu/{name}.py").exists())
 check("rclone installé par l'ISO", "rclone" in (SRC / "lib/60-autoinstall.sh").read_text())
 check("outil de manifeste et workflow de publication", (SRC / "tools/manifest.py").exists() and (SRC / ".github/workflows/release.yml").exists())

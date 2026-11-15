@@ -19,7 +19,8 @@ function el(tag, attrs = {}, ...children) {
 // ---------------------------------------------------------------------------------------------------------------
 //  Formats : une seule manière d'écrire une date, une taille, une durée, un débit
 // ---------------------------------------------------------------------------------------------------------------
-const LOCALE = 'fr-FR';
+const EN = document.documentElement.lang === 'en';
+const LOCALE = EN ? 'en-GB' : 'fr-FR';
 const asDate = (value) => {
   if (value === null || value === undefined || value === '' || value === 0) return null;
   const date = typeof value === 'number' ? new Date(value < 1e11 ? value * 1000 : value) : new Date(value);
@@ -39,8 +40,8 @@ const fmtFull = (value) => { const d = asDate(value); return d ? DATE_FULL.forma
 /** Taille : « 512 o », « 12 Ko », « 3,4 Mo », « 1,2 Go », « 2,50 To » (base 1024, un seul jeu d'unités). */
 function fmtSize(value) {
   const bytes = Number(value) || 0;
-  if (bytes < 1024) return `${Math.round(bytes)} o`;
-  const units = ['Ko', 'Mo', 'Go', 'To', 'Po'];
+  if (bytes < 1024) return `${Math.round(bytes)} ${EN ? 'B' : 'o'}`;
+  const units = EN ? ['KB', 'MB', 'GB', 'TB', 'PB'] : ['Ko', 'Mo', 'Go', 'To', 'Po'];
   const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length);
   const scaled = bytes / 1024 ** power;
   return `${scaled.toLocaleString(LOCALE, { maximumFractionDigits: power <= 1 ? 0 : power === 2 ? 1 : 2, minimumFractionDigits: 0 })} ${units[power - 1]}`;
@@ -50,7 +51,7 @@ const fmtRate = (value) => `${fmtSize(Math.max(0, value))}/s`;
 function fmtDuration(seconds) {
   const s = Math.max(0, Math.round(Number(seconds) || 0));
   const d = Math.floor(s / 86400); const h = Math.floor((s % 86400) / 3600); const m = Math.floor((s % 3600) / 60);
-  if (d) return `${d} j ${h} h`;
+  if (d) return `${d} ${EN ? 'd' : 'j'} ${h} h`;
   if (h) return `${h} h ${String(m).padStart(2, '0')} min`;
   if (m) return `${m} min`;
   return `${s} s`;
@@ -61,7 +62,7 @@ const AXIS_TIME = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-
 const fmtAxis = (value, byDay) => { const d = asDate(value); return d ? (byDay ? AXIS_DAY : AXIS_TIME).format(d) : ''; };
 /** Nombre à virgule française : « 1,25 ». */
 const fmtNumber = (value, digits = 1) => Number(value).toLocaleString(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits });
-const fmtPercent = (value) => `${Math.round(Number(value) || 0)} %`;
+const fmtPercent = (value) => `${Math.round(Number(value) || 0)}${EN ? '' : ' '}%`;
 
 // ---------------------------------------------------------------------------------------------------------------
 //  Icônes : un seul jeu (icons.svg), toujours via <use>
@@ -152,8 +153,11 @@ function setLabel(button, text) {
 // ---------------------------------------------------------------------------------------------------------------
 //  Notifications (toasts) et tiroir de tâches : le résultat d'une action apparaît à côté d'elle
 // ---------------------------------------------------------------------------------------------------------------
+/** Erreurs affichées pendant cette session : elles disparaissent de l'écran, le centre de notifications les garde. */
+const toastLog = [];
 function toast(kind, text, options = {}) {
   const key = statusKind(kind);
+  if (key === 'err' && !options.busy) { toastLog.unshift({ t: Date.now() / 1000, level: 'critical', title: text }); toastLog.length = Math.min(toastLog.length, 20); }
   const holder = $('toasts');
   const body = el('span', { class: 'toast-text' }, text);
   const close = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Fermer', onclick: () => api_close() }, icon('x'));
@@ -165,7 +169,7 @@ function toast(kind, text, options = {}) {
   if (options.action) head.append(el('button', { class: 'btn sm', type: 'button', onclick: options.action.run }, options.action.label));
   holder.append(node);
   while (holder.children.length > 4) holder.firstElementChild.remove();
-  setTimer(options.sticky ? 0 : key === 'err' ? 12000 : 5000);
+  setTimer(options.sticky ? 0 : options.ttl || (key === 'err' ? 12000 : 5000));
   return {
     close: api_close,
     update(newKind, newText, opts = {}) {
@@ -226,7 +230,7 @@ function ask({ title, message, confirm = 'Confirmer', danger = false }) {
 /** Demande confirmation dans une boîte de dialogue, puis exécute l'action. Le texte du bouton nomme l'action. */
 function confirmAction(button, message, action) {
   const verb = (button.getAttribute('aria-label') || button.textContent || 'Confirmer').trim();
-  const danger = button.classList.contains('danger') || /supprim|vider|effac|retir|révoqu/i.test(verb);
+  const danger = button.classList.contains('danger') || /supprim|vider|effac|retir|révoqu|delete|empty|remove|revoke|erase/i.test(verb);
   ask({ title: verb, message: /^Confirmer\s*\??$/.test(message) ? 'Cette action modifie le système. Voulez-vous continuer ?' : message, confirm: verb, danger })
     .then((yes) => { if (yes) action(); });
 }
@@ -236,6 +240,7 @@ const DISPLAY_LABELS = {
   density: ['Densité', { comfortable: 'Confortable', compact: 'Compacte' }],
   contrast: ['Contraste', { normal: 'Normal', high: 'Élevé' }],
   text: ['Taille du texte', { normal: 'Normale', large: 'Grande', xlarge: 'Très grande' }],
+  lang: ['Langue', { fr: 'Français', en: 'English' }],
 };
 function displayControls() {
   const current = window.Display.get();
@@ -244,7 +249,7 @@ function displayControls() {
     el('div', { class: 'segmented', role: 'group', 'aria-label': title },
       ...window.Display.CHOICES[key].map((choice) => el('button', {
         class: `seg${current[key] === choice ? ' active' : ''}`, type: 'button', 'aria-pressed': String(current[key] === choice),
-        onclick: () => { window.Display.set({ [key]: choice }); refreshDisplay(); },
+        onclick: () => { window.Display.set({ [key]: choice }); refreshDisplay(); if (key === 'lang') languageChanged(choice); },
       }, labels[choice])))));
 }
 function refreshDisplay() {
@@ -291,6 +296,8 @@ const GLOSSARY = [
   ['Restaurer', 'undo', 'Remettre des données depuis une sauvegarde.'],
   ['Copier', 'copy', 'Copier dans le presse-papiers.'],
   ['Afficher', 'eye', 'Montrer une information masquée ou la suite d’une liste.'],
+  ['Régler', 'sliders', 'Ouvrir la page qui règle un point de configuration.'],
+  ['Défaire', 'undo', 'Annuler une action qui vient d’être faite : notification avec retour immédiat.'],
   ['Installer', 'play', 'Mettre en place une application.'],
   ['Activer', 'play', 'Mettre une fonction en service.'],
   ['Désactiver', 'ban', 'Mettre une fonction hors service.'],
@@ -346,26 +353,32 @@ const NAV = [
     { view: 'secrets', label: 'Identifiants', icon: 'key' }] },
   { id: 'ops', label: 'Exploitation', icon: 'activity', items: [
     { view: 'system', label: 'Système', icon: 'monitor' }, { view: 'alerts', label: 'Alertes', icon: 'bell' },
+    { view: 'report', label: 'Rapport', icon: 'file' }, { view: 'setup', label: 'Assistant', icon: 'check-circle' },
     { view: 'journal', label: 'Journal', icon: 'file' }, { view: 'settings', label: 'Paramètres', icon: 'sliders' },
     { view: 'styleguide', label: 'Guide de style', icon: 'palette' }] },
 ];
+/** Pages d'un observateur : lecture seule, aucune page qui expose un secret ou un réglage. */
+const OBSERVER_VIEWS = ['overview', 'apps', 'system', 'alerts', 'report'];
+const readonlyMode = () => typeof SESSION !== 'undefined' && SESSION.readonly;
+/** Navigation visible pour le compte courant. */
+const visibleNav = () => NAV.map((g) => ({ ...g, items: g.items.filter((i) => !readonlyMode() || OBSERVER_VIEWS.includes(i.view)) })).filter((g) => g.items.length);
 const NAV_VIEWS = NAV.flatMap((g) => g.items.map((i) => i.view));
 const navLink = (item) => el('a', { href: `#${item.view}`, 'data-view': item.view }, icon(item.icon), el('span', {}, item.label));
 
 function buildNav() {
   const side = $('nav');
-  side.replaceChildren(...NAV.map((group) => (group.items.length === 1
+  side.replaceChildren(...visibleNav().map((group) => (group.items.length === 1
     ? el('div', { class: 'nav-group single' }, navLink(group.items[0]))
     : el('div', { class: 'nav-group' }, el('div', { class: 'nav-title' }, group.label), ...group.items.map(navLink)))));
   const bar = $('tabbar');
-  bar.replaceChildren(...NAV.map((group) => (group.items.length === 1
-    ? el('a', { href: `#${group.items[0].view}`, class: 'tabbar-item', 'data-group': group.id }, icon(group.icon), el('span', {}, 'Accueil'))
+  bar.replaceChildren(...visibleNav().map((group) => (group.items.length === 1
+    ? el('a', { href: `#${group.items[0].view}`, class: 'tabbar-item', 'data-group': group.id }, icon(group.icon), el('span', {}, group.id === 'overview' ? 'Accueil' : group.items[0].label))
     : el('button', { type: 'button', class: 'tabbar-item', 'data-group': group.id, 'aria-haspopup': 'true', 'aria-expanded': 'false',
       onclick: () => toggleSheet(group.id) }, icon(group.icon), el('span', {}, group.label)))));
 }
 function toggleSheet(groupId) {
   const sheet = $('sheet');
-  const group = NAV.find((g) => g.id === groupId);
+  const group = visibleNav().find((g) => g.id === groupId);
   const same = !sheet.classList.contains('hidden') && sheet.dataset.group === groupId;
   closeSheet();
   if (same) return;
