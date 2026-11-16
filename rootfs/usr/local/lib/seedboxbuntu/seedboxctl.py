@@ -1059,6 +1059,29 @@ def qbit_bind_interface(vpn):
     conf.write_text("\n".join(lines) + "\n")
 
 
+def qbit_interface_bound():
+    """Vrai si qBittorrent est lié à une interface (tun0) dans sa configuration ; None sans fichier."""
+    conf = CONFIG / "qbittorrent" / "qBittorrent" / "qBittorrent.conf"
+    if not conf.exists():
+        return None
+    return any(re.match(r"Session\\Interface(Name)?=", l) for l in conf.read_text().splitlines())
+
+
+def qbit_heal_interface():
+    """Remet la liaison d'interface de qBittorrent d'accord avec le mode : en accès direct, une liaison à tun0
+    (qui n'existe pas) coupe toute connexion : tous les torrents « dormants », DHT à 0 nœud. Le fichier est corrigé
+    conteneur arrêté, car qBittorrent le réécrit en quittant. Renvoie True si quelque chose a été corrigé."""
+    mode = qbit_mode()
+    bound = qbit_interface_bound()
+    if mode is None or bound is None or bound == (mode == "vpn"):
+        return False
+    say("qBittorrent : liaison d'interface remise d'accord avec le mode " + ("VPN (tun0)" if mode == "vpn" else "direct (aucune)"))
+    run("docker", "stop", "qbittorrent", check=False, capture=True)
+    qbit_bind_interface(mode == "vpn")
+    run("docker", "start", "qbittorrent", check=False, capture=True)
+    return True
+
+
 def qbit_stop():
     """Libère le nom de conteneur « qbittorrent » avant de démarrer l'autre mode."""
     run("docker", "rm", "-f", "qbittorrent", check=False, capture=True)
@@ -2804,6 +2827,10 @@ def refresh():
         say(f"nouvelles adresses : {env_read()['PUBLIC_HOSTS']}")
         for warning in apply_addresses():
             say(f"attention : {warning}")
+    try:
+        qbit_heal_interface()   # qBittorrent lié à tun0 sans VPN : plus aucune connexion
+    except (SeedboxError, OSError) as error:
+        say(f"qBittorrent : {error}")
     if "tailscale" in profiles_read():
         try:
             remote().tailscale_sync()
