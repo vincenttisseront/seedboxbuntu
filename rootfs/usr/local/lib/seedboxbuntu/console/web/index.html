@@ -379,6 +379,61 @@
     </div>
   </section>
 
+  <section id="view-aggregator" class="view hidden">
+    <header class="page-head"><div><h1>Agrégateur</h1><p class="sub">Les nouveautés de vos indexeurs (Prowlarr, Jackett, sources Torznab) regroupées par œuvre : un film ou une série n’apparaît qu’une fois, avec toutes ses versions. Un clic envoie le torrent choisi à qBittorrent.</p></div><div class="actions"><button id="agg-sync" class="btn primary" type="button">Collecter maintenant</button></div></header>
+    <p id="agg-state" class="notice info"></p>
+    <div class="card" id="agg-catalogue">
+      <div class="card-head"><h2>Catalogue</h2><div id="agg-periods" class="segmented" role="group" aria-label="Période"></div></div>
+      <div id="agg-categories" class="segmented" role="group" aria-label="Catégorie"></div>
+      <form id="agg-form" class="row filters">
+        <label>Recherche<input name="q" type="search" placeholder="titre, saison, année…" autocomplete="off"></label>
+        <label>Tracker<select name="tracker"><option value="">Tous</option></select></label>
+        <label>Qualité<select name="quality"><option value="">Toutes</option></select></label>
+        <label>Tri<select name="sort">
+          <option value="publishedAt">Date</option><option value="seeders">Seeders</option><option value="leechers">Leechers</option><option value="completed">Téléchargements</option>
+          <option value="title">Titre</option><option value="quality">Qualité</option><option value="tracker">Tracker</option></select></label>
+        <label>Ordre<select name="dir"><option value="desc">Décroissant</option><option value="asc">Croissant</option></select></label>
+        <label>Par page<select name="per"><option value="20">20</option><option value="40">40</option><option value="60">60</option><option value="0">Tout</option></select></label>
+        <button class="btn primary" type="submit">Filtrer</button>
+      </form>
+      <p id="agg-summary" class="small muted"></p>
+      <div id="agg-list" class="agg-list"></div>
+      <div class="row"><button id="agg-prev" class="btn sm" type="button">Précédent</button><span id="agg-page" class="small muted"></span><button id="agg-next" class="btn sm" type="button">Suivant</button></div>
+    </div>
+    <div class="card" id="agg-sources-card">
+      <div class="card-head"><h2>Sources</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Source</th><th>État</th><th>Dernière collecte</th><th>Résultats</th><th>Nouveaux</th><th>Dans le catalogue</th><th></th></tr></thead>
+        <tbody id="agg-sources"></tbody>
+      </table></div>
+      <form id="agg-add" class="row filters">
+        <label>Nom<input name="name" required maxlength="60" autocomplete="off" placeholder="Mon indexeur"></label>
+        <label>Adresse du flux Torznab<input name="url" type="url" required autocomplete="off" placeholder="https://indexeur.exemple/api"></label>
+        <label>Clé d’API<input name="key" type="password" autocomplete="off"></label>
+        <button class="btn primary" type="submit">Ajouter une source</button>
+      </form>
+      <p class="muted small">Prowlarr et Jackett sont lus avec les clés de la boîte. Une source ajoutée doit répondre au format Torznab (t=search). Les trackers privés sans flux Torznab (ratio, messages non lus) restent dans P2P Aggregator.</p>
+    </div>
+    <div class="card" id="agg-health-card">
+      <h2>Santé et historique</h2>
+      <dl id="agg-totals" class="kv"></dl>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Jour</th><th>Indexés</th><th>Ajoutés</th><th>Purgés</th></tr></thead>
+        <tbody id="agg-timeline"></tbody>
+      </table></div>
+    </div>
+    <form id="agg-settings" class="card form">
+      <h2>Collecte</h2>
+      <label class="check"><input name="enabled" type="checkbox">Collecter automatiquement</label>
+      <label>Intervalle<select name="interval" id="agg-interval"></select></label>
+      <label>Conserver (jours)<input name="retention" type="number" min="1" max="60" autocomplete="off"></label>
+      <label>Résultats demandés par requête<input name="limit" type="number" min="10" max="300" autocomplete="off"></label>
+      <label>Catégorie qBittorrent des envois<input name="category" maxlength="40" autocomplete="off" placeholder="agregateur"></label>
+      <label class="check"><input name="alert" type="checkbox">Alerter quand une source échoue 3 collectes de suite</label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+  </section>
+
   <section id="view-p2p" class="view hidden">
     <header class="page-head"><div><h1>P2P Aggregator</h1><p class="sub">Agrégateur de trackers privés intégré à l'appliance.</p></div></header>
     <div class="card"><dl id="p2p-state" class="kv"></dl>

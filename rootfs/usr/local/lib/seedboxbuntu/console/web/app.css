@@ -386,3 +386,11 @@ body.kiosk .tiles{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1
 .spark .line{fill:none;stroke:var(--c0);stroke-width:1.5;stroke-linejoin:round}
 #vacation-banner{margin:0;border-radius:0;justify-content:center}
 .pre-wrap{white-space:pre-wrap}
+
+/* Agrégateur : une œuvre dépliable avec ses torrents */
+.agg-list{display:flex;flex-direction:column;gap:var(--sp-2);margin:var(--sp-3) 0}
+.agg-work{border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel2);padding:var(--sp-2) var(--sp-3)}
+.agg-work>summary{cursor:pointer;color:var(--text);display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.agg-work[open]>summary{margin-bottom:var(--sp-2)}
+.agg-work .group-row th{text-align:left;background:var(--panel);color:var(--muted);font-weight:600}
+#agg-categories{margin-bottom:var(--sp-3)}

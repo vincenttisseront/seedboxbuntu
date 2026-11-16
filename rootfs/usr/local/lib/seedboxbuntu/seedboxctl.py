@@ -73,6 +73,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl guestquota show|default|quota|...  quotas de lecture par compte invité
   seedboxctl energy show|sample|standby|set   veille des disques et coût par To
   seedboxctl trackerstats show|refresh|alias  ratios réels des trackers (p2p-aggregator)
+  seedboxctl aggregator show|sync|sources|add|config|send   catalogue des releases par œuvre (Prowlarr, Jackett, Torznab)
   seedboxctl vpnwatch show|set|tick          surveillance du VPN (fuite, changement d'adresse)
   seedboxctl house                           état d'ensemble pour l'écran « maison »
 """
@@ -395,6 +396,10 @@ def rotation():
 
 def apppasswords():
     return _lazy("apppasswords")
+
+
+def aggregator():
+    return _lazy("aggregator")
 
 
 def mediaquality():
@@ -3033,6 +3038,24 @@ def main():
     ap_reset = ap.add_parser("reset", help="nouveau mot de passe sur l'entrée standard ; vide = généré")
     ap_reset.add_argument("app")
     ap_reset.add_argument("--login", default="")
+    ag = commands.add_parser("aggregator", help="catalogue des releases par œuvre").add_subparsers(dest="action", required=True)
+    for name in ("show", "sources", "purge"):
+        ag.add_parser(name)
+    ag_sync = ag.add_parser("sync", help="collecte les sources maintenant")
+    ag_sync.add_argument("--only", default="")
+    ag_add = ag.add_parser("add", help="ajoute une source Torznab")
+    ag_add.add_argument("name")
+    ag_add.add_argument("url")
+    ag_add.add_argument("--key-stdin", action="store_true", help="clé d'API sur l'entrée standard")
+    for name in ("remove", "enable", "disable", "test", "send"):
+        ag.add_parser(name).add_argument("id")
+    ag_cfg = ag.add_parser("config")
+    ag_cfg.add_argument("--interval", type=int)
+    ag_cfg.add_argument("--retention", type=int)
+    ag_cfg.add_argument("--limit", type=int)
+    ag_cfg.add_argument("--category")
+    ag_cfg.add_argument("--enable", action="store_true")
+    ag_cfg.add_argument("--disable", action="store_true")
     mq = commands.add_parser("mediaquality", help="qualité des médias").add_subparsers(dest="action", required=True)
     mq.add_parser("show")
     mq_up = mq.add_parser("upgrade")
@@ -3689,6 +3712,27 @@ def main():
         else:
             password = "" if args.app != "jellyfin" and sys.stdin.isatty() else read_password("")
             return report(locked(module.reset)(args.app, args.login, password))
+    elif args.command == "aggregator":
+        module = aggregator()
+        if args.action == "show":
+            print(json.dumps(module.dashboard(), indent=2, ensure_ascii=False))
+        elif args.action == "sources":
+            print(json.dumps(module.dashboard()["sources"], indent=2, ensure_ascii=False))
+        elif args.action == "sync":
+            module.sync(only=args.only)
+        elif args.action == "purge":
+            print(f"{module.purge_now()} torrent(s) purgé(s)")
+        elif args.action == "add":
+            print(module.add_source(args.name, args.url, sys.stdin.readline().strip() if args.key_stdin else ""))
+        elif args.action in ("remove", "enable", "disable"):
+            module.remove_source(args.id) if args.action == "remove" else module.set_source(args.id, args.action == "enable")
+        elif args.action == "test":
+            print(json.dumps(module.test_source(args.id), indent=2, ensure_ascii=False))
+        elif args.action == "send":
+            print(json.dumps(module.send(args.id), indent=2, ensure_ascii=False))
+        else:
+            module.configure(interval=args.interval, retention=args.retention, limit=args.limit, category=args.category,
+                             enabled=True if args.enable else False if args.disable else None)
     elif args.command == "mediaquality":
         module = mediaquality()
         if args.action == "show":

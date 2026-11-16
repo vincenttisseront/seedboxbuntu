@@ -489,6 +489,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.rotation().overview())
         if path == "/api/apppasswords":
             return self.send_json(ctl.apppasswords().overview())
+        if path == "/api/aggregator":
+            return self.send_json(ctl.aggregator().dashboard())
+        if path == "/api/aggregator/catalogue":
+            query = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
+            return self.send_json(ctl.aggregator().catalogue(
+                period=query.get("period", "24h"), category=query.get("category", ""), q=query.get("q", "")[:100], tracker=query.get("tracker", "")[:80],
+                quality=query.get("quality", "")[:10], sort=query.get("sort", "publishedAt"), direction=query.get("dir", "desc"),
+                page=query.get("page", 1), per_page=query.get("per", 20)))
         if path == "/api/mediaquality":
             return self.send_json(ctl.mediaquality().overview())
         if path == "/api/peoplereport":
@@ -688,6 +696,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ctl.SeedboxError(f"mot de passe invalide : {ctl.MIN_PASSWORD} caractères au minimum")
             argv = ["apppass", "reset", app] + (["--login", login] if login else [])
             return self.send_json({"job": start_job("Mot de passe de " + ctl.apppasswords().APPS[app], argv, password)})
+        if path.startswith("/api/aggregator/"):
+            module = ctl.aggregator()
+            if path == "/api/aggregator/sync":
+                only = str(data.get("source", ""))
+                if only and not re.fullmatch(r"[a-z0-9-]{1,40}", only):
+                    raise ctl.SeedboxError("source inconnue")
+                return self.send_json({"job": start_job("Collecte de l'agrégateur", ["aggregator", "sync"] + (["--only", only] if only else []))})
+            if path == "/api/aggregator/send":
+                return self.send_json(module.send(int(data.get("id", 0))))
+            if path == "/api/aggregator/settings":
+                module.configure(interval=data.get("interval"), retention=data.get("retention"), limit=data.get("limit"), category=data.get("category"),
+                                 enabled=data.get("enabled"), alert=data.get("alert"))
+                return self.send_json(module.dashboard())
+            if path == "/api/aggregator/source/add":
+                module.add_source(str(data.get("name", "")), str(data.get("url", "")), str(data.get("key", "")))
+                return self.send_json(module.dashboard())
+            if path == "/api/aggregator/source/remove":
+                module.remove_source(str(data.get("id", "")))
+                return self.send_json(module.dashboard())
+            if path == "/api/aggregator/source/toggle":
+                module.set_source(str(data.get("id", "")), bool(data.get("enabled")))
+                return self.send_json(module.dashboard())
+            if path == "/api/aggregator/source/test":
+                return self.send_json(module.test_source(str(data.get("id", ""))))
         if path == "/api/mediaquality/upgrade":
             return self.send_json(ctl.mediaquality().upgrade(str(data.get("app", "")), data.get("count", 20), by=self.headers.get("Remote-User", "") or "console"))
         if path == "/api/linkcheck/run":

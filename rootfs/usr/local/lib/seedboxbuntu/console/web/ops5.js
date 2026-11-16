@@ -394,7 +394,182 @@ function resetAppPassword(event) {
   runJob('/api/apppasswords/reset', body, () => { form.elements.password.value = ''; loadAppPasswords().catch(showError); loadRotation().catch(showError); });
 }
 
+// --- agrégateur de releases (page Agrégateur) ----------------------------------------------------------------------------
+const AGG_PERIODS = [['24h', 'Nouveautés 24 h'], ['week', 'Cette semaine'], ['all', 'Tout']];
+const AGG_SOURCE_STATE = { ok: ['ok', 'actif'], partial: ['warn', 'partiel'], error: ['err', 'en échec'], wait: ['info', 'en attente'], off: ['unknown', 'désactivé'], absent: ['unknown', 'non installé'] };
+const AGG_INTERVALS = { 15: '15 minutes', 30: '30 minutes', 60: '1 heure', 120: '2 heures', 180: '3 heures', 240: '4 heures', 360: '6 heures' };
+const aggState = { period: '24h', category: '', page: 1, pages: 1 };
+
+function aggVariantRow(v) {
+  const sendCell = v.sent ? pill('envoyé', 'ok') : el('button', { class: 'btn sm', type: 'button', onclick: (event) => aggSend(event.currentTarget, v) }, 'Envoyer');
+  return el('tr', {},
+    el('td', {}, el('div', { class: 'no-i18n' }, v.torrent_title), v.label ? el('div', { class: 'muted small' }, v.label) : null),
+    el('td', {}, v.tracker), el('td', {}, v.size ? fmtSize(v.size) : '-'),
+    el('td', {}, `${fmtNumber(v.seeders, 0)} / ${fmtNumber(v.leechers, 0)}`), el('td', {}, fmtNumber(v.grabs, 0)),
+    el('td', {}, fmtDateTime(v.published)), el('td', {}, sendCell));
+}
+
+function aggVariantTable(groups) {
+  const rows = [];
+  for (const group of groups) {
+    rows.push(el('tr', { class: 'group-row' }, el('th', { colspan: 7, scope: 'colgroup' }, group.bucket)));
+    rows.push(...group.variants.map(aggVariantRow));
+  }
+  return el('div', { class: 'table-wrap' }, el('table', {},
+    el('thead', {}, el('tr', {}, el('th', {}, 'Torrent'), el('th', {}, 'Tracker'), el('th', {}, 'Taille'), el('th', {}, 'Seeders / leechers'), el('th', {}, 'Téléch.'),
+      el('th', {}, 'Publié'), el('th', {}, ''))),
+    el('tbody', {}, rows)));
+}
+
+function aggWork(work) {
+  const body = work.seasons
+    ? work.seasons.map((season) => el('div', {}, el('h3', { class: 'small' }, season.label), aggVariantTable(season.groups)))
+    : [aggVariantTable(work.groups || [])];
+  return el('details', { class: 'agg-work' },
+    el('summary', {}, el('strong', { class: 'no-i18n' }, work.title), work.year ? el('span', { class: 'muted' }, ` (${work.year})`) : null, ' ',
+      pill(work.label, 'info'), ' ', el('span', { class: 'muted small' }, `${fmtNumber(work.count, 0)} torrent${work.count > 1 ? 's' : ''} · ${work.trackers.join(', ')} · ${work.qualities.join(' ')} · ${fmtNumber(work.seeders, 0)} seeders · ${fmtDateTime(work.latest)}`)),
+    ...body);
+}
+
+function aggSegments(box, items, current, choose) {
+  box.replaceChildren(...items.map(([value, label]) => el('button', {
+    class: `seg${value === current ? ' active' : ''}`, type: 'button', 'aria-pressed': value === current ? 'true' : 'false', onclick: () => choose(value),
+  }, label)));
+}
+
+function aggFill(select, values, current, firstLabel) {
+  select.replaceChildren(el('option', { value: '' }, firstLabel), ...values.map((v) => el('option', { value: v }, v)));
+  select.value = values.includes(current) ? current : '';
+}
+
+async function loadAggCatalogue() {
+  const form = $('agg-form').elements;
+  const params = new URLSearchParams({ period: aggState.period, category: aggState.category, page: aggState.page, q: form.q.value.trim(), tracker: form.tracker.value,
+    quality: form.quality.value, sort: form.sort.value, dir: form.dir.value, per: form.per.value });
+  const data = await api(`/api/aggregator/catalogue?${params}`);
+  aggState.page = data.page;
+  aggState.pages = data.pages;
+  aggSegments($('agg-periods'), AGG_PERIODS.map(([id, label]) => [id, `${label} (${fmtNumber(data.periods[id], 0)})`]), data.period,
+    (value) => { aggState.period = value; aggState.page = 1; loadAggCatalogue().catch(showError); });
+  const total = Object.values(data.counts).reduce((a, b) => a + b, 0);
+  const cats = [['', `Toutes (${fmtNumber(total, 0)})`], ...data.categories.map((c) => [c.id, `${c.label} (${fmtNumber(data.counts[c.id] || 0, 0)})`])];
+  if (data.counts.unknown) cats.push(['unknown', `Autres (${fmtNumber(data.counts.unknown, 0)})`]);
+  aggSegments($('agg-categories'), cats, data.category, (value) => { aggState.category = value; aggState.page = 1; loadAggCatalogue().catch(showError); });
+  aggFill(form.tracker, data.trackers, form.tracker.value, 'Tous');
+  aggFill(form.quality, data.qualities, form.quality.value, 'Toutes');
+  $('agg-summary').textContent = data.q ? `${fmtNumber(data.total, 0)} œuvre(s) pour « ${data.q} » (la recherche ignore la période).` : `${fmtNumber(data.total, 0)} œuvre(s).`;
+  $('agg-list').replaceChildren(...(data.works.length ? data.works.map(aggWork)
+    : [el('p', { class: 'muted' }, 'Rien à afficher : lancez une collecte, ou élargissez la période et les filtres.')]));
+  $('agg-page').textContent = `Page ${data.page} / ${data.pages}`;
+  $('agg-prev').disabled = data.page <= 1;
+  $('agg-next').disabled = data.page >= data.pages;
+}
+
+async function aggSend(button, variant) {
+  button.disabled = true;
+  try {
+    const result = await api('/api/aggregator/send', { id: variant.id });
+    toast(result.state === 'envoye' ? 'ok' : 'info', `${result.title} : ${result.message}.`);
+    await loadAggCatalogue();
+  } catch (error) { button.disabled = false; showError(error); }
+}
+
+function aggSourceRow(source) {
+  const [kind, label] = AGG_SOURCE_STATE[source.state] || AGG_SOURCE_STATE.wait;
+  const act = (text, run, danger) => el('button', { class: `btn sm${danger ? ' danger' : ''}`, type: 'button', onclick: run }, text);
+  const buttons = [];
+  if (source.present) buttons.push(act('Tester', () => aggTest(source)));
+  if (source.present && source.enabled) buttons.push(act('Collecter', () => runJob('/api/aggregator/sync', { source: source.id }, () => loadAggregator().catch(showError))));
+  if (source.present) buttons.push(act(source.enabled ? 'Désactiver' : 'Activer', () => aggToggle(source)));
+  if (!source.auto) buttons.push(act('Retirer', (event) => confirmAction(event.currentTarget,
+    `La source « ${source.name} » et ses torrents sont retirés du catalogue.`, () => aggRemove(source)), true));
+  return el('tr', {},
+    el('td', {}, source.name, source.url ? el('div', { class: 'muted small no-i18n' }, source.url) : null),
+    el('td', {}, pill(label, kind), source.error ? el('div', { class: 'muted small no-i18n' }, source.error) : null,
+      source.fails >= 3 ? el('div', { class: 'small' }, `${source.fails} collectes en échec de suite`) : null),
+    el('td', {}, source.last ? fmtDateTime(source.last) : '-'), el('td', {}, fmtNumber(source.collected, 0)), el('td', {}, fmtNumber(source.new, 0)),
+    el('td', {}, fmtNumber(source.torrents, 0)), el('td', {}, el('div', { class: 'row' }, ...buttons)));
+}
+
+async function aggTest(source) {
+  try {
+    const result = await api('/api/aggregator/source/test', { id: source.id });
+    toast(result.count ? 'ok' : 'warn', result.count ? `${source.name} répond : ${result.count} résultat(s) (${result.trackers.join(', ') || 'tracker inconnu'}).`
+      : `${source.name} répond mais sans résultat (films, derniers jours).`);
+  } catch (error) { showError(error); }
+}
+
+async function aggToggle(source) {
+  try { await api('/api/aggregator/source/toggle', { id: source.id, enabled: !source.enabled }); await loadAggregator(); } catch (error) { showError(error); }
+}
+
+async function aggRemove(source) {
+  try { await api('/api/aggregator/source/remove', { id: source.id }); toast('ok', 'Source retirée.'); await loadAggregator(); } catch (error) { showError(error); }
+}
+
+async function loadAggregator() {
+  const data = await api('/api/aggregator');
+  const state = $('agg-state');
+  const sources = data.sources.filter((s) => s.enabled);
+  state.className = `notice ${data.problems.length ? 'warn' : 'info'}`;
+  const headline = data.running ? 'Collecte en cours…'
+    : !data.enabled ? 'Collecte automatique désactivée : utilisez « Collecter maintenant » ou réactivez-la dans Collecte.'
+    : !sources.length ? 'Aucune source active : Prowlarr et Jackett sont lus s’ils tournent, ou ajoutez une source Torznab ci-dessous.'
+    : !data.last_sync ? 'Aucune collecte pour le moment : cliquez sur « Collecter maintenant ».'
+    : `Dernière collecte : ${fmtDateTime(data.last_sync)}${data.next_sync ? ` · prochaine vers ${fmtDateTime(data.next_sync)}` : ''}.`;
+  state.replaceChildren(headline, data.problems.length ? el('span', { class: 'no-i18n' }, ` ${data.problems.join(' ; ')}`) : null);
+  $('agg-sources').replaceChildren(...(data.sources.length ? data.sources.map(aggSourceRow) : [emptyRow(7, 'Aucune source.')]));
+  const t = data.totals;
+  $('agg-totals').replaceChildren(
+    el('dt', {}, 'Œuvres'), el('dd', {}, `${fmtNumber(t.works, 0)} (dont ${fmtNumber(t.day, 0)} en 24 h, ${fmtNumber(t.week, 0)} sur la semaine)`),
+    el('dt', {}, 'Torrents'), el('dd', {}, fmtNumber(t.torrents, 0)), el('dt', {}, 'Envoyés à qBittorrent'), el('dd', {}, fmtNumber(t.sent, 0)),
+    el('dt', {}, 'Conservation'), el('dd', {}, `${fmtNumber(data.retention, 0)} jours`));
+  $('agg-timeline').replaceChildren(...data.timeline.map((d) => el('tr', {}, el('td', {}, d.day), el('td', {}, fmtNumber(d.indexed, 0)),
+    el('td', {}, fmtNumber(d.added, 0)), el('td', {}, fmtNumber(d.purged, 0)))));
+  const form = $('agg-settings').elements;
+  form.enabled.checked = data.enabled;
+  form.alert.checked = data.alert;
+  form.interval.replaceChildren(...data.intervals.map((m) => el('option', { value: m }, AGG_INTERVALS[m] || `${m} minutes`)));
+  form.interval.value = String(data.interval);
+  form.retention.value = data.retention;
+  form.limit.value = data.limit;
+  form.category.value = data.category;
+  await loadAggCatalogue();
+}
+
+async function saveAggSettings(event) {
+  event.preventDefault();
+  const f = event.target.elements;
+  try {
+    await api('/api/aggregator/settings', { enabled: f.enabled.checked, alert: f.alert.checked, interval: Number(f.interval.value), retention: Number(f.retention.value),
+      limit: Number(f.limit.value), category: f.category.value.trim() });
+    toast('ok', 'Réglages enregistrés.');
+    await loadAggregator();
+  } catch (error) { showError(error); }
+}
+
+async function addAggSource(event) {
+  event.preventDefault();
+  const f = event.target.elements;
+  try {
+    await api('/api/aggregator/source/add', { name: f.name.value.trim(), url: f.url.value.trim(), key: f.key.value });
+    toast('ok', 'Source ajoutée : lancez une collecte pour la remplir.');
+    event.target.reset();
+    await loadAggregator();
+  } catch (error) { showError(error); }
+}
+
+function initAggregator() {
+  $('agg-sync').addEventListener('click', () => runJob('/api/aggregator/sync', {}, () => loadAggregator().catch(showError)));
+  $('agg-form').addEventListener('submit', (event) => { event.preventDefault(); aggState.page = 1; loadAggCatalogue().catch(showError); });
+  $('agg-prev').addEventListener('click', () => { aggState.page = Math.max(1, aggState.page - 1); loadAggCatalogue().catch(showError); });
+  $('agg-next').addEventListener('click', () => { aggState.page = Math.min(aggState.pages, aggState.page + 1); loadAggCatalogue().catch(showError); });
+  $('agg-settings').addEventListener('submit', saveAggSettings);
+  $('agg-add').addEventListener('submit', addAggSource);
+}
+
 function initOps5() {
+  initAggregator();
   $('apppass-form').addEventListener('submit', resetAppPassword);
   $('apppass-app').addEventListener('change', syncAppPassAccount);
   $('care-refresh').addEventListener('click', () => loadCare().catch(showError));

@@ -282,6 +282,29 @@ def route(p, q, role="admin", PREFS=None):
                    {"name": "usb", "kind": "disk", "version": "", "username": "", "source": "", "label": "Archive", "fstype": "ext4", "mounted": True, "free": 8e11, "total": 2e12, "roles": []}]}
     if p == "/api/vpn": return {"enabled": False, "state": "", "provider": "", "ip": "", "port": 6881, "port_forwarding": False}
     if p == "/api/remote": return {"extra_hosts": "", "tailscale": {"enabled": False, "running": False, "state": "", "hostname": "seedbox", "ips": []}, "dns": {"providers": {"cloudflare": "Cloudflare", "ovh": "OVH"}, "provider": "", "custom_domain": "", "variables": []}}
+    if p == "/api/aggregator": return {"enabled": True, "interval": 60, "retention": 7, "limit": 100, "category": "agregateur", "alert": True, "intervals": [15, 30, 60, 120, 180, 240, 360],
+        "running": False, "last_sync": now - 1800, "next_sync": now + 1800, "qbittorrent": True, "problems": ["Jackett : 3 collectes en échec"],
+        "totals": {"works": 5, "torrents": 9, "sent": 1, "day": 3, "week": 5}, "per_category": {"films": 2, "series": 1, "musique": 1},
+        "timeline": [{"day": f"2026-11-{d:02d}", "indexed": 120 * (d - 4), "added": 30 + d, "purged": 10 * (d % 3)} for d in range(5, 12)],
+        "sources": [{"id": "prowlarr", "name": "Prowlarr", "auto": True, "enabled": True, "present": True, "state": "ok", "last": now - 1800, "error": None, "collected": 240, "new": 18, "ms": 4200, "fails": 0, "torrents": 7, "url": "", "has_key": True},
+                    {"id": "jackett", "name": "Jackett", "auto": True, "enabled": True, "present": True, "state": "error", "last": now - 1800, "error": "films : connexion refusée", "collected": 0, "new": 0, "ms": 100, "fails": 3, "torrents": 0, "url": "", "has_key": True},
+                    {"id": "mon-indexeur", "name": "Mon indexeur", "auto": False, "enabled": False, "present": True, "state": "off", "last": None, "error": None, "collected": 0, "new": 0, "ms": 0, "fails": 0, "torrents": 2, "url": "https://indexeur.exemple/api?apikey=•••", "has_key": True}]}
+    if p == "/api/aggregator/catalogue":
+        def variant(i, title, tracker, bucket, seeders, label=None, sent=False):
+            return {"id": i, "torrent_title": title, "label": label, "tracker": tracker, "bucket": bucket, "size": 4.2e9, "seeders": seeders, "leechers": 2, "grabs": 40, "published": now - 3600 * i, "sent": sent, "magnet": False, "link": True}
+        works = [{"id": 1, "title": "The Matrix", "category": "films", "label": "Films", "year": 1999, "imdb": "tt0133093", "tmdb": None, "latest": now - 3600, "seeders": 30, "leechers": 2, "grabs": 40, "count": 3,
+                  "trackers": ["Tracker A", "Tracker B"], "qualities": ["4K", "FHD"], "seasons": None,
+                  "groups": [{"bucket": "4K", "variants": [variant(2, "Matrix 1999 2160p UHD", "Tracker B", "4K", 5)]},
+                             {"bucket": "FHD", "variants": [variant(1, "The.Matrix.1999.1080p.BluRay.x264-AA", "Tracker A", "FHD", 30, sent=True), variant(3, "The Matrix 1999 1080p", "Tracker B", "FHD", 9)]}]},
+                 {"id": 2, "title": "Show Name", "category": "series", "label": "Séries", "year": None, "imdb": None, "tmdb": None, "latest": now - 7200, "seeders": 9, "leechers": 2, "grabs": 40, "count": 3,
+                  "trackers": ["Tracker A"], "qualities": ["HD", "FHD"], "groups": None, "seasons": [
+                      {"season": "2", "label": "Saison 2", "groups": [{"bucket": "HD", "variants": [variant(6, "Show.Name.S02E01.720p.WEB-DL-GRP", "Tracker A", "HD", 4, "S02E01")]}]},
+                      {"season": "1", "label": "Saison 1", "groups": [{"bucket": "FHD", "variants": [variant(4, "Show.Name.S01E01.1080p.WEB-DL-GRP", "Tracker A", "FHD", 9, "S01E01"), variant(5, "Show.Name.S01E02.1080p.WEB-DL-GRP", "Tracker A", "FHD", 8, "S01E02")]}]}]},
+                 {"id": 3, "title": "Artiste - Album", "category": "musique", "label": "Musique", "year": 2020, "imdb": None, "tmdb": None, "latest": now - 9000, "seeders": 7, "leechers": 2, "grabs": 40, "count": 1,
+                  "trackers": ["Tracker C"], "qualities": ["AUDIO"], "seasons": None, "groups": [{"bucket": "AUDIO", "variants": [variant(7, "Artiste - Album (2020) [FLAC]", "Tracker C", "AUDIO", 7)]}]}]
+        return {"works": works, "total": 3, "page": 1, "pages": 1, "per_page": 20, "period": (q.get("period") or ["24h"])[0], "category": (q.get("category") or [""])[0], "q": (q.get("q") or [""])[0],
+                "sort": "publishedAt", "direction": "desc", "counts": {"films": 1, "series": 1, "musique": 1}, "periods": {"24h": 3, "week": 5, "all": 5}, "trackers": ["Tracker A", "Tracker B", "Tracker C"],
+                "qualities": ["4K", "FHD", "HD", "SD", "AUDIO", "EBOOK", "GAME", "OTHER"], "categories": [{"id": c, "label": l} for c, l in (("films", "Films"), ("series", "Séries"), ("musique", "Musique"), ("jeux", "Jeux"), ("livres", "Livres"), ("presse", "Presse"), ("logiciels", "Logiciels"))]}
     if p == "/api/p2p": return {"version": "1.8.2", "commit": "a1b2c3d", "update_available": False, "error": "", "token": True}
     if p == "/api/alerts": return {"settings": {"enabled": True, "disk_percent": 90, "repeat_hours": 24, "ntfy": {"url": "https://ntfy.sh", "topic": "xxxx"}}, "active": [
         {"level": "critical", "title": "Radarr ne répond plus", "detail": "depuis 12 minutes", "notified": True}, {"level": "warning", "title": "Disque « Stockage » à 88 %", "detail": "", "notified": False}]}
@@ -358,6 +381,9 @@ class H(http.server.BaseHTTPRequestHandler):
             {"id": "prowlarr-apps", "title": "Prowlarr → Radarr, Sonarr", "state": "ok", "detail": "Les applications reliées répondent.", "hint": ""},
             {"id": "radarr-client", "title": "Radarr → client de téléchargement", "state": "error", "detail": "qBittorrent : Unable to connect", "hint": "Relancer la configuration des applications (Applications) relie à nouveau ce que la console provisionne."},
             {"id": "seerr-sonarr", "title": "Seerr → Sonarr", "state": "warn", "detail": "Seerr n'a aucun serveur Sonarr : les demandes ne partiront pas.", "hint": ""}]})
+        if self.path.endswith("/api/aggregator/send"): return self.send(200, {"state": "envoye", "message": "envoyé à qBittorrent", "title": "Matrix 1999 2160p UHD"})
+        if self.path.endswith("/api/aggregator/source/test"): return self.send(200, {"count": 12, "trackers": ["Tracker A", "Tracker B"], "sample": "Dune"})
+        if self.path.endswith(("/api/aggregator/settings", "/api/aggregator/source/add", "/api/aggregator/source/remove", "/api/aggregator/source/toggle")): return self.send(200, route("/api/aggregator", {}, self.role, self.prefs))
         if self.path.endswith("/api/mediaquality/upgrade"): return self.send(200, {"searched": 14})
         if self.path.endswith("/api/changelog/undo"): return self.send(200, {"file": "alerts.json"})
         if self.path.endswith("/api/titleshare/create"): return self.send(200, {"id": "ab12cd34", "path": "/invite/" + "S" * 32, "expires": now + 86400 * 8, "title": "Dune"})

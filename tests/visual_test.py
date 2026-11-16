@@ -373,6 +373,36 @@ def journeys_ops2(page, base):
         fail("parcours : la création d'un partage n'envoie pas le titre choisi ou n'affiche pas le lien")
     if "Marie" not in page.inner_text("#peoplereport-list") and "marie" not in page.inner_text("#peoplereport-list"):
         fail("parcours : le bilan mensuel n'affiche pas les comptes")
+    page.goto(base + "#aggregator")
+    settle(page, "aggregator")
+    page.wait_for_timeout(300)
+    if page.locator("#agg-list details.agg-work").count() != 3 or "The Matrix" not in page.inner_text("#agg-list"):
+        fail("parcours : l'agrégateur doit lister les œuvres du catalogue")
+    if page.locator("#agg-periods .seg").count() != 3 or page.locator("#agg-categories .seg").count() != 8:
+        fail("parcours : l'agrégateur doit proposer 3 périodes et 7 catégories plus « Toutes »")
+    page.click("#agg-list details.agg-work >> nth=1 >> summary")
+    if "Saison 2" not in page.inner_text("#agg-list") or "S01E02" not in page.inner_text("#agg-list"):
+        fail("parcours : une série doit se déplier par saison et par épisode")
+    page.click("#agg-list details.agg-work >> nth=0 >> summary")
+    page.click("#agg-list details.agg-work >> nth=0 >> button:has-text('Envoyer') >> nth=0")
+    page.wait_for_timeout(300)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/aggregator/send") and body.get("id") == 2]:
+        fail("parcours : « Envoyer » doit transmettre le torrent choisi")
+    page.click("#agg-categories .seg:has-text('Séries')")
+    page.wait_for_timeout(300)
+    page.fill("#agg-form [name=q]", "matrix")
+    page.click("#agg-form button[type=submit]")
+    page.wait_for_timeout(300)
+    if "Jackett" not in page.inner_text("#agg-sources") or "3 collectes en échec" not in page.inner_text("#agg-sources"):
+        fail("parcours : une source en échec doit être signalée")
+    if page.locator("#agg-sources tr").count() != 3 or page.locator("#agg-timeline tr").count() != 7:
+        fail("parcours : l'agrégateur doit montrer 3 sources et la chronologie de 7 jours")
+    page.click("#agg-sources tr >> nth=0 >> button:has-text('Tester')")
+    page.wait_for_timeout(300)
+    page.click("#agg-settings button[type=submit]")
+    page.wait_for_timeout(300)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/aggregator/settings") and body.get("interval") == 60 and body.get("retention") == 7]:
+        fail("parcours : les réglages de collecte doivent être envoyés")
     page.goto(base + "#secrets")
     settle(page, "secrets")
     page.wait_for_timeout(300)
