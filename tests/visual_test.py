@@ -378,6 +378,14 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(300)
     if page.locator("#rotation-list button:not([disabled])").count() != 3:
         fail("parcours : la rotation doit proposer 3 secrets renouvelables (le service arrêté est désactivé)")
+    if page.locator("#apppass-app option").count() != 3 or page.locator("#apppass-login option").all_inner_texts() != ["vincent", "papa"]:
+        fail("parcours : la réinitialisation d'un mot de passe doit lister les applications et les comptes Jellyfin")
+    if not page.locator("#apppass-form [name=password]").evaluate("e => e.required"):
+        fail("parcours : le mot de passe de Jellyfin doit être obligatoire")
+    page.select_option("#apppass-app", "qbittorrent")
+    if page.locator("#apppass-form [name=password]").evaluate("e => e.required") or page.locator("#apppass-login option").all_inner_texts() != ["admin"]:
+        fail("parcours : qBittorrent doit proposer son compte et un mot de passe facultatif")
+    page.select_option("#apppass-app", "jellyfin")
     page.goto(base + "#backup")
     settle(page, "backup")
     page.wait_for_timeout(300)

@@ -13,6 +13,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl vpn direct|set|status      qBittorrent sans VPN (par défaut) ou dans un tunnel VPN
   seedboxctl check [--json]             contrôle de santé : API et liaisons entre applications
   seedboxctl rotate SERVICE             renouvelle un mot de passe ou une clé de service
+  seedboxctl apppass show|reset APP     réinitialise le mot de passe d'une application (Jellyfin, qBittorrent...)
   seedboxctl trackers list|sync|rule    trackers et règles de seed
   seedboxctl p2p status|update|token    application p2p-aggregator
   seedboxctl share list|add|role|...    partages réseau (SMB, NFS) et disques externes
@@ -390,6 +391,10 @@ def diskusage():
 
 def rotation():
     return _lazy("rotation")
+
+
+def apppasswords():
+    return _lazy("apppasswords")
 
 
 def mediaquality():
@@ -2288,31 +2293,57 @@ def user_del(login):
 # ----------------------------------------------------------------------------
 #  Secrets de service
 # ----------------------------------------------------------------------------
+def qbit_set_password(password):
+    """Applique un mot de passe à qBittorrent : par son API si la console peut s'y connecter, sinon par le
+    fichier de configuration, conteneur arrêté (mot de passe de la console périmé : changé dans l'interface)."""
+    cookie = None
+    running = container_running("qbittorrent")
+    if running:
+        try:
+            cookie = qbit_login()
+        except (SeedboxError, OSError, ValueError):
+            cookie = None
+    if cookie:
+        result = request("POST", svc(qbit_host(), 8080) + "/api/v2/app/setPreferences", headers={"Cookie": cookie},
+                         form={"json": json.dumps({"web_ui_password": password})}, timeout=20)
+        if not result.ok:
+            raise SeedboxError(f"qBittorrent : changement refusé (HTTP {result.status})")
+    else:
+        conf = CONFIG / "qbittorrent" / "qBittorrent" / "qBittorrent.conf"
+        if not conf.exists():
+            raise SeedboxError("qBittorrent : fichier de configuration introuvable")
+        if running:
+            compose("stop", "qbittorrent", capture=True)      # il réécrit sa configuration en s'arrêtant
+        line = f'WebUI\\Password_PBKDF2="@ByteArray({qbit_pbkdf2(password)})"'
+        text = conf.read_text()
+        if re.search(r'WebUI\\Password_PBKDF2=".*"', text):
+            text = re.sub(r'WebUI\\Password_PBKDF2=".*"', lambda m: line, text)
+        elif "[Preferences]" in text:
+            text = text.replace("[Preferences]", "[Preferences]\n" + line, 1)
+        else:
+            text += "\n[Preferences]\n" + line + "\n"
+        conf.write_text(text)
+        if running:
+            compose("up", "-d", "qbittorrent", capture=True)
+    env_set(QBIT_PASSWORD=password)
+
+
+def autobrr_set_password(password):
+    result = autobrr_api("PATCH", "/auth/user/admin", {
+        "username_current": "admin", "password_current": env_read()["AUTOBRR_ADMIN_PASSWORD"],
+        "password_new": password}, cookie=autobrr_session())
+    if not result.ok:
+        raise SeedboxError(f"autobrr : changement refusé (HTTP {result.status})")
+    env_set(AUTOBRR_ADMIN_PASSWORD=password)
+
+
 def rotate(service):
     if service == "qbittorrent":
-        password = hex_secret(16)
-        if container_running("qbittorrent"):
-            cookie = qbit_login()
-            result = request("POST", svc(qbit_host(), 8080) + "/api/v2/app/setPreferences", headers={"Cookie": cookie},
-                             form={"json": json.dumps({"web_ui_password": password})}, timeout=20)
-            if not result.ok:
-                raise SeedboxError(f"qBittorrent : changement refusé (HTTP {result.status})")
-        else:
-            conf = CONFIG / "qbittorrent" / "qBittorrent" / "qBittorrent.conf"
-            text = re.sub(r'(WebUI\\Password_PBKDF2=").*"', lambda m: f'{m.group(1)}@ByteArray({qbit_pbkdf2(password)})"',
-                          conf.read_text())
-            conf.write_text(text)
-        env_set(QBIT_PASSWORD=password)
+        qbit_set_password(hex_secret(16))
     elif service in ("radarr", "sonarr", "prowlarr"):
         env_set(**{f"{service.upper()}_API_KEY": hex_secret(16)})
     elif service == "autobrr":
-        password = hex_secret(16)
-        result = autobrr_api("PATCH", "/auth/user/admin", {
-            "username_current": "admin", "password_current": env_read()["AUTOBRR_ADMIN_PASSWORD"],
-            "password_new": password}, cookie=autobrr_session())
-        if not result.ok:
-            raise SeedboxError(f"autobrr : changement refusé (HTTP {result.status})")
-        env_set(AUTOBRR_ADMIN_PASSWORD=password)
+        autobrr_set_password(hex_secret(16))
     else:
         raise SeedboxError("service à renouveler : qbittorrent, autobrr, radarr, sonarr ou prowlarr")
     compose("up", "-d", capture=True)
@@ -2997,6 +3028,11 @@ def main():
     rt_run = rt.add_parser("run")
     rt_run.add_argument("item")
     rt_run.add_argument("--by", default="cli")
+    ap = commands.add_parser("apppass", help="mots de passe propres aux applications").add_subparsers(dest="action", required=True)
+    ap.add_parser("show")
+    ap_reset = ap.add_parser("reset", help="nouveau mot de passe sur l'entrée standard ; vide = généré")
+    ap_reset.add_argument("app")
+    ap_reset.add_argument("--login", default="")
     mq = commands.add_parser("mediaquality", help="qualité des médias").add_subparsers(dest="action", required=True)
     mq.add_parser("show")
     mq_up = mq.add_parser("upgrade")
@@ -3646,6 +3682,13 @@ def main():
             print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
         else:
             locked(module.rotate)(args.item, args.by)
+    elif args.command == "apppass":
+        module = apppasswords()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            password = "" if args.app != "jellyfin" and sys.stdin.isatty() else read_password("")
+            return report(locked(module.reset)(args.app, args.login, password))
     elif args.command == "mediaquality":
         module = mediaquality()
         if args.action == "show":

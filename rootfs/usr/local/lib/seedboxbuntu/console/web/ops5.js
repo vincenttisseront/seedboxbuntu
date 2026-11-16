@@ -364,7 +364,39 @@ function initNetwork() {
     'La configuration réseau précédente est rétablie et le serveur peut changer d’adresse.', revertNetwork));
 }
 
+// --- mots de passe des applications (page Identifiants) ------------------------------------------------------------------
+let appPasswords = [];
+
+function syncAppPassAccount() {
+  const app = appPasswords.find((a) => a.id === $('apppass-app').value);
+  const accounts = app ? app.accounts : [];
+  $('apppass-login').replaceChildren(...(accounts.length ? accounts.map((name) => el('option', { value: name }, name))
+    : [el('option', { value: '' }, app && app.id === 'jellyfin' ? 'Aucun compte lisible (Jellyfin arrêté ?)' : '-')]));
+  $('apppass-form').elements.password.placeholder = app && app.typed ? 'Nouveau mot de passe (8 caractères au minimum)' : 'vide : généré';
+  $('apppass-form').elements.password.required = Boolean(app && app.typed);
+}
+
+async function loadAppPasswords() {
+  const data = await api('/api/apppasswords');
+  appPasswords = data.apps;
+  const chosen = $('apppass-app').value;
+  $('apppass-app').replaceChildren(...appPasswords.map((a) => el('option', { value: a.id }, a.running ? a.name : `${a.name} (arrêté)`)));
+  if (chosen) $('apppass-app').value = chosen;
+  syncAppPassAccount();
+}
+
+function resetAppPassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const app = appPasswords.find((a) => a.id === form.elements.app.value);
+  if (!app) return;
+  const body = { app: app.id, login: app.id === 'jellyfin' ? form.elements.login.value : '', password: form.elements.password.value };
+  runJob('/api/apppasswords/reset', body, () => { form.elements.password.value = ''; loadAppPasswords().catch(showError); loadRotation().catch(showError); });
+}
+
 function initOps5() {
+  $('apppass-form').addEventListener('submit', resetAppPassword);
+  $('apppass-app').addEventListener('change', syncAppPassAccount);
   $('care-refresh').addEventListener('click', () => loadCare().catch(showError));
   $('spacefore-form').addEventListener('submit', saveSpacefore);
   $('libreport-form').addEventListener('submit', saveLibreport);

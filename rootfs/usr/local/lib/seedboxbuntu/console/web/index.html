@@ -763,6 +763,14 @@
   <section id="view-secrets" class="view hidden">
     <header class="page-head"><div><h1>Identifiants</h1><p class="sub">Comptes de service utilisés entre les applications. Un renouvellement met aussi à jour les applications qui en dépendent.</p></div><div class="actions"><button id="secrets-show" class="btn" type="button">Afficher</button></div></header>
     <div id="secrets-list" class="grid"></div>
+    <form id="apppass-form" class="card form">
+      <h2>Réinitialiser le mot de passe d’une application</h2>
+      <p class="muted small">Pour une application qui demande un compte que vous ne retrouvez plus. Jellyfin : choisissez le compte et saisissez le nouveau mot de passe (il n’est conservé nulle part). qBittorrent, autobrr, Audiobookshelf : laissez vide pour en générer un, visible ensuite ci-dessus. Le résultat est vérifié par une vraie connexion. Les comptes partagés (connexion unique, Jellyfin, Seerr, p2p-aggregator) se changent d’un coup dans la page Comptes.</p>
+      <label>Application<select name="app" id="apppass-app"></select></label>
+      <label>Compte<select name="login" id="apppass-login"></select></label>
+      <label>Nouveau mot de passe<input name="password" type="password" minlength="8" autocomplete="new-password" placeholder="vide : généré"></label>
+      <button class="btn primary" type="submit">Réinitialiser</button>
+    </form>
     <div class="card" id="rotation-card">
       <h2>Renouveler un secret interne</h2>
       <p class="muted small">Un nouveau secret est écrit, propagé aux applications qui en dépendent, puis vérifié : si l’application ne répond pas avec lui, l’ancien est remis et tout est relié à nouveau. Une clé d’API rend l’application indisponible quelques dizaines de secondes. Ne sont pas renouvelés ici : les secrets d’Authelia, les mots de passe des comptes (page Comptes), la clé des sauvegardes et le mot de passe de qBittorrent.</p>

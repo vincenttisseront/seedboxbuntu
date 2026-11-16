@@ -111,6 +111,10 @@ def route(p, q, role="admin", PREFS=None):
         {"key": "du.media-films", "label": "Médias : films", "size": 8e11, "per_day": 2e9, "span_days": 14, "share": 31.4, "spark": [7.9e11, 7.92e11, 7.95e11, 7.98e11, 8e11]},
         {"key": "du.docker-images", "label": "Docker : images", "size": 9e9, "per_day": 0, "span_days": 14, "share": 0.4, "spark": [9e9, 9e9, 9e9]},
         {"key": "du.config-jellyfin", "label": "Configuration : jellyfin", "size": 3e9, "per_day": 0, "span_days": 0, "share": 0.1, "spark": [3e9]}]}
+    if p == "/api/apppasswords": return {"apps": [
+        {"id": "jellyfin", "name": "Jellyfin", "running": True, "typed": True, "accounts": ["vincent", "papa"]},
+        {"id": "qbittorrent", "name": "qBittorrent", "running": True, "typed": False, "accounts": ["admin"]},
+        {"id": "autobrr", "name": "autobrr", "running": False, "typed": False, "accounts": ["admin"]}]}
     if p == "/api/rotation": return {"old_after_days": 365, "items": [
         {"id": "radarr", "label": "Radarr", "present": True, "last": now - 86400 * 30, "by": "vincent", "age_days": 30, "running": True},
         {"id": "sonarr", "label": "Sonarr", "present": True, "last": 0, "by": "", "age_days": None, "running": True},

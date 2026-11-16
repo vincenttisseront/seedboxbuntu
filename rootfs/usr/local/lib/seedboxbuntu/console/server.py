@@ -487,6 +487,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.diskusage().overview())
         if path == "/api/rotation":
             return self.send_json(ctl.rotation().overview())
+        if path == "/api/apppasswords":
+            return self.send_json(ctl.apppasswords().overview())
         if path == "/api/mediaquality":
             return self.send_json(ctl.mediaquality().overview())
         if path == "/api/peoplereport":
@@ -678,6 +680,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ctl.SeedboxError("secret inconnu")
             return self.send_json({"job": start_job("Renouvellement d'un secret : " + ctl.rotation().ITEMS[item][0], ["rotation", "run", item, "--by",
                                                                                                                   self.headers.get("Remote-User", "")[:30] or "console"])})
+        if path == "/api/apppasswords/reset":
+            app, login, password = str(data.get("app", "")), str(data.get("login", "")), str(data.get("password", ""))
+            if app not in ctl.apppasswords().APPS:
+                raise ctl.SeedboxError("application inconnue")
+            if "\n" in password or "\n" in login or login.startswith("-") or (password and len(password) < ctl.MIN_PASSWORD):
+                raise ctl.SeedboxError(f"mot de passe invalide : {ctl.MIN_PASSWORD} caractères au minimum")
+            argv = ["apppass", "reset", app] + (["--login", login] if login else [])
+            return self.send_json({"job": start_job("Mot de passe de " + ctl.apppasswords().APPS[app], argv, password)})
         if path == "/api/mediaquality/upgrade":
             return self.send_json(ctl.mediaquality().upgrade(str(data.get("app", "")), data.get("count", 20), by=self.headers.get("Remote-User", "") or "console"))
         if path == "/api/linkcheck/run":
