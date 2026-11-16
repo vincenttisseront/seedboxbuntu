@@ -489,6 +489,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.rotation().overview())
         if path == "/api/apppasswords":
             return self.send_json(ctl.apppasswords().overview())
+        if path == "/api/bans":
+            return self.send_json(ctl.bans().overview(self.client_address_text()))
         if path == "/api/aggregator":
             return self.send_json(ctl.aggregator().dashboard())
         if path == "/api/aggregator/catalogue":
@@ -696,6 +698,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ctl.SeedboxError(f"mot de passe invalide : {ctl.MIN_PASSWORD} caractères au minimum")
             argv = ["apppass", "reset", app] + (["--login", login] if login else [])
             return self.send_json({"job": start_job("Mot de passe de " + ctl.apppasswords().APPS[app], argv, password)})
+        if path.startswith("/api/bans/"):
+            module = ctl.bans()
+            if path == "/api/bans/unban":
+                module.unban(str(data.get("address", "")), str(data.get("jail", "")))
+            elif path == "/api/bans/unban-all":
+                module.unban_all()
+            elif path == "/api/bans/ban":
+                module.ban(str(data.get("address", "")), str(data.get("jail", "sshd")))
+            elif path == "/api/bans/ignore":
+                module.ignore(str(data.get("address", "")))
+            elif path == "/api/bans/unignore":
+                module.unignore(str(data.get("address", "")))
+            elif path == "/api/bans/settings":
+                module.save(data.get("ban_minutes"), data.get("window_minutes"), data.get("retries"), data.get("increment"), data.get("max_hours"))
+            else:
+                self.send_json({"error": "route inconnue"}, 404)
+                return
+            return self.send_json(module.overview(self.client_address_text()))
         if path.startswith("/api/aggregator/"):
             module = ctl.aggregator()
             if path == "/api/aggregator/sync":

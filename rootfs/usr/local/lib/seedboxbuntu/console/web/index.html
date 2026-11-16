@@ -379,6 +379,59 @@
     </div>
   </section>
 
+  <section id="view-bans" class="view hidden">
+    <header class="page-head"><div><h1>Bannissements</h1><p class="sub">fail2ban bloque pendant un temps croissant l’adresse qui échoue trop souvent à se connecter en SSH. Ici : qui est banni, débannir ou bannir une adresse, adresses jamais bannies, seuils. La connexion web a sa propre protection (5 essais, puis 10 minutes).</p></div><div class="actions"><button id="bans-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <p id="bans-state" class="notice info"></p>
+    <div id="bans-me" class="notice warn hidden">
+      <p id="bans-me-text"></p>
+      <button id="bans-me-ignore" class="btn primary" type="button">Ne jamais bannir mon adresse</button>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Adresses bannies</h2><button id="bans-unban-all" class="btn danger sm" type="button">Tout débannir</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Adresse</th><th>Jail</th><th>Jusqu’à</th><th></th></tr></thead>
+        <tbody id="bans-list"></tbody>
+      </table></div>
+      <form id="bans-add" class="row filters">
+        <label>Bannir une adresse<input name="address" required autocomplete="off" placeholder="203.0.113.7"></label>
+        <label>Jail<select name="jail" id="bans-jail"></select></label>
+        <button class="btn primary" type="submit">Bannir</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Jails</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Jail</th><th>Échecs en cours</th><th>Échecs au total</th><th>Bannis en ce moment</th><th>Bannissements au total</th></tr></thead>
+        <tbody id="bans-jails"></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h2>Adresses ignorées</h2>
+      <p class="muted small">Ces adresses ne sont jamais bannies, même après de nombreux échecs : mettez-y votre poste ou votre réseau local. 127.0.0.1 et ::1 le sont toujours.</p>
+      <ul id="bans-ignored" class="checks"></ul>
+      <form id="bans-ignore-form" class="row filters">
+        <label>Adresse ou réseau<input name="address" required autocomplete="off" placeholder="192.168.1.0/24"></label>
+        <button class="btn primary" type="submit">Ignorer</button>
+      </form>
+    </div>
+    <form id="bans-settings" class="card form">
+      <h2>Seuils</h2>
+      <label>Durée du bannissement (minutes)<input name="ban_minutes" type="number" min="1" max="43200" autocomplete="off"></label>
+      <label>Fenêtre de comptage des échecs (minutes)<input name="window_minutes" type="number" min="1" max="1440" autocomplete="off"></label>
+      <label>Essais permis avant le bannissement<input name="retries" type="number" min="2" max="30" autocomplete="off"></label>
+      <label class="check"><input name="increment" type="checkbox">Bannissement plus long à chaque récidive</label>
+      <label>Durée maximale d’un bannissement (heures)<input name="max_hours" type="number" min="1" max="8760" autocomplete="off"></label>
+      <button class="btn primary" type="submit">Enregistrer</button>
+    </form>
+    <div class="card">
+      <h2>Historique récent</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Jail</th><th>Action</th><th>Adresse</th></tr></thead>
+        <tbody id="bans-recent"></tbody>
+      </table></div>
+    </div>
+  </section>
+
   <section id="view-aggregator" class="view hidden">
     <header class="page-head"><div><h1>Agrégateur</h1><p class="sub">Les nouveautés de vos indexeurs (Prowlarr, Jackett, sources Torznab) regroupées par œuvre : un film ou une série n’apparaît qu’une fois, avec toutes ses versions. Un clic envoie le torrent choisi à qBittorrent.</p></div><div class="actions"><button id="agg-sync" class="btn primary" type="button">Collecter maintenant</button></div></header>
     <p id="agg-state" class="notice info"></p>

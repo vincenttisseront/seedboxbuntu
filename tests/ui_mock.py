@@ -282,6 +282,11 @@ def route(p, q, role="admin", PREFS=None):
                    {"name": "usb", "kind": "disk", "version": "", "username": "", "source": "", "label": "Archive", "fstype": "ext4", "mounted": True, "free": 8e11, "total": 2e12, "roles": []}]}
     if p == "/api/vpn": return {"enabled": False, "state": "", "provider": "", "ip": "", "port": 6881, "port_forwarding": False}
     if p == "/api/remote": return {"extra_hosts": "", "tailscale": {"enabled": False, "running": False, "state": "", "hostname": "seedbox", "ips": []}, "dns": {"providers": {"cloudflare": "Cloudflare", "ovh": "OVH"}, "provider": "", "custom_domain": "", "variables": []}}
+    if p == "/api/bans": return {"active": True, "installed": True, "total_banned": 2, "me": "192.168.1.20", "me_ignored": False, "me_banned": True,
+        "always": ["127.0.0.1/8", "::1"], "limits": {}, "settings": {"ban_minutes": 60, "window_minutes": 10, "retries": 5, "increment": True, "max_hours": 168, "ignore": ["192.168.1.0/24"]},
+        "jails": [{"name": "sshd", "error": "", "failed": 2, "failed_total": 17, "banned_total": 9, "banned": [
+            {"address": "192.168.1.20", "until": now + 1800, "seconds": 3600}, {"address": "203.0.113.7", "until": now + 86400, "seconds": 86400}]}],
+        "recent": [{"at": "2026-11-16T16:05:01+01:00", "jail": "sshd", "action": "Ban", "address": "203.0.113.7"}, {"at": "2026-11-16T15:40:00+01:00", "jail": "sshd", "action": "Unban", "address": "192.0.2.9"}]}
     if p == "/api/aggregator": return {"enabled": True, "interval": 60, "retention": 7, "limit": 100, "category": "agregateur", "alert": True, "intervals": [15, 30, 60, 120, 180, 240, 360],
         "running": False, "last_sync": now - 1800, "next_sync": now + 1800, "qbittorrent": True, "problems": ["Jackett : 3 collectes en échec"],
         "totals": {"works": 5, "torrents": 9, "sent": 1, "day": 3, "week": 5}, "per_category": {"films": 2, "series": 1, "musique": 1},
@@ -381,6 +386,8 @@ class H(http.server.BaseHTTPRequestHandler):
             {"id": "prowlarr-apps", "title": "Prowlarr → Radarr, Sonarr", "state": "ok", "detail": "Les applications reliées répondent.", "hint": ""},
             {"id": "radarr-client", "title": "Radarr → client de téléchargement", "state": "error", "detail": "qBittorrent : Unable to connect", "hint": "Relancer la configuration des applications (Applications) relie à nouveau ce que la console provisionne."},
             {"id": "seerr-sonarr", "title": "Seerr → Sonarr", "state": "warn", "detail": "Seerr n'a aucun serveur Sonarr : les demandes ne partiront pas.", "hint": ""}]})
+        if self.path.endswith(("/api/bans/unban", "/api/bans/unban-all", "/api/bans/ban", "/api/bans/ignore", "/api/bans/unignore", "/api/bans/settings")):
+            return self.send(200, route("/api/bans", {}, self.role, self.prefs))
         if self.path.endswith("/api/aggregator/send"): return self.send(200, {"state": "envoye", "message": "envoyé à qBittorrent", "title": "Matrix 1999 2160p UHD"})
         if self.path.endswith("/api/aggregator/source/test"): return self.send(200, {"count": 12, "trackers": ["Tracker A", "Tracker B"], "sample": "Dune"})
         if self.path.endswith(("/api/aggregator/settings", "/api/aggregator/source/add", "/api/aggregator/source/remove", "/api/aggregator/source/toggle")): return self.send(200, route("/api/aggregator", {}, self.role, self.prefs))

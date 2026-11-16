@@ -373,6 +373,28 @@ def journeys_ops2(page, base):
         fail("parcours : la création d'un partage n'envoie pas le titre choisi ou n'affiche pas le lien")
     if "Marie" not in page.inner_text("#peoplereport-list") and "marie" not in page.inner_text("#peoplereport-list"):
         fail("parcours : le bilan mensuel n'affiche pas les comptes")
+    page.goto(base + "#bans")
+    settle(page, "bans")
+    page.wait_for_timeout(300)
+    if page.locator("#bans-list tr").count() != 2 or "203.0.113.7" not in page.inner_text("#bans-list"):
+        fail("parcours : la page Bannissements doit lister les adresses bannies")
+    if page.locator("#bans-me").evaluate("e => e.classList.contains('hidden')") or "192.168.1.20" not in page.inner_text("#bans-me"):
+        fail("parcours : votre adresse bannie doit être signalée avec le bouton « Ne jamais bannir mon adresse »")
+    page.click("#bans-list tr >> nth=1 >> button:has-text('Débannir') >> nth=0")
+    page.wait_for_timeout(300)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/bans/unban") and body.get("address") == "203.0.113.7" and body.get("jail") == "sshd"]:
+        fail("parcours : « Débannir » doit transmettre l'adresse et le jail")
+    page.fill("#bans-add [name=address]", "198.51.100.9")
+    page.click("#bans-add button[type=submit]")
+    page.wait_for_timeout(300)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/bans/ban") and body.get("address") == "198.51.100.9"]:
+        fail("parcours : « Bannir » doit transmettre l'adresse saisie")
+    page.click("#bans-settings button[type=submit]")
+    page.wait_for_timeout(300)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/bans/settings") and body.get("retries") == 5 and body.get("ban_minutes") == 60]:
+        fail("parcours : les seuils doivent être envoyés")
+    if "192.168.1.0/24" not in page.inner_text("#bans-ignored") or "toujours ignorée" not in page.inner_text("#bans-ignored"):
+        fail("parcours : les adresses ignorées (dont 127.0.0.1) doivent être listées")
     page.goto(base + "#aggregator")
     settle(page, "aggregator")
     page.wait_for_timeout(300)

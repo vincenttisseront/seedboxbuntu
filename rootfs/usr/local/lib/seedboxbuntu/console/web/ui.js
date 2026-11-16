@@ -355,7 +355,7 @@ const NAV = [
   { id: 'security', label: 'Sécurité', icon: 'lock', items: [
     { view: 'users', label: 'Comptes', icon: 'users' }, { view: 'guests', label: 'Invités', icon: 'user-plus' },
     { view: 'secrets', label: 'Identifiants', icon: 'key' }, { view: 'activity', label: 'Activité', icon: 'activity' },
-    { view: 'vulns', label: 'Vulnérabilités', icon: 'shield' }] },
+    { view: 'vulns', label: 'Vulnérabilités', icon: 'shield' }, { view: 'bans', label: 'Bannissements', icon: 'ban' }] },
   { id: 'ops', label: 'Exploitation', icon: 'activity', items: [
     { view: 'system', label: 'Système', icon: 'monitor' }, { view: 'alerts', label: 'Alertes', icon: 'bell' },
     { view: 'report', label: 'Rapport', icon: 'file' }, { view: 'vacation', label: 'Vacances', icon: 'sun' }, { view: 'diagnose', label: 'Dépannage', icon: 'help' },

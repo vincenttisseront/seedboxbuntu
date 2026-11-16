@@ -74,6 +74,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl energy show|sample|standby|set   veille des disques et coût par To
   seedboxctl trackerstats show|refresh|alias  ratios réels des trackers (p2p-aggregator)
   seedboxctl aggregator show|sync|sources|add|config|send   catalogue des releases par œuvre (Prowlarr, Jackett, Torznab)
+  seedboxctl bans show|unban|ban|ignore|set      fail2ban : adresses bannies, adresses ignorées, seuils
   seedboxctl vpnwatch show|set|tick          surveillance du VPN (fuite, changement d'adresse)
   seedboxctl house                           état d'ensemble pour l'écran « maison »
 """
@@ -400,6 +401,10 @@ def apppasswords():
 
 def aggregator():
     return _lazy("aggregator")
+
+
+def bans():
+    return _lazy("bans")
 
 
 def mediaquality():
@@ -3038,6 +3043,22 @@ def main():
     ap_reset = ap.add_parser("reset", help="nouveau mot de passe sur l'entrée standard ; vide = généré")
     ap_reset.add_argument("app")
     ap_reset.add_argument("--login", default="")
+    bn = commands.add_parser("bans", help="fail2ban : bannissements et réglages").add_subparsers(dest="action", required=True)
+    for name in ("show", "unban-all"):
+        bn.add_parser(name)
+    for name in ("unban", "ban"):
+        bn_a = bn.add_parser(name)
+        bn_a.add_argument("address")
+        bn_a.add_argument("--jail", default="" if name == "unban" else "sshd")
+    for name in ("ignore", "unignore"):
+        bn.add_parser(name).add_argument("address")
+    bn_set = bn.add_parser("set")
+    bn_set.add_argument("--ban-minutes", type=int)
+    bn_set.add_argument("--window-minutes", type=int)
+    bn_set.add_argument("--retries", type=int)
+    bn_set.add_argument("--max-hours", type=int)
+    bn_set.add_argument("--increment", dest="increment", action="store_true", default=None)
+    bn_set.add_argument("--no-increment", dest="increment", action="store_false")
     ag = commands.add_parser("aggregator", help="catalogue des releases par œuvre").add_subparsers(dest="action", required=True)
     for name in ("show", "sources", "purge"):
         ag.add_parser(name)
@@ -3712,6 +3733,22 @@ def main():
         else:
             password = "" if args.app != "jellyfin" and sys.stdin.isatty() else read_password("")
             return report(locked(module.reset)(args.app, args.login, password))
+    elif args.command == "bans":
+        module = bans()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "unban":
+            print(f"{args.address} débanni ({module.unban(args.address, args.jail)} jail(s))")
+        elif args.action == "unban-all":
+            print(f"{module.unban_all()} adresse(s) débannie(s)")
+        elif args.action == "ban":
+            module.ban(args.address, args.jail)
+        elif args.action == "ignore":
+            module.ignore(args.address)
+        elif args.action == "unignore":
+            module.unignore(args.address)
+        else:
+            module.save(args.ban_minutes, args.window_minutes, args.retries, args.increment, args.max_hours)
     elif args.command == "aggregator":
         module = aggregator()
         if args.action == "show":

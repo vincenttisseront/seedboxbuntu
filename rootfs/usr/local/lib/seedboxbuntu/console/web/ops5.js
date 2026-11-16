@@ -568,8 +568,81 @@ function initAggregator() {
   $('agg-add').addEventListener('submit', addAggSource);
 }
 
+// --- bannissements fail2ban (page Bannissements) ----------------------------------------------------------------------------
+let bansData = null;
+
+const bansAct = (path, body, ok) => async () => {
+  try { bansData = await api(path, body); toast('ok', ok); drawBans(); } catch (error) { showError(error); }
+};
+
+function banActionLabel(action) { return action === 'Unban' ? 'débannie' : action === 'Restore Ban' ? 'bannie (reprise)' : 'bannie'; }
+
+function drawBans() {
+  const data = bansData;
+  const state = $('bans-state');
+  state.className = `notice ${!data.installed || !data.active ? 'warn' : 'info'}`;
+  state.textContent = !data.installed ? 'fail2ban n’est pas installé sur ce serveur.' : !data.active ? 'fail2ban est arrêté : plus rien n’est bloqué. Le durcissement de l’appliance le relance.'
+    : data.total_banned ? `fail2ban actif : ${fmtNumber(data.total_banned, 0)} adresse(s) bannie(s) en ce moment.` : 'fail2ban actif : aucune adresse bannie en ce moment.';
+  $('bans-me').classList.toggle('hidden', !data.me || (data.me_ignored && !data.me_banned));
+  $('bans-me-text').textContent = data.me_banned ? `Votre adresse (${data.me}) est bannie. Elle ne peut plus se connecter en SSH ; la console web reste accessible.`
+    : `Votre adresse (${data.me}) peut être bannie après trop d’échecs de connexion SSH.`;
+  $('bans-me-ignore').onclick = bansAct('/api/bans/ignore', { address: data.me }, 'Adresse ignorée : elle ne sera plus bannie.');
+  const rows = data.jails.flatMap((jail) => jail.banned.map((b) => ({ ...b, jail: jail.name })));
+  $('bans-list').replaceChildren(...(rows.length ? rows.map((row) => el('tr', {},
+    el('td', { class: 'no-i18n' }, row.address, row.address === data.me ? ' ' : null, row.address === data.me ? pill('vous', 'warn') : null), el('td', {}, row.jail),
+    el('td', {}, row.until ? fmtDateTime(row.until) : row.seconds && row.seconds < 0 ? 'définitif' : '-'),
+    el('td', {}, el('div', { class: 'row' },
+      el('button', { class: 'btn sm', type: 'button', onclick: bansAct('/api/bans/unban', { address: row.address, jail: row.jail }, 'Adresse débannie.') }, 'Débannir'),
+      el('button', { class: 'btn sm', type: 'button', onclick: bansAct('/api/bans/ignore', { address: row.address }, 'Adresse débannie et ignorée désormais.') }, 'Débannir et ignorer')))))
+    : [emptyRow(4, 'Aucune adresse bannie.')]));
+  $('bans-unban-all').disabled = !rows.length;
+  $('bans-jail').replaceChildren(...(data.jails.length ? data.jails.map((j) => el('option', { value: j.name }, j.name)) : [el('option', { value: 'sshd' }, 'sshd')]));
+  $('bans-jails').replaceChildren(...(data.jails.length ? data.jails.map((j) => el('tr', {}, el('td', {}, j.name, j.error ? el('div', { class: 'muted small no-i18n' }, j.error) : null),
+    el('td', {}, fmtNumber(j.failed, 0)), el('td', {}, fmtNumber(j.failed_total, 0)), el('td', {}, fmtNumber(j.banned.length, 0)), el('td', {}, fmtNumber(j.banned_total, 0))))
+    : [emptyRow(5, 'Aucun jail actif.')]));
+  const ignored = [...data.always, ...data.settings.ignore];
+  $('bans-ignored').replaceChildren(...ignored.map((item) => el('li', {}, el('span', { class: 'no-i18n' }, item), ' ',
+    data.always.includes(item) ? el('span', { class: 'muted small' }, 'toujours ignorée')
+      : el('button', { class: 'btn sm', type: 'button', onclick: bansAct('/api/bans/unignore', { address: item }, 'Adresse retirée de la liste.') }, 'Retirer'))));
+  const f = $('bans-settings').elements;
+  f.ban_minutes.value = data.settings.ban_minutes;
+  f.window_minutes.value = data.settings.window_minutes;
+  f.retries.value = data.settings.retries;
+  f.increment.checked = data.settings.increment;
+  f.max_hours.value = data.settings.max_hours;
+  $('bans-recent').replaceChildren(...(data.recent.length ? data.recent.map((r) => el('tr', {}, el('td', {}, fmtDateTime(r.at)), el('td', {}, r.jail),
+    el('td', {}, banActionLabel(r.action)), el('td', { class: 'no-i18n' }, r.address))) : [emptyRow(4, 'Rien de récent.')]));
+}
+
+async function loadBans() {
+  bansData = await api('/api/bans');
+  drawBans();
+}
+
+function initBans() {
+  $('bans-refresh').addEventListener('click', () => loadBans().catch(showError));
+  $('bans-unban-all').addEventListener('click', (event) => confirmAction(event.currentTarget,
+    'Toutes les adresses bannies sont libérées : celles qui tentent de deviner un mot de passe pourront recommencer.', bansAct('/api/bans/unban-all', {}, 'Toutes les adresses sont débannies.')));
+  $('bans-add').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const f = event.target.elements;
+    bansAct('/api/bans/ban', { address: f.address.value.trim(), jail: f.jail.value }, 'Adresse bannie.')().then(() => event.target.reset());
+  });
+  $('bans-ignore-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    bansAct('/api/bans/ignore', { address: event.target.elements.address.value.trim() }, 'Adresse ignorée : elle ne sera plus bannie.')().then(() => event.target.reset());
+  });
+  $('bans-settings').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const f = event.target.elements;
+    bansAct('/api/bans/settings', { ban_minutes: Number(f.ban_minutes.value), window_minutes: Number(f.window_minutes.value), retries: Number(f.retries.value),
+      increment: f.increment.checked, max_hours: Number(f.max_hours.value) }, 'Seuils enregistrés et appliqués.')();
+  });
+}
+
 function initOps5() {
   initAggregator();
+  initBans();
   $('apppass-form').addEventListener('submit', resetAppPassword);
   $('apppass-app').addEventListener('change', syncAppPassAccount);
   $('care-refresh').addEventListener('click', () => loadCare().catch(showError));
