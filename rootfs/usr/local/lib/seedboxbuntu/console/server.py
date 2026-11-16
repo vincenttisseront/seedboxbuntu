@@ -1073,6 +1073,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json({"job": start_job("Relance du déploiement", ["deploy"])})
         if path == "/api/shares":
             return self.share_add(data)
+        if path == "/api/shares/discover":
+            return self.send_json({"shares": ctl.shares().discover(str(data.get("kind", "")), str(data.get("host", "")), str(data.get("username", "")),
+                                                                     str(data.get("password", "")), str(data.get("domain", "")), str(data.get("version", "")))})
         if path == "/api/shares/role":
             role, share = data["role"], data.get("share", "")
             if role not in ctl.shares().ROLES or (share and not ctl.shares().NAME.match(share)):

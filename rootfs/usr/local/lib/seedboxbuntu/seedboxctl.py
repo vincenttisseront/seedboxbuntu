@@ -3287,6 +3287,12 @@ def main():
     share.add_parser("list")
     share.add_parser("disks")
     share.add_parser("remount")
+    find = share.add_parser("discover", help="partages proposés par un serveur ; mot de passe SMB lu sur l'entrée standard")
+    find.add_argument("kind", choices=("smb", "nfs"))
+    find.add_argument("host")
+    find.add_argument("--username", default="")
+    find.add_argument("--domain", default="")
+    find.add_argument("--version", default="")
     new = share.add_parser("add", help="mot de passe SMB lu sur l'entrée standard")
     new.add_argument("name")
     new.add_argument("--kind", choices=("smb", "nfs", "disk"), required=True)
@@ -3973,6 +3979,9 @@ def main():
             print(json.dumps(module.disks(), indent=2, ensure_ascii=False))
         elif args.action == "remount":
             return report(locked(module.remount)())
+        elif args.action == "discover":
+            password = read_password("") if args.kind == "smb" and args.username else ""
+            print(json.dumps(module.discover(args.kind, args.host, args.username, password, args.domain, args.version), indent=2, ensure_ascii=False))
         elif args.action == "add":
             password = read_password("") if args.kind == "smb" and args.username else ""
             return report(locked(module.add)(args.name, args.kind, args.source, args.username, password,

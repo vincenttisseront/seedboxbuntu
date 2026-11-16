@@ -245,17 +245,23 @@
           <option value="disk">Disque branché sur le serveur (NTFS, exFAT, ext4...)</option>
         </select>
       </label>
-      <label>Nom court<input name="name" required pattern="[a-z][a-z0-9]{0,19}" placeholder="nas"></label>
-      <label data-kinds="smb nfs">Adresse<input name="source" id="share-source" placeholder="//192.168.1.10/torrents"></label>
-      <label data-kinds="disk">Disque
-        <select name="disk" id="share-disk"></select>
-      </label>
+      <label data-kinds="smb nfs">Serveur (adresse IP ou nom)<input name="host" id="share-host" placeholder="192.168.1.10" autocomplete="off"></label>
       <label data-kinds="smb">Identifiant<input name="username" placeholder="vide : accès invité" autocomplete="off"></label>
       <label data-kinds="smb">Mot de passe<input name="password" type="password" autocomplete="new-password"></label>
       <label data-kinds="smb">Domaine<input name="domain" placeholder="facultatif" autocomplete="off"></label>
       <label data-kinds="smb nfs">Version du protocole
         <select name="version" id="share-version"></select>
       </label>
+      <div class="row" data-kinds="smb nfs"><button id="share-discover" class="btn" type="button">Rechercher les partages</button></div>
+      <p id="share-discover-state" class="muted small hidden" role="status"></p>
+      <label id="share-found" class="hidden">Partage trouvé sur le serveur
+        <select id="share-pick"></select>
+      </label>
+      <label data-kinds="smb nfs">Adresse du partage (remplie par la liste, modifiable)<input name="source" id="share-source" placeholder="//192.168.1.10/torrents"></label>
+      <label data-kinds="disk">Disque
+        <select name="disk" id="share-disk"></select>
+      </label>
+      <label>Nom court<input name="name" required pattern="[a-z][a-z0-9]{0,19}" placeholder="nas"></label>
       <p class="muted small" data-kinds="smb">Le compte doit pouvoir écrire dans le partage. Les fichiers appartiennent aux applications (utilisateur 1000) côté serveur.</p>
       <p class="muted small" data-kinds="nfs">Autorisez l'adresse IP de ce serveur dans l'export, et mappez les accès en écriture (all_squash, anonuid=1000 ou équivalent du NAS).</p>
       <p class="muted small" data-kinds="disk">Seuls les disques non montés sont proposés. Le disque n'est pas formaté : son contenu est conservé.</p>

@@ -26,6 +26,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import seedboxctl as ctl
@@ -133,6 +134,121 @@ def check_subdir(path):
     if not SUBDIR.match(path) or any(part in (".", "..") for part in path.split("/")):
         raise ctl.SeedboxError("sous-dossier invalide : lettres, chiffres, espace, . _ - et / uniquement, sans ..")
     return path
+
+
+# ----------------------------------------------------------------------------
+#  Découverte : les partages qu'un serveur propose, avec l'identifiant saisi
+# ----------------------------------------------------------------------------
+SMB_PROTOCOLS = {"3.1.1": "SMB3_11", "3.0": "SMB3_00", "2.1": "SMB2_10", "2.0": "SMB2_02", "1.0": "NT1"}
+DISCOVER_RULES = [
+    (r"NT_STATUS_LOGON_FAILURE|NT_STATUS_WRONG_PASSWORD|NT_STATUS_NO_SUCH_USER", "accès refusé : identifiant ou mot de passe incorrect"),
+    (r"NT_STATUS_ACCOUNT_LOCKED_OUT|NT_STATUS_ACCOUNT_DISABLED|NT_STATUS_PASSWORD_EXPIRED|NT_STATUS_PASSWORD_MUST_CHANGE",
+     "compte verrouillé, désactivé ou au mot de passe expiré sur le serveur"),
+    (r"NT_STATUS_ACCESS_DENIED", "le serveur refuse de lister ses partages avec ce compte : saisissez l'adresse du partage à la main"),
+    (r"NT_STATUS_HOST_UNREACHABLE|NT_STATUS_IO_TIMEOUT|NT_STATUS_CONNECTION_REFUSED|NT_STATUS_UNSUCCESSFUL|NT_STATUS_NETWORK_UNREACHABLE"
+     r"|Connection to .* failed|timed out", "serveur injoignable : adresse, réseau ou service SMB arrêté"),
+    (r"NT_STATUS_INVALID_NETWORK_RESPONSE|NT_STATUS_NOT_SUPPORTED|protocol negotiation failed",
+     "le serveur refuse cette version du protocole : choisissez-en une autre"),
+    (r"NT_STATUS_BAD_NETWORK_NAME|NT_STATUS_OBJECT_NAME_NOT_FOUND", "partage introuvable sur le serveur"),
+    (r"Unable to initialize messaging context|Unknown host|Name or service not known|NT_STATUS_NO_SUCH_DEVICE", "nom du serveur introuvable : utilisez son adresse IP"),
+    (r"RPC: Program not registered|RPC: Remote system error|RPC: Port mapper failure|Program not registered",
+     "ce serveur ne répond pas à showmount (NFS version 4 seule ?) : saisissez le chemin de l'export à la main"),
+    (r"RPC: Timed out|clnt_create", "serveur NFS injoignable : adresse, réseau ou service arrêté"),
+]
+
+
+def ensure_package(binary, package):
+    """Outil de découverte installé à la demande sur les serveurs montés avant son arrivée dans la liste des paquets."""
+    if shutil.which(binary):
+        return
+    if not shutil.which("apt-get"):
+        raise ctl.SeedboxError(f"{binary} est absent : installez le paquet {package}")
+    ctl.say(f"{binary} absent : installation de {package}")
+    result = subprocess.run(["apt-get", "install", "-y", "-q", "--no-install-recommends", "-o", "DPkg::Lock::Timeout=120", package],
+                            capture_output=True, text=True, env=dict(os.environ, DEBIAN_FRONTEND="noninteractive"), timeout=300)
+    if result.returncode != 0 or not shutil.which(binary):
+        raise ctl.SeedboxError(f"{binary} absent et {package} impossible à installer : {result.stderr.strip()[-160:]}")
+
+
+def discover_error(output, fallback):
+    for pattern, message in DISCOVER_RULES:
+        if re.search(pattern, output, re.I):
+            return message
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    return fallback + (" : " + lines[-1][:160] if lines else "")
+
+
+def discover_smb(host, username="", password="", domain="", version=""):
+    ensure_package("smbclient", "smbclient")
+    command = ["smbclient", "-g", "-L", host]
+    if version:
+        command += ["-m", SMB_PROTOCOLS[version]]
+        if version == "1.0":
+            command += ["--option=client min protocol=NT1"]
+    folder = Path(tempfile.mkdtemp(prefix="sbdisc"))
+    try:
+        if username:
+            auth = folder / "auth"      # le mot de passe ne passe jamais par la ligne de commande
+            fd = os.open(auth, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as handle:
+                handle.write(f"username={username}\npassword={password}\n" + (f"domain={domain}\n" if domain else ""))
+            command += ["-A", str(auth)]
+        else:
+            command += ["-N"]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            raise ctl.SeedboxError("serveur injoignable : délai dépassé")
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    found = []
+    for line in result.stdout.splitlines():
+        kind, _, rest = line.partition("|")
+        name, _, comment = rest.partition("|")
+        if kind == "Disk" and name and not name.endswith("$") and SMB_PART.match(name):
+            found.append({"name": name, "comment": comment.strip()[:80], "source": f"//{host}/{name}"})
+    if not found:
+        if result.returncode != 0:
+            raise ctl.SeedboxError(discover_error(result.stdout + result.stderr, "recherche impossible"))
+        raise ctl.SeedboxError("aucun partage visible avec ce compte" if username else
+                               "aucun partage visible sans identifiant : saisissez un compte")
+    return found
+
+
+def discover_nfs(host):
+    ensure_package("showmount", "nfs-common")
+    try:
+        result = subprocess.run(["showmount", "-e", "--no-headers", host], capture_output=True, text=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        raise ctl.SeedboxError("serveur NFS injoignable : délai dépassé")
+    if result.returncode != 0:
+        raise ctl.SeedboxError(discover_error(result.stdout + result.stderr, "recherche impossible"))
+    found = []
+    for line in result.stdout.splitlines():
+        path = line.split()[0] if line.split() else ""
+        if NFS_PATH.match(path):
+            found.append({"name": path, "comment": " ".join(line.split()[1:])[:80], "source": f"{host}:{path}"})
+    if not found:
+        raise ctl.SeedboxError("aucun export visible depuis ce serveur : autorisez son adresse IP dans la configuration NFS du NAS")
+    return found
+
+
+def discover(kind, host, username="", password="", domain="", version=""):
+    """Liste les partages (SMB) ou exports (NFS) d'un serveur : [{name, comment, source}]."""
+    host = (host or "").strip()
+    if not HOST.match(host):
+        raise ctl.SeedboxError("serveur invalide : adresse IP ou nom, sans « // » ni chemin")
+    if kind == "smb":
+        if version not in SMB_VERSIONS:
+            raise ctl.SeedboxError("version SMB inconnue")
+        if not DOMAIN.match(domain or ""):
+            raise ctl.SeedboxError("domaine invalide")
+        check_line("identifiant", username or "")
+        check_line("mot de passe", password or "", 256)
+        return discover_smb(host, username or "", password or "", domain or "", version)
+    if kind == "nfs":
+        return discover_nfs(host)
+    raise ctl.SeedboxError("la recherche concerne les partages SMB et NFS")
 
 
 # ----------------------------------------------------------------------------

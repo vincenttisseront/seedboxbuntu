@@ -218,6 +218,7 @@ async function loadP2p() {
 
 const KIND_LABEL = { smb: 'SMB', nfs: 'NFS', disk: 'Disque' };
 let sharesData = null;
+let foundShares = [];
 
 function showKindFields() {
   const kind = $('share-kind').value;
@@ -225,8 +226,49 @@ function showKindFields() {
     node.classList.toggle('hidden', !node.dataset.kinds.split(' ').includes(kind));
   }
   $('share-source').placeholder = kind === 'nfs' ? '192.168.1.10:/volume1/torrents' : '//192.168.1.10/torrents';
+  $('share-found').classList.toggle('hidden', kind === 'disk' || !foundShares.length);
+  $('share-discover-state').classList.toggle('hidden', kind === 'disk' || !$('share-discover-state').textContent);
   const versions = (sharesData && (kind === 'nfs' ? sharesData.nfs_versions : sharesData.smb_versions)) || [''];
   $('share-version').replaceChildren(...versions.map((v) => el('option', { value: v }, v || 'automatique (conseillé)')));
+}
+
+
+// Recherche des partages d'un serveur avec l'identifiant saisi, puis choix dans la liste
+function shortName(text) {
+  const clean = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '').slice(0, 20);
+  return /^[a-z]/.test(clean) ? clean : (clean ? `p${clean}`.slice(0, 20) : '');
+}
+async function discoverShares() {
+  const form = $('share-form');
+  const state = $('share-discover-state');
+  const kind = form.elements.kind.value;
+  const host = form.elements.host.value.trim();
+  if (!host) { toast('warn', 'Saisissez d’abord l’adresse ou le nom du serveur.'); return; }
+  const button = $('share-discover');
+  button.disabled = true;
+  state.textContent = 'Recherche en cours...';
+  state.classList.remove('hidden');
+  try {
+    const answer = await api('/api/shares/discover', { kind, host, username: form.elements.username.value, password: form.elements.password.value,
+      domain: form.elements.domain.value, version: form.elements.version.value });
+    foundShares = answer.shares;
+    $('share-pick').replaceChildren(el('option', { value: '' }, `${foundShares.length} trouvé(s) : choisissez`),
+      ...foundShares.map((share, index) => el('option', { value: String(index) }, share.comment ? `${share.name} · ${share.comment}` : share.name)));
+    $('share-found').classList.remove('hidden');
+    state.textContent = `${foundShares.length} partage(s) trouvé(s) sur ${host}.`;
+    if (foundShares.length === 1) { $('share-pick').value = '0'; pickShare(); }
+  } catch (error) {
+    foundShares = [];
+    $('share-found').classList.add('hidden');
+    state.textContent = error.message || String(error);
+  } finally { button.disabled = false; }
+}
+function pickShare() {
+  const share = foundShares[Number($('share-pick').value)];
+  if (!share) return;
+  $('share-source').value = share.source;
+  const name = $('share-form').elements.name;
+  if (!name.value) name.value = shortName(share.name.split('/').filter(Boolean).pop() || share.name);
 }
 
 function shareAction(name, action, label) {
@@ -814,13 +856,15 @@ $('token-form').addEventListener('submit', async (event) => {
     loadP2p();
   } catch (error) { showError(error); }
 });
-$('share-kind').addEventListener('change', showKindFields);
+$('share-kind').addEventListener('change', () => { foundShares = []; $('share-discover-state').textContent = ''; showKindFields(); });
+$('share-discover').addEventListener('click', discoverShares);
+$('share-pick').addEventListener('change', pickShare);
 $('share-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const data = formData(event.target);
   if (data.kind === 'disk') data.source = data.disk;
   delete data.disk;
-  runJob('/api/shares', data, () => { event.target.reset(); loadShares(); });
+  runJob('/api/shares', data, () => { event.target.reset(); foundShares = []; $('share-found').classList.add('hidden'); $('share-discover-state').textContent = ''; $('share-discover-state').classList.add('hidden'); loadShares(); });
 });
 $('share-credentials').addEventListener('submit', (event) => {
   event.preventDefault();

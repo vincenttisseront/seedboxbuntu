@@ -481,6 +481,25 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(400)
     if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/renamer/apply") and body.get("app") == "sonarr" and body.get("ids") == [9]]:
         fail("parcours : le renommage n'envoie pas le titre coché")
+    page.goto(base + "#shares")
+    settle(page, "shares")
+    page.wait_for_timeout(500)
+    page.fill("#share-host", "192.168.1.10")
+    page.fill('#share-form input[name="username"]', "seedbox")
+    page.fill('#share-form input[name="password"]', "secret")
+    ui_mock.CALLS.clear()
+    page.click("#share-discover")
+    page.wait_for_function("document.querySelectorAll('#share-pick option').length === 3")
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/shares/discover") and body.get("host") == "192.168.1.10" and body.get("username") == "seedbox" and body.get("kind") == "smb"]:
+        fail("parcours : la recherche des partages n'envoie pas le serveur et l'identifiant")
+    page.select_option("#share-pick", "1")
+    if page.input_value("#share-source") != "//192.168.1.10/Films 4K" or page.input_value('#share-form input[name="name"]') != "films4k":
+        fail("parcours : le partage choisi ne remplit pas l'adresse et le nom court")
+    page.fill("#share-host", "absent")
+    page.click("#share-discover")
+    page.wait_for_function("document.getElementById('share-discover-state').textContent.includes('injoignable')")
+    if not page.is_hidden("#share-found"):
+        fail("parcours : la liste des partages reste affichée après un échec de recherche")
     page.goto(base + "#domain")
     settle(page, "domain")
     page.wait_for_timeout(500)

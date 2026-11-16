@@ -378,6 +378,9 @@ class H(http.server.BaseHTTPRequestHandler):
                                "/api/energy/settings", "/api/trackerstats/settings", "/api/trackerstats/alias")): return self.send(200, {"settings": body})
         if self.path.endswith("/api/network/apply"): return self.send(200, {"pending": {"seconds_left": 120, "deadline": now + 120, "new": {}}, "address": body.get("address", "").split("/")[0], "mode": body.get("mode", "")})
         if self.path.endswith(("/api/network/confirm", "/api/network/revert")): return self.send(200, {"kept": True})
+        if self.path.endswith("/api/shares/discover"):
+            if body.get("host") == "absent": return self.send(400, {"error": "serveur injoignable : adresse, réseau ou service SMB arrêté"})
+            return self.send(200, {"shares": [{"name": "torrents", "comment": "Téléchargements", "source": "//%s/torrents" % body.get("host")}, {"name": "Films 4K", "comment": "", "source": "//%s/Films 4K" % body.get("host")}]})
         if self.path.endswith("/api/libreport/send"): return self.send(200, {"sent": True})
         if self.path.endswith(("/api/dormant/unmonitor", "/api/renamer/apply")): return self.send(200, {"done": 1})
         if self.path.endswith(("/api/integrity/research", "/api/energy/standby", "/api/guestquota/quota", "/api/guestquota/resume")): return self.send(200, {"ok": True})
