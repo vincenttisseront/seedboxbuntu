@@ -293,7 +293,8 @@ def scan():
 def targets():
     """Dossiers de médias de CE serveur, pour remplir la table des chemins."""
     try:
-        return {role: ctl.shares().location(role) for role in ("movies", "tv", "music", "books", "downloads") if ctl.shares().location(role)}
+        roles = {"movies": "movies", "tv": "tv", "music": "music", "books": "books", "downloads": "complete"}
+        return {name: ctl.shares().location(role) for name, role in roles.items() if ctl.shares().location(role)}
     except (ctl.SeedboxError, OSError, KeyError, AttributeError):
         return {}
 

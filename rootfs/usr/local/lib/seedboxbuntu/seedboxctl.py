@@ -1412,32 +1412,36 @@ def provision_jellyfin():
     created = False
     for name, kind, default, role in (("Films", "movies", "/data/media/movies", "movies"),
                                       ("Séries", "tvshows", "/data/media/tv", "tv")):
-        wanted = shares().jellyfin_paths(default, role)
-        if name in folders:
-            # Bibliothèque existante : ajoute le partage choisi, retire un partage abandonné
-            current = [p.rstrip("/") for p in folders[name].get("Locations") or []]
-            for path in wanted:
-                if path not in current:
-                    say(f"Jellyfin : {name} inclut {path}")
-                    jellyfin_api("POST", "/Library/VirtualFolders/Paths?refreshLibrary=true",
-                                 {"Name": name, "PathInfo": {"Path": path}})
-            for path in current:
-                if path.startswith(shares().INNER + "/") and path not in wanted:
-                    say(f"Jellyfin : {name} n'inclut plus {path}")
-                    query = urllib.parse.urlencode({"name": name, "path": path, "refreshLibrary": "true"})
-                    jellyfin_api("DELETE", f"/Library/VirtualFolders/Paths?{query}")
-            continue
-        created = True
-        say(f"Jellyfin : bibliothèque {name}")
-        query = urllib.parse.urlencode({"name": name, "collectionType": kind, "refreshLibrary": "false"})
-        result = jellyfin_api("POST", f"/Library/VirtualFolders?{query}", {
-            "LibraryOptions": {"PathInfos": [{"Path": path} for path in wanted], "EnableRealtimeMonitor": True,
-                               "PreferredMetadataLanguage": "fr", "MetadataCountryCode": "FR"}})
-        if not result.ok:
-            raise SeedboxError(f"Jellyfin : bibliothèque {name} refusée (HTTP {result.status})")
+        created |= jellyfin_library_sync(name, kind, shares().library_paths(default, role), folders)
     if created:
         # Une bibliothèque jamais analysée ignore aussi les notifications de Radarr et Sonarr
         jellyfin_api("POST", "/Library/Refresh")
+
+
+def jellyfin_library_sync(name, kind, wanted, folders, refresh=False):
+    """Crée la bibliothèque, ou ajuste ses dossiers : ajoute le partage choisi, retire un partage abandonné.
+    Renvoie True si la bibliothèque vient d'être créée."""
+    if name in folders:
+        current = [p.rstrip("/") for p in folders[name].get("Locations") or []]
+        for path in wanted:
+            if path not in current:
+                say(f"Jellyfin : {name} inclut {path}")
+                jellyfin_api("POST", "/Library/VirtualFolders/Paths?refreshLibrary=true",
+                             {"Name": name, "PathInfo": {"Path": path}})
+        for path in current:
+            if path.startswith(shares().INNER + "/") and path not in wanted:
+                say(f"Jellyfin : {name} n'inclut plus {path}")
+                query = urllib.parse.urlencode({"name": name, "path": path, "refreshLibrary": "true"})
+                jellyfin_api("DELETE", f"/Library/VirtualFolders/Paths?{query}")
+        return False
+    say(f"Jellyfin : bibliothèque {name}")
+    query = urllib.parse.urlencode({"name": name, "collectionType": kind, "refreshLibrary": "true" if refresh else "false"})
+    result = jellyfin_api("POST", f"/Library/VirtualFolders?{query}", {
+        "LibraryOptions": {"PathInfos": [{"Path": path} for path in wanted], "EnableRealtimeMonitor": True,
+                           "PreferredMetadataLanguage": "fr", "MetadataCountryCode": "FR"}})
+    if not result.ok:
+        raise SeedboxError(f"Jellyfin : bibliothèque {name} refusée (HTTP {result.status})")
+    return True
 
 
 def qbit_reachable():
@@ -1486,7 +1490,12 @@ def provision_arr():
 def provision_apps():
     """Relie de nouveau les applications ajoutées depuis le catalogue (mode qBittorrent changé, mise à jour)."""
     module, errors = apps(), []
-    for entry in module.installed_entries():
+    entries = module.installed_entries()
+    if entries:
+        # Emplacements changés (Navidrome, Audiobookshelf, Lidarr) : les conteneurs sont recréés si leur définition a changé
+        module.regenerate()
+        compose("up", "-d", *[e["id"] for e in entries], check=False, capture=True)
+    for entry in entries:
         hook = module.INTEGRATIONS.get(entry.get("integration"))
         if not hook or not container_running(entry["id"]):
             continue

@@ -18,8 +18,10 @@ Identifiants
 
 Rôles
     Un rôle indique ce qu'un partage reçoit : téléchargements terminés, en cours, dossier
-    surveillé de .torrent, copie des .torrent, bibliothèques Films et Séries. Les applications
-    sont reconfigurées par « seedboxctl provision », qui lit l'emplacement de chaque rôle.
+    surveillé de .torrent, copie des .torrent, bibliothèques Films, Séries, Musique, Livres audio
+    et Livres. Les applications sont reconfigurées par « seedboxctl provision », qui lit
+    l'emplacement de chaque rôle (qBittorrent, Radarr, Sonarr, Lidarr, Jellyfin, Navidrome,
+    Audiobookshelf).
 """
 import json
 import os
@@ -52,6 +54,9 @@ ROLES = {
     "torrents": ("Copie des fichiers .torrent ajoutés", "torrents", ""),
     "movies": ("Bibliothèque Films", "movies", "/data/media/movies"),
     "tv": ("Bibliothèque Séries", "tv", "/data/media/tv"),
+    "music": ("Bibliothèque Musique", "music", "/data/media/music"),
+    "audiobooks": ("Bibliothèque Livres audio", "audiobooks", "/data/media/audiobooks"),
+    "books": ("Bibliothèque Livres", "books", "/data/media/books"),
 }
 
 NAME = re.compile(r"^[a-z][a-z0-9]{0,19}$")
@@ -682,6 +687,7 @@ def set_role(role, share="", path=""):
         data["roles"].pop(role, None)
         ctl.say(f"{ROLES[role][0]} : " + (ROLES[role][2] and "stockage local" or "désactivé"))
     save(data)
+    ctl.apps().regenerate()     # Navidrome, Audiobookshelf et Lidarr voient le partage sous /shares
     return ctl.provision()
 
 
@@ -751,12 +757,18 @@ def apply_qbittorrent():
         raise ctl.SeedboxError("qBittorrent : emplacement non pris en compte")
 
 
-def jellyfin_paths(default, role):
-    """Chemins d'une bibliothèque Jellyfin : le stockage local, plus le partage s'il est choisi."""
+def library_paths(default, role):
+    """Chemins d'une bibliothèque : le stockage local, plus le partage s'il est choisi."""
     paths = [default]
     if volume(role) not in ("local", None):
         paths.append(location(role))
     return paths
+
+
+def app_folder(role, local):
+    """Dossier du rôle tel que le voit une application dont le dossier local a un autre nom
+    (Navidrome : /music, Audiobookshelf : /audiobooks) ; le partage est vu sous /shares."""
+    return local if volume(role) in ("local", None) else location(role)
 
 
 # ----------------------------------------------------------------------------
@@ -777,10 +789,11 @@ def warnings(data):
 
     def vol(role):
         return roles[role]["share"] if role in roles else ("local" if ROLES[role][2] else None)
-    apart = [label for library, label in (("movies", "Films"), ("tv", "Séries")) if vol("complete") != vol(library)]
+    apart = [label for library, label in (("movies", "Films"), ("tv", "Séries"), ("music", "Musique"))
+             if vol("complete") != vol(library)]
     if apart:
         notes.append(f"Téléchargements terminés et bibliothèque{'s' if len(apart) > 1 else ''} {' et '.join(apart)} "
-                     "sur des volumes différents : Radarr et Sonarr copieront les fichiers au lieu de créer un lien "
+                     "sur des volumes différents : Radarr, Sonarr et Lidarr copieront les fichiers au lieu de créer un lien "
                      "physique. L'espace est consommé deux fois tant que le torrent est partagé.")
     if "complete" in roles:
         notes.append(f"Les torrents terminés sont partagés depuis {roles['complete']['share']} : le débit d'envoi dépend "

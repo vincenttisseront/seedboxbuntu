@@ -21,6 +21,7 @@
       "health": {"tool": "curl", "path": "/lidarr/ping"},
       "secrets": ["LIDARR_API_KEY"],
       "dirs": ["media/music"],
+      "shares": "rw",
       "integration": "lidarr",
       "icon": "lidarr.png",
       "widget": {"type": "lidarr", "key": "LIDARR_API_KEY"}
@@ -44,6 +45,7 @@
       ],
       "health": {"tool": "wget", "path": "/audiobookshelf/healthcheck"},
       "dirs": ["media/audiobooks", "media/books"],
+      "shares": "rw",
       "integration": "audiobookshelf",
       "icon": "audiobookshelf.png"
     },
@@ -61,6 +63,7 @@
       "volumes": ["${CONFIG_DIR}/navidrome:/data", "${DATA_DIR}/media/music:/music:ro"],
       "health": {"tool": "wget", "path": "/navidrome/ping"},
       "dirs": ["media/music"],
+      "shares": "ro",
       "integration": "navidrome",
       "icon": "navidrome.png"
     },

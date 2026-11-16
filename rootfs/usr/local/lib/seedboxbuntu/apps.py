@@ -53,7 +53,7 @@ SIMPLE_VARS = {"TZ", "PUID", "PGID", "UMASK", "DOMAIN", "CONFIG_DIR", "DATA_DIR"
 STACK_KEYS = {"RADARR_API_KEY", "SONARR_API_KEY", "LIDARR_API_KEY", "PROWLARR_API_KEY"}
 FIELDS = {"id", "name", "category", "description", "image", "port", "path", "auth", "access", "lsio", "user", "env",
           "volumes", "health", "secrets", "dirs", "integration", "icon", "widget", "generic", "strip", "slash",
-          "source", "headless"}
+          "source", "headless", "shares"}
 TOOLS = {"curl", "wget"}
 
 
@@ -124,6 +124,10 @@ def validate(entry, trusted=False):
     if not isinstance(volumes, list) or len(volumes) > 12 or not all(isinstance(v, str) and VOLUME.match(v) and ".." not in v for v in volumes):
         raise CatalogError(f"{ident} : volumes non autorisés (seuls CONFIG_DIR et DATA_DIR sont permis)")
     clean["volumes"] = volumes
+    shared = entry.get("shares")
+    if shared is not None and (not trusted or shared not in ("rw", "ro")):
+        raise CatalogError(f"{ident} : accès aux partages non disponible pour une entrée du web")
+    clean["shares"] = shared
     health = entry.get("health")
     if health is not None and not clean["headless"]:
         if (not isinstance(health, dict) or health.get("tool") not in TOOLS
@@ -197,7 +201,15 @@ def installed_write(installed):
 def installed_entries():
     """Entrées des applications installées. L'entrée est gardée à l'installation : une application
     reste décrite même si le catalogue ne la propose plus."""
-    return [e["entry"] for e in installed_read().values() if "entry" in e]
+    entries = [e["entry"] for e in installed_read().values() if "entry" in e]
+    if any("shares" not in e for e in entries):
+        # Installée avant l'accès aux Emplacements : l'application intégrée le reçoit sans réinstallation
+        try:
+            known = builtin()
+        except (OSError, ValueError, CatalogError):
+            known = {}
+        entries = [e if "shares" in e else {**e, "shares": known.get(e["id"], {}).get("shares")} for e in entries]
+    return entries
 
 
 def fetch(url):
@@ -327,6 +339,13 @@ def listing():
 # ----------------------------------------------------------------------------
 #  Fichier compose des applications
 # ----------------------------------------------------------------------------
+def role_env(ident):
+    """Variables qui dépendent des Emplacements choisis (le dossier Musique de Navidrome)."""
+    if ident == "navidrome":
+        return {"ND_MUSICFOLDER": ctl.shares().app_folder("music", "/music")}
+    return {}
+
+
 def service_definition(entry):
     ident = entry["id"]
     router = f"app-{ident}"
@@ -336,11 +355,15 @@ def service_definition(entry):
     else:
         env["TZ"] = "${TZ}"
     env.update(entry["env"])
+    env.update(role_env(ident))
+    volumes = list(entry["volumes"])
+    if entry.get("shares"):     # les partages réseau (Emplacements) vus sous /shares, montés plus tard compris
+        volumes.append("${SHARES_DIR:-/mnt/shares}:/shares:" + ("ro,rslave" if entry["shares"] == "ro" else "rslave"))
     if entry.get("headless"):
         return {
             "image": entry["image"], "container_name": ident, "restart": "unless-stopped",
             "logging": {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}},
-            "security_opt": ["no-new-privileges:true"], "environment": env, "volumes": entry["volumes"],
+            "security_opt": ["no-new-privileges:true"], "environment": env, "volumes": volumes,
             "networks": ["seedbox"], **({"user": "${PUID}:${PGID}"} if entry["user"] else {}),
         }
     middlewares = []
@@ -362,7 +385,7 @@ def service_definition(entry):
     service = {
         "image": entry["image"], "container_name": ident, "restart": "unless-stopped",
         "logging": {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}},
-        "security_opt": ["no-new-privileges:true"], "environment": env, "volumes": entry["volumes"],
+        "security_opt": ["no-new-privileges:true"], "environment": env, "volumes": volumes,
         "networks": ["seedbox"], "labels": labels,
     }
     if entry["user"]:
@@ -563,22 +586,15 @@ def check_entries():
 # ----------------------------------------------------------------------------
 #  Liaisons propres à chaque application
 # ----------------------------------------------------------------------------
-def jellyfin_library(name, kind, path):
+def jellyfin_library(name, kind, paths):
+    """Crée la bibliothèque, ou ajuste ses dossiers si elle existe (Emplacements changés)."""
     folders = {f["Name"]: f for f in ctl.jellyfin_api("GET", "/Library/VirtualFolders").json()}
-    if name in folders:
-        return
-    ctl.say(f"Jellyfin : bibliothèque {name}")
-    query = ctl.urllib.parse.urlencode({"name": name, "collectionType": kind, "refreshLibrary": "true"})
-    result = ctl.jellyfin_api("POST", f"/Library/VirtualFolders?{query}", {
-        "LibraryOptions": {"PathInfos": [{"Path": path}], "EnableRealtimeMonitor": True,
-                           "PreferredMetadataLanguage": "fr", "MetadataCountryCode": "FR"}})
-    if not result.ok:
-        raise ctl.SeedboxError(f"Jellyfin : bibliothèque {name} refusée (HTTP {result.status})")
+    ctl.jellyfin_library_sync(name, kind, [paths] if isinstance(paths, str) else paths, folders, refresh=True)
 
 
 def integrate_lidarr(entry, env):
     ctl.wait_http("lidarr", 8686, "/lidarr/ping")
-    folder = "/data/media/music"
+    folder = ctl.shares().location("music")      # Emplacements : /data/media/music ou un partage
     roots = {r["path"].rstrip("/") for r in ctl.arr_api("lidarr", "GET", "/rootfolder").json()}
     if folder not in roots:
         quality = ctl.arr_api("lidarr", "GET", "/qualityprofile").json()
@@ -596,7 +612,7 @@ def integrate_lidarr(entry, env):
     ctl.arr_upsert("prowlarr", "/applications", "Lidarr", "Lidarr", {
         "prowlarrUrl": "http://prowlarr:9696/prowlarr", "baseUrl": "http://lidarr:8686/lidarr",
         "apiKey": env["LIDARR_API_KEY"]}, {"syncLevel": "fullSync"})
-    jellyfin_library("Musique", "music", folder)
+    jellyfin_library("Musique", "music", ctl.shares().library_paths("/data/media/music", "music"))
     ctl.say("Lidarr : relié à Prowlarr, qBittorrent et Jellyfin")
 
 
@@ -624,12 +640,29 @@ def integrate_audiobookshelf(entry, env):
     token = login.json()["user"]["token"]
     headers = {"Authorization": f"Bearer {token}"}
     libraries = ctl.request("GET", base + "/api/libraries", headers=headers, timeout=30).json().get("libraries", [])
-    if not libraries:
-        result = ctl.request("POST", base + "/api/libraries", headers=headers, timeout=30, body={
-            "name": "Livres audio", "folders": [{"fullPath": "/audiobooks"}], "mediaType": "book", "icon": "audiobookshelf"})
-        if not result.ok:
-            raise ctl.SeedboxError(f"Audiobookshelf : bibliothèque refusée (HTTP {result.status}) {result.text[:160]}")
-        ctl.say("Audiobookshelf : bibliothèque Livres audio (/audiobooks)")
+    for name, role, local in (("Livres audio", "audiobooks", "/audiobooks"), ("Livres", "books", "/books")):
+        wanted = [local] + ([ctl.shares().location(role)] if ctl.shares().volume(role) not in ("local", None) else [])
+        library = next((l for l in libraries if l.get("name") == name), None)
+        if library is None and name == "Livres audio" and libraries:
+            continue            # bibliothèque unique déjà créée à la main : on n'y touche pas
+        if library is None:
+            result = ctl.request("POST", base + "/api/libraries", headers=headers, timeout=30, body={
+                "name": name, "folders": [{"fullPath": p} for p in wanted], "mediaType": "book", "icon": "audiobookshelf"})
+            if not result.ok:
+                raise ctl.SeedboxError(f"Audiobookshelf : bibliothèque {name} refusée (HTTP {result.status}) {result.text[:160]}")
+            ctl.say(f"Audiobookshelf : bibliothèque {name} ({', '.join(wanted)})")
+            continue
+        current = [f["fullPath"].rstrip("/") for f in library.get("folders", [])]
+        keep = [f for f in library.get("folders", [])
+                if not f["fullPath"].startswith(ctl.shares().INNER + "/") or f["fullPath"].rstrip("/") in wanted]
+        added = [p for p in wanted if p not in current]
+        if added or len(keep) != len(current):
+            folders = [{"id": f["id"], "fullPath": f["fullPath"]} for f in keep] + [{"fullPath": p} for p in added]
+            result = ctl.request("PATCH", base + f"/api/libraries/{library['id']}", headers=headers, timeout=30,
+                                 body={"folders": folders})
+            if not result.ok:
+                raise ctl.SeedboxError(f"Audiobookshelf : dossiers de {name} refusés (HTTP {result.status}) {result.text[:160]}")
+            ctl.say(f"Audiobookshelf : {name} lit {', '.join(wanted)}")
 
 
 def integrate_navidrome(entry, env):
