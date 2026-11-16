@@ -1544,6 +1544,7 @@ window.I18N_EN = {
   "Torrents sans valeur": "Worthless torrents",
   "Assistant IA externe (Ollama)": "External AI assistant (Ollama)",
   "Par To et par an": "Per TB per year",
+  "Nouveau dossier...": "New folder...",
   "Serveur (adresse IP ou nom)": "Server (IP address or name)",
   "Rechercher les partages": "Look up the shares",
   "Partage trouvé sur le serveur": "Share found on the server",
@@ -1634,6 +1635,7 @@ window.I18N_EN = {
 // Modèles à trous : [expression, fonction]. Les parties captées sont traduites avant d'être insérées.
 const P = (re, fn) => [re, fn];
 window.I18N_PATTERNS = [
+  P(/^(.+) \(à créer\)$/, (a) => `${a} (to create)`),
   P(/^(\d+) partage\(s\) trouvé\(s\) sur (.+)\.$/, (a, b) => `${a} share(s) found on ${b}.`),
   P(/^(\d+) trouvé\(s\) : choisissez$/, (a) => `${a} found: choose one`),
   P(/^Changement appliqué, en attente de confirmation : retour automatique dans (\d+) s\. $/, (a) => `Change applied, waiting for confirmation: automatic rollback in ${a} s. `),
@@ -1935,6 +1937,7 @@ window.I18N_PATTERNS = [
   P(/^Alléger (.+)$/, (a) => `Slim ${a}`),
   P(/^Réannoncer (.+)$/, (a) => `Reannounce ${a}`),
   P(/^Retirer (.+)$/, (a) => `Remove ${a}`),
+  P(/^Nouveau dossier : (.+)$/, (a) => `New folder: ${a}`),
   P(/^Ne plus suivre (.+)$/, (a) => `Stop monitoring ${a}`),
   P(/^Renommer (.+)$/, (a) => `Rename ${a}`),
   P(/^Quota de (.+)$/, (a) => `Quota of ${a}`),

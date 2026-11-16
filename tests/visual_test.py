@@ -495,6 +495,19 @@ def journeys_ops2(page, base):
     page.select_option("#share-pick", "1")
     if page.input_value("#share-source") != "//192.168.1.10/Films 4K" or page.input_value('#share-form input[name="name"]') != "films4k":
         fail("parcours : le partage choisi ne remplit pas l'adresse et le nom court")
+    # Emplacements : le sous-dossier d'un partage vient d'une liste des dossiers présents
+    page.select_option('select[aria-label="Emplacement : Téléchargements"]', "usb")
+    page.wait_for_function("document.querySelectorAll('select[aria-label=\"Sous-dossier : Téléchargements\"] option').length >= 4")
+    folder_options = page.eval_on_selector_all('select[aria-label="Sous-dossier : Téléchargements"] option', "nodes => nodes.map(n => n.value)")
+    if "Films/HD" not in folder_options or "__new__" not in folder_options:
+        fail(f"parcours : la liste des sous-dossiers est incomplète : {folder_options}")
+    page.select_option('select[aria-label="Sous-dossier : Téléchargements"]', "__new__")
+    page.fill('input[aria-label="Nouveau dossier : Téléchargements"]', "telechargements")
+    ui_mock.CALLS.clear()
+    page.click('tr:has(select[aria-label="Emplacement : Téléchargements"]) button:has-text("Appliquer")')
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/shares/role") and body.get("share") == "usb" and body.get("path") == "telechargements"]:
+        fail("parcours : « Appliquer » n'envoie pas le nouveau dossier saisi")
     page.fill("#share-host", "absent")
     page.click("#share-discover")
     page.wait_for_function("document.getElementById('share-discover-state').textContent.includes('injoignable')")

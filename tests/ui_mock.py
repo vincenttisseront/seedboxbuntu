@@ -271,6 +271,7 @@ def route(p, q, role="admin", PREFS=None):
     if p == "/api/users": return {"users": [{"login": "vincent", "role": "admin"}, {"login": "marie", "role": "user"}, {"login": "paul", "role": "manager"}]}
     if p == "/api/trackers": return {"rules": {"tracker-a": {"name": "Tracker A", "min_seed_hours": 72, "max_ratio": 2}, "tracker-b": {"name": "Tracker B", "min_seed_hours": 0, "max_ratio": -1}},
         "stats": [{"tracker": "Tracker A", "torrents": 214, "uploaded": 4.2e12, "downloaded": 1.1e12, "ratio": 3.8, "upspeed": 2.4e6}, {"tracker": "Tracker B", "torrents": 12, "uploaded": 3e10, "downloaded": 4e10, "ratio": 0.75, "upspeed": 0}]}
+    if p == "/api/shares/folders": return {"folders": ["Films", "Films/HD", "Séries"]}
     if p == "/api/shares": return {"warnings": ["Le partage « nas » n'est pas monté."], "nfs_versions": ["", "4.1", "4"], "smb_versions": ["", "3.0", "2.1"], "disks": [],
         "roles": [{"role": "downloads", "label": "Téléchargements", "share": "", "path": "", "location": "/mnt/storage/downloads", "local": True}, {"role": "movies", "label": "Films", "share": "nas", "path": "films", "location": "/mnt/nas/films", "local": False}],
         "shares": [{"name": "nas", "kind": "smb", "version": "3.0", "username": "seedbox", "source": "//192.168.1.10/torrents", "label": "", "fstype": "cifs", "mounted": False, "free": 0, "total": 0, "roles": ["movies"]},

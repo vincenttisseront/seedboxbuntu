@@ -143,6 +143,7 @@ La version installée devient « AAAA.MM.JJ-HHMM » de la date du commit (UTC). 
 | Ratios réels des trackers lus dans P2P Aggregator (ratio exigé, évolution, santé de tracker-session) ; sous le ratio exigé, les torrents du tracker sont protégés dans l'optimisation des seeds | Trackers | `seedboxctl trackerstats show\|refresh\|alias\|settings` |
 | Réseau de l'appliance : IP fixe ou DHCP, passerelle, DNS, avec vérification, sauvegarde netplan et retour arrière automatique en 2 minutes sans confirmation | Adresse | `seedboxctl network show\|set\|confirm\|revert` |
 | Ajout de partage réseau guidé : serveur + identifiants, recherche des partages SMB (smbclient) ou exports NFS (showmount), choix dans une liste, adresse et nom court remplis | Partages | `seedboxctl share discover smb\|nfs SERVEUR [--username U]` |
+| Emplacements : sous-dossier choisi dans la liste des dossiers présents sur le partage (ou « Nouveau dossier... ») | Partages | `GET /api/shares/folders?share=NOM` |
 
 Points d'attention :
 

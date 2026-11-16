@@ -570,6 +570,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.p2p_status())
         if path == "/api/shares":
             return self.send_json(ctl.shares().overview())
+        if path == "/api/shares/folders":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            share = query.get("share", [""])[0]
+            if not ctl.shares().NAME.match(share):
+                raise ctl.SeedboxError("partage invalide")
+            return self.send_json({"folders": ctl.shares().folders(share)})
         if path == "/api/appliance":
             return self.send_json(self.observer_view(path, ctl.appliance().overview()))
         if path == "/api/settings/updates":

@@ -73,5 +73,21 @@ check("NFS : aucun export", "aucun export" in (raises(shares.discover, "nfs", "n
 check("type disque refusé", raises(shares.discover, "disk", "nas") is not None)
 check("smbclient dans la liste des paquets de l'appliance", "smbclient" in __import__("maintenance").PACKAGES)
 
+# --- dossiers d'un partage monté (liste déroulante des emplacements) --------------------------------------------------
+tool("setpriv", 'while [ "$1" != "--" ]; do shift; done; shift; exec "$@"\n')
+share_dir = shares.ROOT / "nas"
+for folder in ("Films/HD", "Séries", "media/movies", ".Trash", "lost+found", "$RECYCLE.BIN", "@eaDir", "Films/.cache", "mauvais,nom", "a/b/c/d"):
+    (share_dir / folder).mkdir(parents=True, exist_ok=True)
+(share_dir / "fichier.txt").write_text("x")
+shares.save({"shares": {"nas": {"kind": "smb", "source": "//nas.local/torrents"}}, "roles": {}})
+shares.mounted_targets = lambda: {str(share_dir)}
+listed = shares.folders("nas")
+check("dossiers : deux niveaux, triés, sans fichiers", listed == ["a", "a/b", "Films", "Films/HD", "media", "media/movies", "Séries"], listed)
+check("dossiers : cachés, corbeilles et noms interdits écartés", not any(x.startswith((".", "lost", "$", "@", "mauvais")) or "/." in x for x in listed))
+check("dossiers : un seul niveau", shares.folders("nas", 1) == ["a", "Films", "media", "Séries"], shares.folders("nas", 1))
+check("dossiers : partage inconnu refusé", raises(shares.folders, "inconnu") is not None)
+shares.mounted_targets = lambda: set()
+check("dossiers : partage non monté refusé", "pas monté" in (raises(shares.folders, "nas") or ""))
+
 print(f"échecs : {bad}")
 sys.exit(1 if bad else 0)

@@ -639,6 +639,29 @@ def set_credentials(name, username, password, domain=""):
     return []
 
 
+HIDDEN_FOLDERS = {"lost+found", "$RECYCLE.BIN", "System Volume Information", "@eaDir", "#recycle", "#snapshot", "@Recycle", "@Recently-Snapshot"}
+
+
+def folders(name, depth=2, limit=300):
+    """Dossiers d'un partage monté (jusqu'à `depth` niveaux), lus avec l'identité des applications : ceux qu'on peut choisir comme emplacement."""
+    data = load()
+    if name not in data["shares"]:
+        raise ctl.SeedboxError(f"partage inconnu : {name}")
+    if not is_mounted(name):
+        raise ctl.SeedboxError(f"le partage {name} n'est pas monté")
+    depth = max(1, min(int(depth), 3))
+    result = as_puid("find", "-L", str(ROOT / name), "-mindepth", "1", "-maxdepth", str(depth), "-type", "d", "-printf", "%P\\n", timeout=25)
+    if result.returncode != 0 and not result.stdout:
+        raise ctl.SeedboxError("lecture du partage impossible : " + (result.stderr.strip().splitlines() or ["droits insuffisants"])[-1][:160])
+    found = []
+    for line in result.stdout.splitlines():
+        parts = line.split("/")
+        if any(part.startswith(".") or part in HIDDEN_FOLDERS for part in parts) or not SUBDIR.match(line) or any(p in (".", "..") for p in parts):
+            continue
+        found.append(line)
+    return sorted(found, key=str.lower)[:limit]
+
+
 def set_role(role, share="", path=""):
     """Choisit l'emplacement d'un rôle, puis reconfigure les applications."""
     if role not in ROLES:

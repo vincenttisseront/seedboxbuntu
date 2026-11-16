@@ -219,6 +219,7 @@ async function loadP2p() {
 const KIND_LABEL = { smb: 'SMB', nfs: 'NFS', disk: 'Disque' };
 let sharesData = null;
 let foundShares = [];
+const NEW_FOLDER = '__new__';
 
 function showKindFields() {
   const kind = $('share-kind').value;
@@ -313,15 +314,34 @@ async function loadShares() {
       el('option', { value: '' }, role.local ? 'Stockage local' : 'Désactivé'),
       ...mounted.map((s) => el('option', { value: s.name }, `Partage ${s.name}`)));
     choice.value = role.share;
-    const sub = el('input', { value: role.path, placeholder: role.path, 'aria-label': `Sous-dossier : ${role.label}` });
-    const toggle = () => { sub.disabled = !choice.value; };
-    choice.addEventListener('change', toggle);
-    toggle();
-    return el('tr', {}, el('td', {}, role.label), el('td', {}, choice), el('td', {}, sub),
+    // Sous-dossier : liste des dossiers réellement présents sur le partage choisi (+ « Nouveau dossier » pour en créer un)
+    const sub = el('select', { 'aria-label': `Sous-dossier : ${role.label}` });
+    const custom = el('input', { class: 'hidden', placeholder: role.path, 'aria-label': `Nouveau dossier : ${role.label}` });
+    const chosenPath = () => (sub.value === NEW_FOLDER ? custom.value.trim() : sub.value);
+    const showCustom = () => custom.classList.toggle('hidden', sub.disabled || sub.value !== NEW_FOLDER);
+    const fillFolders = async () => {
+      const share = choice.value;
+      sub.replaceChildren();
+      if (!share) { sub.disabled = true; showCustom(); return; }
+      sub.disabled = false;
+      let existing = [];
+      try { existing = (await api(`/api/shares/folders?share=${encodeURIComponent(share)}`)).folders; } catch (error) { showError(error); }
+      if (choice.value !== share) return;      // l'utilisateur a changé de partage pendant la lecture
+      const wanted = role.path;
+      const options = existing.map((folder) => el('option', { value: folder }, folder));
+      if (wanted && !existing.includes(wanted)) options.unshift(el('option', { value: wanted }, `${wanted} (à créer)`));
+      sub.replaceChildren(...options, el('option', { value: NEW_FOLDER }, 'Nouveau dossier...'));
+      sub.value = wanted || (existing[0] || NEW_FOLDER);
+      showCustom();
+    };
+    choice.addEventListener('change', () => { fillFolders(); });
+    sub.addEventListener('change', showCustom);
+    fillFolders();
+    return el('tr', {}, el('td', {}, role.label), el('td', {}, choice), el('td', {}, sub, custom),
       el('td', { class: 'secret' }, role.location || '-'),
       el('td', {}, el('button', {
         class: 'btn sm', type: 'button',
-        onclick: () => runJob('/api/shares/role', { role: role.role, share: choice.value, path: sub.value }, loadShares),
+        onclick: () => runJob('/api/shares/role', { role: role.role, share: choice.value, path: chosenPath() }, loadShares),
       }, 'Appliquer')));
   }));
   $('share-disk').replaceChildren(...(data.disks.length ? data.disks.map((d) => el('option', { value: d.uuid },
