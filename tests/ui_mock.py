@@ -282,6 +282,13 @@ def route(p, q, role="admin", PREFS=None):
                    {"name": "usb", "kind": "disk", "version": "", "username": "", "source": "", "label": "Archive", "fstype": "ext4", "mounted": True, "free": 8e11, "total": 2e12, "roles": []}]}
     if p == "/api/vpn": return {"enabled": False, "state": "", "provider": "", "ip": "", "port": 6881, "port_forwarding": False}
     if p == "/api/remote": return {"extra_hosts": "", "tailscale": {"enabled": False, "running": False, "state": "", "hostname": "seedbox", "ips": []}, "dns": {"providers": {"cloudflare": "Cloudflare", "ovh": "OVH"}, "provider": "", "custom_domain": "", "variables": []}}
+    if p == "/api/subdomains": return {"enabled": True, "domain": "ar-systems.fr", "suggestion": "ar-systems.fr", "main": "vmdmz-seedbox01.ar-systems.fr",
+        "portal": "vmdmz-seedbox01.ar-systems.fr", "target": "vmdmz-seedbox01.ar-systems.fr", "record": "CNAME", "tls": "local", "addresses": ["172.24.0.109"],
+        "warnings": ["Certificat de l'autorité locale : installez-la sur vos appareils (page Adresse) pour éviter l'alerte du navigateur."],
+        "apps": [{"id": "radarr", "label": "Radarr", "name": "radarr", "host": "radarr.ar-systems.fr", "enabled": True, "url": "https://radarr.ar-systems.fr/", "protected": True, "state": "ok", "ips": ["172.24.0.109"]},
+                 {"id": "sonarr", "label": "Sonarr", "name": "sonarr", "host": "sonarr.ar-systems.fr", "enabled": True, "url": "https://sonarr.ar-systems.fr/", "protected": True, "state": "autre", "ips": ["10.9.9.9"]},
+                 {"id": "seerr", "label": "Seerr", "name": "seerr", "host": "seerr.ar-systems.fr", "enabled": True, "url": "https://seerr.ar-systems.fr/", "protected": False, "state": "absent", "ips": []},
+                 {"id": "dockge", "label": "Dockge", "name": "dockge", "host": "dockge.ar-systems.fr", "enabled": False, "url": "https://dockge.ar-systems.fr/", "protected": True}]}
     if p == "/api/bans": return {"active": True, "installed": True, "total_banned": 2, "me": "192.168.1.20", "me_ignored": False, "me_banned": True,
         "always": ["127.0.0.1/8", "::1"], "limits": {}, "settings": {"ban_minutes": 60, "window_minutes": 10, "retries": 5, "increment": True, "max_hours": 168, "ignore": ["192.168.1.0/24"]},
         "jails": [{"name": "sshd", "error": "", "failed": 2, "failed_total": 17, "banned_total": 9, "banned": [

@@ -589,6 +589,30 @@ def journeys_ops2(page, base):
         fail("parcours : « Appliquer » n'envoie pas la configuration réseau saisie")
     if "https://172.24.0.231/console/#domain" not in page.inner_text("#network-pending"):
         fail("parcours : le changement en attente n'indique pas la nouvelle adresse à ouvrir")
+    page.wait_for_selector("#sub-list tr")
+    if page.locator("#sub-list tr").count() != 4 or "radarr.ar-systems.fr" not in page.inner_text("#sub-list"):
+        fail("parcours : la page Adresse doit lister une adresse par application")
+    sub_text = page.inner_text("#sub-list")
+    if "DNS correct" not in sub_text or "autre adresse" not in sub_text or "absent du DNS" not in sub_text:
+        fail("parcours : l'état DNS de chaque sous-domaine doit être affiché")
+    if "CNAME" not in page.inner_text("#sub-zone") or "vmdmz-seedbox01.ar-systems.fr" not in page.inner_text("#sub-zone") or "dockge.ar-systems.fr" in page.inner_text("#sub-zone"):
+        fail("parcours : la liste des enregistrements DNS doit viser l'adresse principale et ignorer les applications retirées")
+    ui_mock.CALLS.clear()
+    page.click("#sub-list tr >> nth=3 >> button:has-text('Remettre')")
+    page.wait_for_timeout(500)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/subdomains/toggle") and body.get("app") == "dockge" and body.get("enabled") is True]:
+        fail("parcours : « Remettre » doit activer le sous-domaine de l'application")
+    page.select_option("#sub-rename select[name=app]", "seerr")
+    page.fill("#sub-rename input[name=name]", "overseerr")
+    page.click("#sub-rename button[type=submit]")
+    page.wait_for_timeout(500)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/subdomains/rename") and body.get("app") == "seerr" and body.get("name") == "overseerr"]:
+        fail("parcours : « Renommer » doit envoyer l'application et le nouveau nom")
+    page.fill("#sub-form input[name=domain]", "exemple.fr")
+    page.click("#sub-form button[type=submit]")
+    page.wait_for_timeout(500)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/subdomains/set") and body.get("domain") == "exemple.fr"]:
+        fail("parcours : « Changer de domaine » doit envoyer le domaine saisi")
     page.goto(base + "#guests")
     settle(page, "guests")
     page.wait_for_timeout(500)

@@ -75,6 +75,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl trackerstats show|refresh|alias  ratios réels des trackers (p2p-aggregator)
   seedboxctl aggregator show|sync|sources|add|config|send   catalogue des releases par œuvre (Prowlarr, Jackett, Torznab)
   seedboxctl bans show|unban|ban|ignore|set      fail2ban : adresses bannies, adresses ignorées, seuils
+  seedboxctl subdomains show|check|set|off|rename|enable|disable   chaque application sur son sous-domaine (radarr.exemple.fr)
   seedboxctl vpnwatch show|set|tick          surveillance du VPN (fuite, changement d'adresse)
   seedboxctl house                           état d'ensemble pour l'écran « maison »
 """
@@ -405,6 +406,10 @@ def aggregator():
 
 def bans():
     return _lazy("bans")
+
+
+def subdomains():
+    return _lazy("subdomains")
 
 
 def mediaquality():
@@ -853,6 +858,7 @@ def ensure_certificates(env):
             capture=True)
         ca_key.chmod(0o600)
     stamp = certs / "domain.txt"
+    hosts = hosts + [n for n in subdomains().cert_names() if n not in hosts]   # *.domaine des applications
     wanted = ",".join(hosts)
     if stamp.exists() and stamp.read_text().strip() == wanted and (certs / "server.crt").exists():
         return
@@ -904,7 +910,10 @@ def template_values(env):
     values["BASE"], values["STORAGE"] = str(BASE), str(STORAGE)
     acme = bool(env.get("ACME_EMAIL"))
     # Let's Encrypt pour le domaine personnalisé ; le certificat de l'appliance pour le reste (IP)
+    sub = subdomains()
+    sans = "".join(f"\n            - {json.dumps(n)}" for n in sub.acme_names(env))
     values["TRAEFIK_TLS"] = (f"\n        certResolver: le\n        domains:\n          - main: {env.get('DOMAIN', '')}"
+                             + (f"\n            sans:{sans}" if sans else "")
                              if acme else "{}")
     values["TRAEFIK_ACME"] = (
         "\ncertificatesResolvers:\n  le:\n    acme:\n"
@@ -915,11 +924,17 @@ def template_values(env):
         "  stores:\n    default:\n      defaultCertificate:\n"
         "        certFile: /certs/server.crt\n        keyFile: /certs/server.key\n")
     hosts = [h for h in env.get("PUBLIC_HOSTS", "").split(",") if h] or [env.get("DOMAIN") or "127.0.0.1"]
-    values["AUTH_DOMAINS"] = json.dumps(hosts)
-    values["OTHER_HOSTS_RULE"] = " && ".join(f"!Host(`{h}`)" for h in hosts)
+    # Sous-domaines des applications : règles d'accès sur *.domaine, un cookie sur le domaine parent, noms connus de Traefik
+    app_domain = sub.domain()
+    app_hosts = sub.hosts(env)
+    values["AUTH_DOMAINS"] = json.dumps(hosts + ([f"*.{app_domain}"] if app_domain else []))
+    values["OTHER_HOSTS_RULE"] = " && ".join(f"!Host(`{h}`)" for h in [*hosts, *app_hosts])
+    cookie_hosts = [(h, h) for h in sub.cookies(hosts)]
+    if app_domain:
+        cookie_hosts.append((app_domain, sub.portal(env)))
     values["AUTH_COOKIES"] = "\n".join(
-        f"    - name: seedbox_session\n      domain: '{h}'\n      authelia_url: 'https://{h}/auth'\n"
-        f"      default_redirection_url: 'https://{h}/'\n      expiration: 12h\n      inactivity: 2h" for h in hosts)
+        f"    - name: seedbox_session\n      domain: '{d}'\n      authelia_url: 'https://{h}/auth'\n"
+        f"      default_redirection_url: 'https://{h}/'\n      expiration: 12h\n      inactivity: 2h" for d, h in cookie_hosts)
     mode = env.get("AUTH_2FA", "none")
     values["POLICY_ADMIN"] = "two_factor" if mode in ("admins", "all") else "one_factor"
     values["POLICY_USERS"] = "two_factor" if mode == "all" else "one_factor"
@@ -971,6 +986,7 @@ def render_templates():
         if fresh and relative == "qbittorrent/qBittorrent/qBittorrent.conf":
             qbit_bind_interface(qbit_mode() == "vpn")
     apps().regenerate()
+    subdomains().render_file(env)       # routes par sous-domaine (retirées quand le domaine d'applications est vide)
     for secret in (CONFIG / "traefik" / "dynamic" / "seedbox.yml",
                    CONFIG / "qbit-manage" / "config.yml",
                    CONFIG / "qbittorrent" / "qBittorrent" / "qBittorrent.conf"):
@@ -3059,6 +3075,15 @@ def main():
     bn_set.add_argument("--max-hours", type=int)
     bn_set.add_argument("--increment", dest="increment", action="store_true", default=None)
     bn_set.add_argument("--no-increment", dest="increment", action="store_false")
+    sd = commands.add_parser("subdomains", help="sous-domaines des applications").add_subparsers(dest="action", required=True)
+    for name in ("show", "check", "off"):
+        sd.add_parser(name)
+    sd.add_parser("set", help="active les sous-domaines sous ce domaine").add_argument("domain")
+    sd_rename = sd.add_parser("rename", help="change le nom d'une application (vide : nom par défaut)")
+    sd_rename.add_argument("app")
+    sd_rename.add_argument("name", nargs="?", default="")
+    for name in ("enable", "disable"):
+        sd.add_parser(name).add_argument("app")
     ag = commands.add_parser("aggregator", help="catalogue des releases par œuvre").add_subparsers(dest="action", required=True)
     for name in ("show", "sources", "purge"):
         ag.add_parser(name)
@@ -3726,6 +3751,18 @@ def main():
             print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
         else:
             locked(module.rotate)(args.item, args.by)
+    elif args.command == "subdomains":
+        module = subdomains()
+        if args.action in ("show", "check"):
+            print(json.dumps(module.overview(check=args.action == "check"), indent=2, ensure_ascii=False))
+        elif args.action == "set":
+            return report(locked(module.set_domain)(args.domain))
+        elif args.action == "off":
+            return report(locked(module.disable)())
+        elif args.action == "rename":
+            locked(module.rename)(args.app, args.name)
+        else:
+            locked(module.set_enabled)(args.app, args.action == "enable")
     elif args.command == "apppass":
         module = apppasswords()
         if args.action == "show":

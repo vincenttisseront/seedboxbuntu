@@ -568,6 +568,62 @@ function initAggregator() {
   $('agg-add').addEventListener('submit', addAggSource);
 }
 
+// --- sous-domaines des applications (page Adresse) ---------------------------------------------------------------------------
+let subData = null;
+const SUB_DNS = { ok: ['DNS correct', 'ok'], autre: ['autre adresse', 'warn'], absent: ['absent du DNS', 'err'], inconnu: ['sans réponse', 'warn'] };
+
+async function loadSubdomains() {
+  subData = await api('/api/subdomains');
+  drawSubdomains();
+}
+
+const subReload = () => loadSubdomains().catch(showError);
+
+function drawSubdomains() {
+  const data = subData;
+  const state = $('sub-state');
+  state.className = `notice ${data.enabled ? 'info' : 'warn'}`;
+  state.textContent = data.enabled ? `Sous-domaines actifs sous ${data.domain}.` : 'Sous-domaines désactivés : les applications ne répondent que par chemin.';
+  $('sub-form').elements.domain.value = data.domain || data.suggestion || '';
+  $('sub-off').classList.toggle('hidden', !data.enabled);
+  $('sub-form').querySelector('button[type=submit]').textContent = data.enabled ? 'Changer de domaine' : 'Activer';
+  $('sub-rename').classList.toggle('hidden', !data.enabled);
+  $('sub-warnings').replaceChildren(...data.warnings.map((text) => el('li', {}, el('span', { class: 'no-i18n' }, text))));
+  const rows = data.enabled ? data.apps : [];
+  $('sub-list').replaceChildren(...(rows.length ? rows.map((row) => {
+    const dns = SUB_DNS[row.state];
+    return el('tr', {},
+      el('td', {}, row.label),
+      el('td', { class: 'no-i18n' }, row.enabled ? el('a', { href: row.url, target: '_blank', rel: 'noopener' }, row.host) : row.host),
+      el('td', {}, !row.enabled ? '-' : dns ? [pill(dns[0], dns[1]), row.ips && row.ips.length ? el('span', { class: 'muted small no-i18n' }, ` ${row.ips.join(', ')}`) : null] : '-'),
+      el('td', {}, row.portal ? '-' : LOGIN_LABEL[row.protected ? 'sso' : 'comptes']),
+      el('td', {}, row.portal ? null : row.enabled
+        ? el('button', { class: 'btn sm', type: 'button', onclick: () => runJob('/api/subdomains/toggle', { app: row.id, enabled: false }, subReload) }, 'Retirer')
+        : el('button', { class: 'btn sm', type: 'button', onclick: () => runJob('/api/subdomains/toggle', { app: row.id, enabled: true }, subReload) }, 'Remettre')));
+  }) : [emptyRow(5, 'Activez un domaine pour obtenir une adresse par application.')]));
+  $('sub-app').replaceChildren(...data.apps.filter((a) => !a.portal).map((a) => el('option', { value: a.id }, a.label)));
+  const zone = data.enabled ? data.apps.filter((a) => a.enabled).map((a) => `${a.host} ${data.record} ${data.target}`) : [];
+  $('sub-zone').textContent = zone.join('\n');
+  $('sub-zone').classList.toggle('hidden', !zone.length);
+  $('sub-zone-title').classList.toggle('hidden', !zone.length);
+}
+
+function initSubdomains() {
+  $('sub-refresh').addEventListener('click', subReload);
+  $('sub-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    runJob('/api/subdomains/set', { domain: event.target.elements.domain.value.trim() }, subReload);
+  });
+  $('sub-off').addEventListener('click', (event) => confirmAction(event.currentTarget,
+    'Les adresses par application ne répondent plus ; les adresses par chemin continuent de fonctionner. Authelia et Traefik sont relancés.',
+    () => runJob('/api/subdomains/off', {}, subReload)));
+  $('sub-rename').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const f = event.target.elements;
+    runJob('/api/subdomains/rename', { app: f.app.value, name: f.name.value.trim() }, () => { f.name.value = ''; subReload(); });
+  });
+}
+
 // --- bannissements fail2ban (page Bannissements) ----------------------------------------------------------------------------
 let bansData = null;
 
@@ -643,6 +699,7 @@ function initBans() {
 function initOps5() {
   initAggregator();
   initBans();
+  initSubdomains();
   $('apppass-form').addEventListener('submit', resetAppPassword);
   $('apppass-app').addEventListener('change', syncAppPassAccount);
   $('care-refresh').addEventListener('click', () => loadCare().catch(showError));

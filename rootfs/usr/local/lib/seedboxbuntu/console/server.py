@@ -491,6 +491,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.apppasswords().overview())
         if path == "/api/bans":
             return self.send_json(ctl.bans().overview(self.client_address_text()))
+        if path == "/api/subdomains":
+            return self.send_json(ctl.subdomains().overview())
         if path == "/api/aggregator":
             return self.send_json(ctl.aggregator().dashboard())
         if path == "/api/aggregator/catalogue":
@@ -698,6 +700,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ctl.SeedboxError(f"mot de passe invalide : {ctl.MIN_PASSWORD} caractères au minimum")
             argv = ["apppass", "reset", app] + (["--login", login] if login else [])
             return self.send_json({"job": start_job("Mot de passe de " + ctl.apppasswords().APPS[app], argv, password)})
+        if path.startswith("/api/subdomains/"):
+            module = ctl.subdomains()
+            if path == "/api/subdomains/set":
+                domain = module.check_domain(str(data.get("domain", "")))
+                return self.send_json({"job": start_job("Sous-domaines des applications", ["subdomains", "set", domain])})
+            if path == "/api/subdomains/off":
+                return self.send_json({"job": start_job("Sous-domaines désactivés", ["subdomains", "off"])})
+            if path == "/api/subdomains/rename":
+                app, name = str(data.get("app", "")), module.check_name(str(data.get("app", "")), str(data.get("name", "")))
+                return self.send_json({"job": start_job("Nom d'un sous-domaine", ["subdomains", "rename", app] + ([name] if name else []))})
+            if path == "/api/subdomains/toggle":
+                app = str(data.get("app", ""))
+                if app not in {r["id"] for r in module.routes()}:
+                    raise ctl.SeedboxError("application inconnue")
+                return self.send_json({"job": start_job("Sous-domaine d'une application", ["subdomains", "enable" if data.get("enabled") else "disable", app])})
+            self.send_json({"error": "route inconnue"}, 404)
+            return
         if path.startswith("/api/bans/"):
             module = ctl.bans()
             if path == "/api/bans/unban":

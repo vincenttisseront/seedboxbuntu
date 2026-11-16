@@ -357,6 +357,28 @@
       <p class="muted small">Chaque adresse reçoit son propre cookie de connexion et sa place dans le certificat de l'appliance. Une adresse non déclarée ici est redirigée vers l'adresse principale.</p>
       <button class="btn primary" type="submit">Enregistrer</button>
     </form>
+    <div class="card" id="sub-card">
+      <div class="card-head"><h2>Sous-domaines des applications</h2><button id="sub-refresh" class="btn sm" type="button">Vérifier le DNS</button></div>
+      <p class="muted small">Chaque application répond aussi sur sa propre adresse (radarr.exemple.fr, sonarr.exemple.fr…), derrière le reverse proxy de l’appliance. Les adresses par chemin continuent de fonctionner. Connexion unique et certificat couvrent tous les noms ; chaque nom doit exister dans votre DNS.</p>
+      <p id="sub-state" class="notice info"></p>
+      <form id="sub-form" class="row filters">
+        <label>Domaine des applications<input name="domain" required placeholder="exemple.fr" autocomplete="off"></label>
+        <button class="btn primary" type="submit">Activer</button>
+        <button id="sub-off" class="btn danger" type="button">Désactiver</button>
+      </form>
+      <ul id="sub-warnings" class="checks"></ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Application</th><th>Adresse</th><th>DNS</th><th>Accès</th><th></th></tr></thead>
+        <tbody id="sub-list"></tbody>
+      </table></div>
+      <form id="sub-rename" class="row filters">
+        <label>Application<select name="app" id="sub-app"></select></label>
+        <label>Nom<input name="name" placeholder="vide : nom par défaut" autocomplete="off"></label>
+        <button class="btn" type="submit">Renommer</button>
+      </form>
+      <p id="sub-zone-title" class="muted small hidden">Enregistrements à créer dans votre DNS :</p>
+      <pre id="sub-zone" class="log no-i18n hidden"></pre>
+    </div>
     <div class="card form" id="ts-card">
       <h2>Accès distant : Tailscale (expérimental)</h2>
       <p class="muted small">Publie l'appliance sur votre réseau privé Tailscale avec un vrai certificat HTTPS, sans ouvrir de port de la box. Prérequis : un compte Tailscale, « HTTPS Certificates » activé dans sa console d'administration. Générez une clé d'authentification (Settings, Keys) ou laissez le champ vide pour valider la connexion depuis un lien.</p>
