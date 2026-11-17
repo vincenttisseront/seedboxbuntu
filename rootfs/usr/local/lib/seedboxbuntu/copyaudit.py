@@ -54,11 +54,13 @@ def _sample(path, size):
     return digest.hexdigest()
 
 
-def identical(a, b):
-    """Comparaison complète, octet par octet."""
+def identical(a, b, progress=None):
+    """Comparaison complète, octet par octet. progress(octets_lus, total) est appelée au plus toutes les 5 secondes."""
     try:
-        if os.path.getsize(a) != os.path.getsize(b):
+        total = os.path.getsize(a)
+        if total != os.path.getsize(b):
             return False
+        read, last = 0, time.time()
         with open(a, "rb") as x, open(b, "rb") as y:
             while True:
                 bx, by = x.read(BLOCK), y.read(BLOCK)
@@ -66,6 +68,10 @@ def identical(a, b):
                     return False
                 if not bx:
                     return True
+                read += len(bx)
+                if progress and time.time() - last >= 5:
+                    last = time.time()
+                    progress(read, total)
     except OSError:
         return False
 
@@ -170,7 +176,9 @@ def relink(paths, records=None, root=None, by="console"):
             skipped.append((path, "deux disques différents : lien impossible"))
             say(f"ignorée : {os.path.basename(path)} : deux disques différents")
             continue
-        if not identical(entry["download"], entry["media"]):
+        def advance(read, size):
+            say(f"comparaison : {round(100 * read / max(1, size))} %")
+        if not identical(entry["download"], entry["media"], advance):
             skipped.append((path, "contenus différents : rien n'est touché"))
             say(f"ignorée : {os.path.basename(path)} : contenus différents")
             continue

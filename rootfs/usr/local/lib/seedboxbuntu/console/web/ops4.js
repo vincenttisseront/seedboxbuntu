@@ -121,7 +121,9 @@ async function loadCopyaudit() {
 function relinkProgress(job) {
   const bar = $('copyaudit-progress');
   const lines = (job.log || '').trim().split('\n');
-  const last = [...lines].reverse().map((line) => line.match(/(\d+)\/(\d+) : (.*?) \((\d+) reliée\(s\), (\d+) octets récupérés\)/)).find(Boolean);
+  const reversed = [...lines].reverse();
+  const last = reversed.map((line) => line.match(/(\d+)\/(\d+) : (.*?) \((\d+) reliée\(s\), (\d+) octets récupérés\)/)).find(Boolean);
+  const compare = (reversed.find((line) => /comparaison : \d+ %|\d+\/\d+ : /.test(line)) || '').match(/comparaison : (\d+) %/);
   const state = $('copyaudit-state');
   state.className = 'notice info';
   if (!last) { bar.classList.remove('hidden'); bar.removeAttribute('value'); state.textContent = 'Recherche des copies à relier…'; return; }
@@ -129,7 +131,7 @@ function relinkProgress(job) {
   bar.classList.remove('hidden');
   bar.max = Number(total);
   bar.value = Number(index) - 1;
-  state.textContent = `Liage en cours : fichier ${index} sur ${total} (${name}) · ${count} copie(s) reliée(s), ${fmtSize(Number(bytes))} récupérés.`;
+  state.textContent = `Liage en cours : fichier ${index} sur ${total} (${name}) · ${count} copie(s) reliée(s), ${fmtSize(Number(bytes))} récupérés.${compare ? ` Comparaison du fichier en cours : ${compare[1]} %.` : ''}`;
 }
 function relinkAll() {
   runJob('/api/copyaudit/relink', { all: true }, (job) => {
@@ -497,7 +499,23 @@ function openJobs() {
   refreshJobs();
 }
 
+async function copyDrawerLog() {
+  const text = $('drawer-log').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {                                           // page sans contexte sécurisé : repli par sélection
+    const area = el('textarea', { 'aria-hidden': 'true' }, text);
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (!ok) { toast('err', 'Copie impossible : sélectionnez le texte à la main.'); return; }
+  }
+  toast('ok', 'Journal copié dans le presse-papiers.');
+}
+
 function initOps4() {
+  $('drawer-copy').addEventListener('click', copyDrawerLog);
   for (const button of document.querySelectorAll('[data-jobs-open]')) button.addEventListener('click', openJobs);
   $('drawer-close').addEventListener('click', () => { jobsView = false; });
   setInterval(() => { if (!document.hidden) refreshJobs(); }, 5000);

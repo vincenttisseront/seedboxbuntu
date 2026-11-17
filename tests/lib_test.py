@@ -137,12 +137,20 @@ res = copies.relink([str(dl), str(other), "/etc/passwd"], small)
 check("copies : relier récupère l'espace, refuse le reste", res["done"] == 1 and res["saved"] == 300_000 and len(res["skipped"]) == 2, res)
 check("copies : le fichier de médiathèque est intact et partage l'inode avec la copie reliée",
       media_file.read_bytes() == payload and os.stat(dl).st_ino == os.stat(media_file).st_ino and os.stat(media_file).st_nlink >= 2)
+ticks = []
+real_time = copies.time.time
+clock = iter(range(0, 10 ** 6, 6))
+copies.time.time = lambda: next(clock)
+copies.BLOCK = 100_000
+check("copies : la comparaison complète signale sa progression", copies.identical(str(media_file), str(dl), lambda read, total: ticks.append((read, total))) and ticks and ticks[-1][1] == 300_000, ticks)
+copies.time.time = real_time
+copies.BLOCK = 8 << 20
 check("copies : plus de copie à relier", copies.candidates(small)["items"] == [])
 check("copies : aucun fichier choisi -> erreur", raises(copies.relink, []) is not None)
 dl2 = ctl.STORAGE / "downloads/dune2.mkv"
 dl2.write_bytes(payload)
 real_identical = copies.identical
-copies.identical = lambda a, b: False
+copies.identical = lambda a, b, progress=None: False
 check("copies : contenus différents à la vérification complète -> rien n'est touché",
       copies.relink([str(dl2)], small)["skipped"][0]["reason"].startswith("contenus") and os.stat(dl2).st_nlink == 1)
 copies.identical = real_identical
