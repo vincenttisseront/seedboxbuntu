@@ -40,13 +40,17 @@ def downloads_root():
 
 
 def _sample(path, size):
-    """Empreinte rapide : taille et trois extraits (début, milieu, fin)."""
+    """Empreinte rapide : taille et trois extraits (début, milieu, fin). None si le fichier ne se lit pas
+    (partage réseau qui refuse la lecture, fichier verrouillé ou disparu) : il est alors ignoré, jamais fatal."""
     import hashlib
     digest = hashlib.sha256(str(size).encode())
-    with open(path, "rb") as handle:
-        for offset in (0, max(0, size // 2 - SAMPLE // 2), max(0, size - SAMPLE)):
-            handle.seek(offset)
-            digest.update(handle.read(SAMPLE))
+    try:
+        with open(path, "rb") as handle:
+            for offset in (0, max(0, size // 2 - SAMPLE // 2), max(0, size - SAMPLE)):
+                handle.seek(offset)
+                digest.update(handle.read(SAMPLE))
+    except OSError:
+        return None
     return digest.hexdigest()
 
 
@@ -85,7 +89,7 @@ def candidates(records=None, root=None, limit=MAX_CANDIDATES):
     if not root or not root.is_dir():
         return {"items": [], "walked": 0, "note": "dossier des téléchargements terminés introuvable"}
     index = media_index(records)
-    found, walked = [], 0
+    found, walked, unreadable = [], 0, 0
     for folder, _dirs, files in os.walk(root):
         for name in files:
             walked += 1
@@ -106,12 +110,16 @@ def candidates(records=None, root=None, limit=MAX_CANDIDATES):
                 if media.st_ino == info.st_ino and media.st_dev == info.st_dev:
                     continue
                 same_disk = media.st_dev == info.st_dev
-                if _sample(path, info.st_size) == _sample(host, info.st_size):
+                mine, theirs = _sample(path, info.st_size), _sample(host, info.st_size)
+                if mine is None or theirs is None:
+                    unreadable += 1
+                    break                                         # illisible : ni copie reconnue, ni erreur
+                if mine == theirs:
                     found.append({"download": str(path), "media": str(host), "size": info.st_size, "title": record["title"],
                                   "same_disk": same_disk})
                     break
     found.sort(key=lambda e: -e["size"])
-    return {"items": found[:limit], "walked": walked, "total": len(found), "saving": sum(e["size"] for e in found if e["same_disk"]),
+    return {"items": found[:limit], "walked": walked, "unreadable": unreadable, "total": len(found), "saving": sum(e["size"] for e in found if e["same_disk"]),
             "blocked": sum(e["size"] for e in found if not e["same_disk"])}
 
 
@@ -172,7 +180,8 @@ def scan(records=None, root=None):
     temp = FILE.with_name(FILE.name + ".tmp")
     temp.write_text(json.dumps(result, ensure_ascii=False))
     os.replace(temp, FILE)
-    say(f"audit des copies : {result.get('total', 0)} copie(s), {result.get('saving', 0)} octets récupérables")
+    say(f"audit des copies : {result.get('total', 0)} copie(s), {result.get('saving', 0)} octets récupérables"
+        + (f", {result['unreadable']} fichier(s) illisible(s) ignoré(s)" if result.get("unreadable") else ""))
     return result
 
 

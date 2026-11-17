@@ -146,6 +146,19 @@ copies.identical = lambda a, b: False
 check("copies : contenus différents à la vérification complète -> rien n'est touché",
       copies.relink([str(dl2)], small)["skipped"][0]["reason"].startswith("contenus") and os.stat(dl2).st_nlink == 1)
 copies.identical = real_identical
+# fichier de partage illisible (SMB : Errno 22) : ignoré et compté, l'analyse ne s'arrête pas
+real_open = open
+def refusing_open(path, *args, **kwargs):
+    if str(path) == str(dl2):
+        raise OSError(22, "Invalid argument")
+    return real_open(path, *args, **kwargs)
+import builtins
+builtins.open = refusing_open
+try:
+    unreadable = copies.candidates(small)
+finally:
+    builtins.open = real_open
+check("copies : un fichier que le partage refuse de lire est ignoré et compté, sans planter", str(dl2) not in [e["download"] for e in unreadable["items"]] and unreadable["unreadable"] == 1, unreadable)
 
 # --- 4. remplacements sous budget ----------------------------------------------------------------------------------------------------
 rep = ctl.replacer()
