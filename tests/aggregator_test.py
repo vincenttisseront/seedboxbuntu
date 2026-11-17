@@ -309,7 +309,7 @@ check("envoi : redirection vers un magnet suivie, ajouté par adresse", magnet["
 check("envoi : réponse qui n'est pas un .torrent → message clair", "n'a pas fourni" in (fails(agg.send, row_id("Film.Casse.2024.1080p")) or ""))
 check("envoi : torrent purgé → message clair", "introuvable" in (fails(agg.send, 99999) or ""))
 world["qbit_login"] = False
-check("envoi : connexion qBittorrent refusée → message clair", "mot de passe refusé" in (fails(agg.send, row_id("Film.Envoi.2024.1080p"), True) or ""))
+check("envoi : connexion qBittorrent refusée → message clair", "bannie" in (fails(agg.send, row_id("Film.Envoi.2024.1080p"), True) or ""))
 world["qbit_login"] = True
 running_before = ctl.container_running
 ctl.container_running = lambda name: name in ("prowlarr", "jackett")
