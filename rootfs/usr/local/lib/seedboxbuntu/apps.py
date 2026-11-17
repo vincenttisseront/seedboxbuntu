@@ -40,8 +40,8 @@ MAX_DOWNLOAD = 12 * 1024 * 1024
 
 # Services et chemins de la stack : une entrée du catalogue ne peut pas les prendre
 RESERVED = {"authelia-redis", "socket-proxy", "traefik", "authelia", "homepage", "dockge", "jellyfin", "seerr", "radarr", "sonarr",
-            "prowlarr", "jackett", "flaresolverr", "autobrr", "p2p-aggregator", "qbit-manage", "cross-seed",
-            "qbittorrent", "qbittorrent-direct", "gluetun", "watchtower", "console", "auth", "qbm", "p2p"}
+            "prowlarr", "jackett", "flaresolverr", "autobrr", "qbit-manage", "cross-seed",
+            "qbittorrent", "qbittorrent-direct", "gluetun", "watchtower", "console", "auth", "qbm"}
 ID = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
 IMAGE = re.compile(r"^(lscr\.io|ghcr\.io|docker\.io|quay\.io)/[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?$|"
                    r"^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9._-]*(:[A-Za-z0-9._-]+)?$")

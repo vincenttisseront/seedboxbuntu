@@ -22,7 +22,7 @@ PINS_FILE = ctl.STATE / "pins.json"
 PINS_COMPOSE = ctl.BASE / "docker-compose.pins.yml"
 REPO = "seedbox-rollback"
 SERVICE = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
-LOCAL_SERVICES = {"p2p-aggregator"}          # image construite sur place : mise à jour par son propre mécanisme
+LOCAL_SERVICES = set()                       # services dont l'image est construite sur place (aucun pour l'instant)
 WAIT = 120
 
 

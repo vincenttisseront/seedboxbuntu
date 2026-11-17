@@ -1,8 +1,7 @@
 """SeedBoxBuntu - fenêtre de maintenance : les tâches lourdes automatiques ne démarrent que dans la plage choisie.
 
 Réglages (/etc/seedboxbuntu/window.json) : jours de la semaine (0 = lundi) et heures de début et de fin (la fin peut passer
-minuit : 23:00 -> 05:00). Tâches concernées : mise à jour automatique de l'appliance, mise à jour automatique
-de p2p-aggregator, analyse de vulnérabilités, test de restauration mensuel. Une tâche qui se déclenche hors fenêtre est
+minuit : 23:00 -> 05:00). Tâches concernées : mise à jour automatique de l'appliance, analyse de vulnérabilités, test de restauration mensuel. Une tâche qui se déclenche hors fenêtre est
 mise en attente (window-pending.json) ; le passage de surveillance (5 minutes) la lance dès que la fenêtre s'ouvre.
 Un lancement manuel depuis la console n'est jamais retenu.
     seedboxctl window show | set | tick

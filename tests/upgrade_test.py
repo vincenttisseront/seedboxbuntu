@@ -61,7 +61,7 @@ class Maintenance:
 
 
 c.maintenance = lambda: Maintenance
-for name in ("ensure_env", "update_addresses", "ensure_certificates", "set_ownership", "p2p_ensure_image", "refresh_firewall_safely"):
+for name in ("ensure_env", "update_addresses", "ensure_certificates", "set_ownership", "retire_old_apps", "refresh_firewall_safely"):
     setattr(c, name, lambda *a, **k: None)
 c.version = lambda: "2026.11.09"
 c.say = lambda message: calls["say"].append(message)

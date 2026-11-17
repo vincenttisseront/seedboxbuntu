@@ -38,7 +38,6 @@ PRIORITY_PATH, PRIORITY_HOST = 600, 500
 STACK = {
     "jellyfin": {"service": "jellyfin", "prefix": "/jellyfin", "auth": False, "extra": []},
     "seerr": {"service": "seerr", "prefix": "", "auth": False, "extra": ["rate-limit@file"]},
-    "p2p": {"service": "p2p", "prefix": "", "auth": False, "extra": ["rate-limit@file"]},
     "qbittorrent": {"service": "qbittorrent", "prefix": "/qbittorrent", "strip": True, "auth": True, "extra": []},
     "prowlarr": {"service": "prowlarr", "prefix": "/prowlarr", "auth": True, "extra": []},
     "jackett": {"service": "jackett", "prefix": "/jackett", "auth": True, "slash": True, "extra": []},

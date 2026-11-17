@@ -13,15 +13,15 @@
 #    Jackett est servi sous /jackett/ ; FlareSolverr n'a aucune route (réseau Docker seulement).
 #    Applications ajoutées depuis le catalogue (console > Catalogue) : elles vivent dans
 #    docker-compose.apps.yml, généré par seedboxctl et fusionné à ce fichier ; elles survivent aux mises à jour.
-#    Seerr, Dockge et p2p-aggregator ne savent pas fonctionner dans un sous-chemin :
-#    ils ont leur propre port, toujours en HTTPS (5055, 5001 et 3000).
+#    Seerr et Dockge ne savent pas fonctionner dans un sous-chemin :
+#    ils ont leur propre port, toujours en HTTPS (5055 et 5001).
 #    Les règles n'imposent aucun nom d'hôte : l'IP, le nom du serveur et un domaine
 #    personnalisé mènent aux mêmes applications. Le TLS se règle sur les points d'entrée
 #    (traefik.yml) : certificat de l'appliance, ou Let's Encrypt pour un domaine.
 #
 #  AUTHENTIFICATION
 #    Le middleware authelia@file protège les applications d'administration
-#    (connexion unique). Jellyfin, Seerr et p2p-aggregator gèrent leurs propres
+#    (connexion unique). Jellyfin et Seerr gèrent leurs propres
 #    comptes : seedboxctl les synchronise avec l'annuaire Authelia.
 #
 #  RÉSEAU
@@ -44,7 +44,6 @@
 #  PROFILS
 #    direct   qBittorrent sans VPN (accès local), qbit_manage, cross-seed  (par défaut)
 #    vpn      gluetun, qBittorrent dans le tunnel, qbit_manage, cross-seed (identifiants VPN requis)
-#    session  tracker-session de p2p-aggregator (renouvellement des sessions trackers)
 # =============================================================================
 
 name: seedbox
@@ -129,7 +128,6 @@ services:
       # Applications incompatibles avec un sous-chemin : un port HTTPS chacune
       - "5055:5055"
       - "5001:5001"
-      - "3000:3000"
     environment:
       TZ: ${TZ}
     # Identifiants du fournisseur DNS pour Let's Encrypt (défi DNS-01) ; fichier vide par défaut
@@ -647,55 +645,6 @@ services:
       traefik.http.routers.seerr.entrypoints: seerr
       traefik.http.routers.seerr.middlewares: rate-limit@file,secure-headers@file
       traefik.http.services.seerr.loadbalancer.server.port: "5055"
-
-  # ---------------------------------------------------------------------------
-  #  P2P Aggregator (image construite localement, voir seedboxctl p2p-update)
-  # ---------------------------------------------------------------------------
-  p2p-aggregator:
-    <<: *base
-    image: seedbox/p2p-aggregator:current
-    pull_policy: never
-    container_name: p2p-aggregator
-    environment:
-      NUXT_JWT_SECRET: ${P2P_JWT_SECRET}
-      NUXT_CREDENTIAL_KEY: ${P2P_CREDENTIAL_KEY}
-      NUXT_COOKIE_SECURE: "true"
-      DATABASE_URL: file:/app/data/p2p.db
-      ENABLE_MOCK_TRACKERS: "false"
-      SEED_DEMO_DATA: "false"
-      ALLOW_DATABASE_RESET: "false"
-      # Utilisé uniquement à la création du compte admin : voir seed de l'image
-      SEED_ADMIN_PASSWORD: ${ADMIN_INITIAL_PASSWORD}
-      TRACKER_SESSION_URL: http://tracker-session:8192
-      TRACKER_SESSION_API_KEY: ${P2P_SESSION_API_KEY}
-    volumes:
-      - ${CONFIG_DIR}/p2p-aggregator:/app/data
-    networks:
-      - seedbox
-    labels:
-      # Image locale : mise à jour par seedboxctl, jamais par Watchtower
-      com.centurylinklabs.watchtower.enable: "false"
-      traefik.enable: "true"
-      # Port 3000 : l'interface appelle /api à la racine de l'adresse
-      traefik.http.routers.p2p.rule: PathPrefix(`/`)
-      traefik.http.routers.p2p.entrypoints: p2p
-      traefik.http.routers.p2p.middlewares: rate-limit@file,secure-headers@file
-      traefik.http.services.p2p.loadbalancer.server.port: "3000"
-
-  tracker-session:
-    <<: *base
-    profiles: ["session"]
-    image: seedbox/tracker-session:current
-    pull_policy: never
-    container_name: tracker-session
-    environment:
-      TRACKER_SESSION_API_KEY: ${P2P_SESSION_API_KEY}
-      TRACKER_SESSION_HEADED: "1"
-      PORT: "8192"
-    networks:
-      - seedbox
-    labels:
-      com.centurylinklabs.watchtower.enable: "false"
 
 networks:
   seedbox:

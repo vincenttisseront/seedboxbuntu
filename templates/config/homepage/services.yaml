@@ -13,7 +13,7 @@
 #
 #    href         ouvert par le NAVIGATEUR -> chemin relatif (/sonarr/) : l'adresse saisie
 #                                            par l'utilisateur est conservée ; port dédié
-#                                            pour Seerr, Dockge et p2p-aggregator
+#                                            pour Seerr et Dockge
 #    widget.url   appelé par HOMEPAGE      -> nom Docker + port interne + chemin de base
 #    siteMonitor  appelé par HOMEPAGE      -> nom Docker + port interne + chemin de base
 #
@@ -34,11 +34,6 @@
           password: "{{HOMEPAGE_VAR_QBIT_PASSWORD}}"
           fields: ["leech", "download", "seed", "upload"]
           enableLeechProgress: true
-    - P2P Aggregator:
-        icon: mdi-transit-connection-variant
-        href: "https://{{HOMEPAGE_VAR_DOMAIN}}:3000/"
-        description: Releases et ratios multi-trackers
-        siteMonitor: http://p2p-aggregator:3000/api/health
     - Prowlarr:
         icon: prowlarr.png
         href: "/prowlarr/"

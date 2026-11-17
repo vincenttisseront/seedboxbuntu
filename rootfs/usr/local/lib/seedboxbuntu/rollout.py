@@ -9,7 +9,7 @@ services, la méthode ajoute :
     les suivants sont marqués « ignoré » et rien d'autre n'est touché.
 Hors lot, à mettre à jour à la main : Traefik et Authelia (une coupure efface la session de la console pendant le test)
 et gluetun (le tunnel de qBittorrent : sa recréation exige celle de qBittorrent). Les services épinglés après un retour
-arrière, et p2p-aggregator (image construite sur place), ne sont pas touchés non plus.
+arrière ne sont pas touchés non plus.
 Limite assumée : le test vaut ce que vaut le contrôle d'état de l'image. Sans « healthcheck » le service est seulement
 vu « en marche » ; le plan l'indique par service.
     seedboxctl rollout plan | run [--only SERVICE ...] [--continue]

@@ -1,6 +1,6 @@
 """SeedBoxBuntu - mots de passe propres aux applications (Identifiants) : réinitialisation depuis la console.
 
-Les comptes de la page Comptes (connexion unique, Jellyfin, Seerr, p2p-aggregator) se changent d'un seul geste là-bas. Ici, les
+Les comptes de la page Comptes (connexion unique, Jellyfin, Seerr) se changent d'un seul geste là-bas. Ici, les
 applications qui ont leur propre mot de passe, y compris quand celui-ci a été perdu ou changé hors de la console :
   - Jellyfin : n'importe quel compte, par la clé d'API de la console (aucun mot de passe actuel nécessaire). Saisi par vous,
     jamais conservé.

@@ -8,7 +8,7 @@
 #     ./build.sh --test-vm [--bios] seedboxbuntu.iso    test en VM QEMU
 #
 #   Dossier des sources : build.sh, lib/ (étapes de la construction), rootfs/ (fichiers de
-#   l'appliance), stack/, templates/, p2p/ (correctifs). Voir README.md.
+#   l'appliance), stack/, templates/. Voir README.md.
 #
 #   Systèmes : Linux ou WSL2 (Ubuntu/Debian conseillé).
 #   Windows   : lancer build.ps1 (Docker Desktop) depuis ce même dossier :
@@ -16,12 +16,7 @@
 #
 #   Paramètres facultatifs (variables d'environnement) :
 #     UBUNTU_RELEASE    24.04          branche Ubuntu Server téléchargée
-#     P2P_REPO          dépôt GitHub de p2p-aggregator
-#     P2P_SOURCE        (vide)         clone local, à la place du téléchargement
-#     P2P_BRANCH        main           branche clonée
 #     GITHUB_TOKEN      (vide)         jeton de lecture du dépôt privé
-#     P2P_PREBUILD      auto           auto | 1 | 0 : image embarquée dans l'ISO
-#     P2P_IMAGE_TAR     (vide)         image déjà exportée (docker save | zstd)
 #     HOST_NAME         seedbox        nom de machine proposé par l'assistant
 #     LOCALE            fr_FR.UTF-8
 #     KEYBOARD          fr             clavier de la console
@@ -49,7 +44,7 @@
 #
 #   Paramètres (console web ou seedbox-menu) : mises à jour de sécurité du système et des
 #   applications planifiées, audit de sécurité, ports ouverts. Pare-feu : SSH, web (80, 443)
-#   et ports dédiés de Seerr (5055), Dockge (5001) et P2P Aggregator (3000) uniquement ;
+#   et ports dédiés de Seerr (5055) et Dockge (5001) uniquement ;
 #   plus le port de partage de qBittorrent (6881) en accès direct.
 #
 #   qBittorrent : accès direct (par défaut, sans VPN, pour un usage en réseau local) ou dans un
@@ -64,12 +59,7 @@ SRC_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"   # dos
 
 SB_VERSION="${SB_VERSION:-$(date +%Y.%m.%d-%H%M)}"   # AAAA.MM.JJ-HHMM : comparable par GRUB
 UBUNTU_RELEASE="${UBUNTU_RELEASE:-24.04}"
-P2P_REPO="${P2P_REPO:-https://github.com/vincenttisseront/p2p-aggregator.git}"
-P2P_SOURCE="${P2P_SOURCE:-}"
-P2P_BRANCH="${P2P_BRANCH:-main}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-P2P_PREBUILD="${P2P_PREBUILD:-auto}"
-P2P_IMAGE_TAR="${P2P_IMAGE_TAR:-}"
 HOST_NAME="${HOST_NAME:-seedbox}"
 LOCALE="${LOCALE:-fr_FR.UTF-8}"
 KEYBOARD="${KEYBOARD:-fr}"
@@ -106,10 +96,7 @@ main() {
   [[ -n $OUTPUT ]] || OUTPUT="$PWD/seedboxbuntu-$SB_VERSION-amd64.iso"
   OUTPUT=$(readlink -f "$OUTPUT")
   rm -rf "$W/iso"; mkdir -p "$W/iso/seedboxbuntu"
-  fetch_p2p
   gen_rootfs
-  p2p_source
-  p2p_image
   gen_late
   gen_update
   gen_autoinstall

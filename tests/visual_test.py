@@ -670,9 +670,6 @@ def journeys_ops2(page, base):
     page.goto(base + "#trackers")
     settle(page, "trackers")
     page.wait_for_timeout(500)
-    stats = page.inner_text("#trackerstats-list")
-    if "torr9" not in stats or "sous le ratio exigé" not in stats:
-        fail("parcours : les ratios réels n'affichent pas le tracker en danger")
     page.goto(base + "#settings")
     settle(page, "settings")
     page.wait_for_timeout(400)

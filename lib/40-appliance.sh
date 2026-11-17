@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-#  4. Fichiers de l'appliance (copiés depuis rootfs/, stack/, templates/ et p2p/)
+#  4. Fichiers de l'appliance (copiés depuis rootfs/, stack/ et templates/)
 # ----------------------------------------------------------------------------
 # Mode d'un fichier de l'appliance : appliance_mode CHEMIN_DANS_LE_SYSTEME FICHIER_SOURCE
 # (indépendant du bit « exécutable » : un dossier copié depuis Windows ou un zip le perd)
@@ -48,7 +48,7 @@ gen_rootfs() {
   rm -rf "$R"; mkdir -p "$R"
   local sub
   copy_tree "$SRC_DIR/rootfs" ""
-  for sub in stack templates p2p; do copy_tree "$SRC_DIR/$sub" "/usr/share/seedboxbuntu/$sub"; done
+  for sub in stack templates; do copy_tree "$SRC_DIR/$sub" "/usr/share/seedboxbuntu/$sub"; done
   printf '%s\n' "$SB_VERSION" > "$R/usr/share/seedboxbuntu/VERSION"
   source_commit > "$R/usr/share/seedboxbuntu/SOURCE_COMMIT"
   [[ -s $R/usr/share/seedboxbuntu/SOURCE_COMMIT ]] || rm -f "$R/usr/share/seedboxbuntu/SOURCE_COMMIT"
@@ -60,6 +60,3 @@ gen_rootfs() {
   tar --owner=0 --group=0 -cpf "$W/iso/seedboxbuntu/rootfs.tar" -C "$R" .
 }
 
-p2p_source() {   # sources d'origine : les correctifs sont réappliqués à chaque construction
-  tar --owner=0 --group=0 --zstd -cf "$W/iso/seedboxbuntu/p2p-source.tar.zst" -C "$W/p2p" p2p-aggregator
-}

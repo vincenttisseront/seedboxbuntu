@@ -45,7 +45,6 @@ cat:
   radarr: @@DOWNLOADS@@/radarr
   sonarr: @@DOWNLOADS@@/sonarr
   autobrr: @@DOWNLOADS@@/autobrr
-  p2p-aggregator: @@DOWNLOADS@@/p2p-aggregator
   cross-seed-link: @@DOWNLOADS@@/cross-seed
 
 nohardlinks:

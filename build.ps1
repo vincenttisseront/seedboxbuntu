@@ -5,8 +5,7 @@
 .DESCRIPTION
     Fonctionne depuis Windows 10 ou 11, sans WSL à installer soi-même, sans Git Bash.
     Lancez-le depuis le dossier des sources (celui qui contient build.sh, lib/ et rootfs/) :
-    build.sh y est exécuté dans un conteneur Ubuntu 24.04 de Docker Desktop. L'image de P2P Aggregator est construite
-    par ce même Docker Desktop, puis embarquée dans l'ISO.
+    build.sh y est exécuté dans un conteneur Ubuntu 24.04 de Docker Desktop.
 
     L'ISO est produite dans le sous-dossier « out » (modifiable avec -OutputDir). Le téléchargement d'Ubuntu et les fichiers de
     travail restent dans le volume Docker « seedboxbuntu-build » : un second lancement
@@ -20,15 +19,13 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\build.ps1
-    Demande le jeton GitHub, télécharge Ubuntu Server 24.04 et construit l'ISO.
+    Télécharge Ubuntu Server 24.04 et construit l'ISO.
 
 .EXAMPLE
     .\build.ps1 -IsoPath .\ubuntu-24.04.5-live-server-amd64.iso -Keyboard fr -Timezone Europe/Paris
 #>
 [CmdletBinding()]
 param(
-    # Jeton GitHub en lecture du dépôt privé p2p-aggregator (demandé s'il est absent)
-    [string]$GithubToken = $env:GITHUB_TOKEN,
     # ISO Ubuntu Server déjà téléchargée ; sinon téléchargée automatiquement
     [string]$IsoPath = "",
     [string]$HostName = "seedbox",
@@ -37,13 +34,8 @@ param(
     [string]$Locale = "fr_FR.UTF-8",
     [string]$Timezone = "Europe/Paris",
     [int]$GrubTimeout = 20,
-    [string]$P2pBranch = "main",
-    # Clone local de p2p-aggregator à utiliser au lieu de GitHub (le jeton devient facultatif)
-    [string]$P2pSource = "",
     # Certificat racine PEM d'un proxy d'entreprise, à installer aussi sur le serveur
     [string]$ExtraCaCerts = "",
-    # Ne pas embarquer l'image P2P Aggregator : elle sera construite au premier démarrage
-    [switch]$NoPrebuild,
     # Dossier de sortie de l'ISO (par défaut : sous-dossier « out » des sources)
     [string]$OutputDir = ""
 )
@@ -100,15 +92,7 @@ try {
     Write-Info "certificats racines de Windows transmis au conteneur : $count"
 
     # --- 4. Paramètres
-    if ($P2pSource -and -not (Test-Path -LiteralPath (Join-Path $P2pSource '.git'))) { Stop-Build "pas un clone git : $P2pSource" }
-    if (-not $GithubToken -and -not $P2pSource) {
-        $secure = Read-Host "Jeton GitHub en lecture du dépôt p2p-aggregator" -AsSecureString
-        $GithubToken = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-    }
-    if (-not $GithubToken -and -not $P2pSource) { Stop-Build "jeton GitHub requis pour télécharger le dépôt privé p2p-aggregator" }
-
-    $mounts = @('-v', "${outDir}:/out", '-v', "${tmp}:/launcher:ro", '-v', "${srcDir}:/src:ro", '-v', 'seedboxbuntu-build:/build',
-                '-v', '/var/run/docker.sock:/var/run/docker.sock')
+    $mounts = @('-v', "${outDir}:/out", '-v', "${tmp}:/launcher:ro", '-v', "${srcDir}:/src:ro", '-v', 'seedboxbuntu-build:/build')
     $scriptArgs = @()
     if ($IsoPath) {
         if (-not (Test-Path -LiteralPath $IsoPath -PathType Leaf)) { Stop-Build "ISO introuvable : $IsoPath" }
@@ -116,20 +100,17 @@ try {
         $mounts += @('-v', ((Split-Path $iso -Parent) + ':/iso:ro'))
         $scriptArgs += "/iso/" + (Split-Path $iso -Leaf)
     }
-    if ($P2pSource) { $mounts += @('-v', ((Resolve-Path -LiteralPath $P2pSource).Path + ':/p2p-src:ro')) }
     if ($ExtraCaCerts) {
         if (-not (Test-Path -LiteralPath $ExtraCaCerts -PathType Leaf)) { Stop-Build "certificat introuvable : $ExtraCaCerts" }
         Copy-Item -LiteralPath $ExtraCaCerts (Join-Path $tmp 'extra-ca.pem')
     }
 
-    # Variables transmises par fichier : le jeton n'apparaît pas sur la ligne de commande
+    # Variables transmises par fichier plutôt que sur la ligne de commande
     $envFile = Join-Path $tmp 'build.env'
     $vars = [ordered]@{
-        GITHUB_TOKEN = $GithubToken; HOST_NAME = $HostName; KEYBOARD = $Keyboard; KEYBOARD_VARIANT = $KeyboardVariant
-        LOCALE = $Locale; TIMEZONE = $Timezone; GRUB_TIMEOUT = "$GrubTimeout"; P2P_BRANCH = $P2pBranch
-        P2P_PREBUILD = $(if ($NoPrebuild) { '0' } else { '1' }); WORKDIR = '/build'
+        HOST_NAME = $HostName; KEYBOARD = $Keyboard; KEYBOARD_VARIANT = $KeyboardVariant
+        LOCALE = $Locale; TIMEZONE = $Timezone; GRUB_TIMEOUT = "$GrubTimeout"; WORKDIR = '/build'
     }
-    if ($P2pSource) { $vars['P2P_SOURCE'] = '/p2p-src' }
     if ($ExtraCaCerts) { $vars['EXTRA_CA_CERTS'] = '/launcher/extra-ca.pem' }
     foreach ($name in 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY') {
         $value = [Environment]::GetEnvironmentVariable($name)

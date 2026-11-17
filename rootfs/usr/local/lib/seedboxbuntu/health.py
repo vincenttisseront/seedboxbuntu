@@ -44,7 +44,7 @@ def expected_services(env):
     """Conteneurs attendus selon le mode de qBittorrent."""
     mode = ctl.qbit_mode()
     services = ["socket-proxy", "traefik", "authelia-redis", "authelia", "homepage", "dockge", "jellyfin", "seerr", "radarr",
-                "sonarr", "prowlarr", "jackett", "flaresolverr", "autobrr", "p2p-aggregator", "qbit-manage", "cross-seed", "qbittorrent"]
+                "sonarr", "prowlarr", "jackett", "flaresolverr", "autobrr", "qbit-manage", "cross-seed", "qbittorrent"]
     if mode == "vpn":
         services.append("gluetun")
     if "autoupdate" in ctl.profiles_read():
@@ -224,23 +224,6 @@ def check_autobrr(report, env):
     report.attempt("autobrr", "client de téléchargement qBittorrent", downloader)
 
 
-def check_p2p(report, env):
-    report.attempt("P2P Aggregator", "API", lambda: expect(ctl.request(
-        "GET", ctl.svc("p2p-aggregator", 3000) + "/api/health", timeout=15)).text[:60])
-
-    def client():
-        cookie = ctl.p2p_session()
-        clients = expect(ctl.p2p_api("GET", "/api/user/download-clients", cookie=cookie)).json()
-        clients = clients.get("items", clients.get("clients", [])) if isinstance(clients, dict) else clients
-        found = [c for c in clients if c.get("name") == "qBittorrent"]
-        if not found:
-            raise ctl.SeedboxError("client qBittorrent absent")
-        if ctl.qbit_host() not in str(found[0].get("baseUrl", "")):
-            raise ctl.SeedboxError(f"client sur {found[0].get('baseUrl')}, attendu {ctl.qbit_host()}")
-        return f"qBittorrent ({found[0].get('baseUrl')})"
-    report.attempt("P2P Aggregator", "client de téléchargement qBittorrent", client)
-
-
 def check_qbm_and_cross_seed(report, env):
     host = ctl.qbit_host()
 
@@ -373,7 +356,6 @@ def run_checks():
     check_qbittorrent(report, env)
     check_qbm_and_cross_seed(report, env)
     check_autobrr(report, env)
-    check_p2p(report, env)
     check_system(report, env)
     return report.items
 

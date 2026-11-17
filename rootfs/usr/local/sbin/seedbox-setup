@@ -569,24 +569,7 @@ print("Version", i["version"], (i["commit"] or "")[:7], "-", ("mise à jour disp
                  stable "Versions publiées (étiquettes v…) : recommandé" dev "Dernier commit de la branche suivie") || continue
                seedboxctl appliance source --channel "$mode" && msg "Canal" "Canal enregistré : $mode." 8 ;;
       token) token=$(pass "Jeton GitHub" "Jeton GitHub en lecture seule :") || continue
-             printf '%s\n' "$token" | seedboxctl p2p token && msg "Jeton" "Jeton enregistré." 8 ;;
-    esac
-  done
-}
-
-menu_p2p() {
-  local c token
-  while :; do
-    c=$(W --title "P2P Aggregator" --ok-button "Valider" --cancel-button "Retour" --menu "$(seedboxctl p2p status 2>/dev/null | python3 -c 'import json,sys
-d=json.load(sys.stdin); print("Version", d["version"], d["commit"] or "", "- jeton", "enregistré" if d["token"] else "absent")')" 13 76 3 \
-      update "Mettre à jour" \
-      token "Enregistrer le jeton GitHub" \
-      session "Activer tracker-session") || return 0
-    case $c in
-      update) ctl_box "Mise à jour" seedboxctl p2p update ;;
-      token) token=$(pass "Jeton GitHub" "Jeton GitHub en lecture seule :") || continue
-             printf '%s\n' "$token" | seedboxctl p2p token && msg "Jeton" "Jeton enregistré." 8 ;;
-      session) ctl_box "tracker-session" seedboxctl p2p session ;;
+             printf '%s\n' "$token" | seedboxctl github token && msg "Jeton" "Jeton enregistré." 8 ;;
     esac
   done
 }
@@ -601,7 +584,7 @@ names=dict(mon="lun",tue="mar",wed="mer",thu="jeu",fri="ven",sat="sam",sun="dim"
 def days(v): return "tous les jours" if v=="daily" else ",".join(names[x] for x in v.split(","))
 def line(label, c, extra=""): return "  %-14s %s" % (label, ("%s à %s%s" % (days(c["days"]), c["time"], extra)) if c["enabled"] else "désactivées")
 print(line("Sécurité", s, (", redémarrage à "+s["reboot_time"]) if s["reboot"] else ""))
-print(line("Applications", a, " + P2P Aggregator" if a["p2p"] else ""))
+print(line("Applications", a))
 if d["reboot_required"]: print("  Redémarrage du serveur nécessaire")'
 }
 
@@ -650,15 +633,14 @@ edit_security_updates() {
 }
 
 edit_app_updates() {
-  local en=false days time p2p=false args
+  local en=false days time args
   days=$(setting_value apps days); time=$(setting_value apps time)
   if ask "Mises à jour des applications" "Mettre à jour automatiquement les applications (Watchtower) ?"; then en=true; fi
   args=(--apps-enabled "$en")
   if [[ $en == true ]]; then
     pick_days "$days" || return 0; days=$DAYS_CHOICE
     ask_clock "Heure du passage" "$time" || return 0; time=$CLOCK_CHOICE
-    if ask "P2P Aggregator" "Mettre aussi à jour P2P Aggregator automatiquement (jeton GitHub requis) ?"; then p2p=true; fi
-    args+=(--apps-days "$days" --apps-time "$time" --apps-p2p "$p2p")
+    args+=(--apps-days "$days" --apps-time "$time")
   fi
   ctl_box "Planification" seedboxctl updates set "${args[@]}"
 }
@@ -668,7 +650,7 @@ menu_updates() {
   while :; do
     c=$(W --title "Mises à jour planifiées" --ok-button "Valider" --cancel-button "Retour" --menu "$(updates_summary)" 16 78 4 \
       security "Sécurité du système : jours, heure, redémarrage" \
-      apps "Applications : jours, heure, P2P Aggregator" \
+      apps "Applications : jours, heure" \
       runsec "Installer les correctifs de sécurité maintenant" \
       runapps "Mettre à jour les applications maintenant") || return 0
     case $c in
@@ -1013,7 +995,6 @@ menu_main() {
       tools "Sauvegarde, versions des services, double authentification" \
       trackers "Synchroniser les trackers" \
       shares "Partages réseau et disques" \
-      p2p "P2P Aggregator et mises à jour" \
       appliance "Mise à jour de l'appliance (GitHub, sans ISO)" \
       settings "Paramètres : mises à jour planifiées, sécurité" \
       network "Réseau" \
@@ -1032,7 +1013,6 @@ menu_main() {
       tools)    menu_tools ;;
       trackers) ctl_box "Trackers" seedboxctl trackers sync ;;
       shares)   menu_shares ;;
-      p2p)      menu_p2p ;;
       appliance) menu_appliance ;;
       settings) menu_settings ;;
       network)  menu_network ;;

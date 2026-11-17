@@ -30,13 +30,8 @@ step "SeedBoxBuntu $SB_VERSION : finalisation de l'installation"
 step "copie des fichiers de l'appliance"
 tar -xpf "$SRC/rootfs.tar" -C "$T" --numeric-owner --no-overwrite-dir
 
-# 2. p2p-aggregator : sources (mises à jour) et image (premier démarrage sans jeton)
-step "p2p-aggregator"
+# 2. Dossiers de travail de l'appliance
 mkdir -p "$T/opt/seedbox/apps" "$T/var/lib/seedboxbuntu/images"
-chroot "$T" zstd -dc < "$SRC/p2p-source.tar.zst" | tar -xf - -C "$T/opt/seedbox/apps" --no-same-owner
-if [[ -f $SRC/p2p-image.tar.zst ]]; then
-  cp -f "$SRC/p2p-image.tar.zst" "$T/var/lib/seedboxbuntu/images/p2p-aggregator.tar.zst"
-fi
 
 # 3. Marqueur lu par le menu de l'ISO (empêche toute réinstallation en boucle)
 mkdir -p "$T/boot"

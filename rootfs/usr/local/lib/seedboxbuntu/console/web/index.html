@@ -140,7 +140,7 @@
   </section>
 
   <section id="view-users" class="view hidden">
-    <header class="page-head"><div><h1>Comptes</h1><p class="sub">Un compte vaut pour toute l'appliance : connexion unique, Jellyfin, Seerr et P2P Aggregator.</p></div></header>
+    <header class="page-head"><div><h1>Comptes</h1><p class="sub">Un compte vaut pour toute l'appliance : connexion unique, Jellyfin et Seerr.</p></div></header>
     <div class="table-wrap card"><table>
       <thead><tr><th>Identifiant</th><th>Rôle</th><th></th></tr></thead>
       <tbody id="users-list"></tbody>
@@ -151,7 +151,7 @@
       <label>Mot de passe<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
       <label>Rôle
         <select name="role">
-          <option value="user">Utilisateur : tableau de bord, Jellyfin, Seerr, P2P Aggregator</option>
+          <option value="user">Utilisateur : tableau de bord, Jellyfin, Seerr</option>
           <option value="manager">Gestionnaire : en plus, Radarr, Sonarr, Prowlarr, qBittorrent et les applications reliées</option>
           <option value="admin">Administrateur : toutes les applications</option>
         </select>
@@ -171,7 +171,7 @@
   </section>
 
   <section id="view-trackers" class="view hidden">
-    <header class="page-head"><div><h1>Trackers</h1><p class="sub">Un indexeur ajouté dans Prowlarr (ou dans Jackett : il est repris automatiquement par Prowlarr, FlareSolverr est déjà branché) est transmis à Radarr, Sonarr, cross-seed, qbit_manage et P2P Aggregator.</p></div><div class="actions"><a id="tracker-add" class="btn" target="_blank" rel="noopener">Ajouter dans Prowlarr</a><button id="trackers-sync" class="btn primary" type="button">Synchroniser</button></div></header>
+    <header class="page-head"><div><h1>Trackers</h1><p class="sub">Un indexeur ajouté dans Prowlarr (ou dans Jackett : il est repris automatiquement par Prowlarr, FlareSolverr est déjà branché) est transmis à Radarr, Sonarr, cross-seed, qbit_manage.</p></div><div class="actions"><a id="tracker-add" class="btn" target="_blank" rel="noopener">Ajouter dans Prowlarr</a><button id="trackers-sync" class="btn primary" type="button">Synchroniser</button></div></header>
     <div class="card">
       <h2>Règles de seed</h2>
       <div class="table-wrap"><table>
@@ -186,22 +186,6 @@
         <thead><tr><th>Tracker</th><th>Torrents</th><th>Envoyé</th><th>Reçu</th><th>Ratio</th><th>Débit</th></tr></thead>
         <tbody id="stats-list"></tbody>
       </table></div>
-    </div>
-    <div class="card" id="trackerstats-card">
-      <div class="card-head"><h2>Ratios réels des trackers</h2><button id="trackerstats-refresh" class="btn" type="button">Actualiser</button></div>
-      <p class="muted small">Les chiffres que chaque tracker affiche pour votre compte, lus dans P2P Aggregator (qui renouvelle les sessions avec tracker-session). Le ratio du tracker fait foi, celui de qBittorrent n’est qu’une estimation. Sous le ratio exigé, tous les torrents de ce tracker sont protégés dans l’optimisation des seeds.</p>
-      <p id="trackerstats-state" class="notice info"></p>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="Ratios des trackers"><table>
-        <thead><tr><th>Compte</th><th>Ratio</th><th>Exigé</th><th>Envoyé</th><th>Reçu</th><th>Évolution</th><th>État</th></tr></thead>
-        <tbody id="trackerstats-list"></tbody>
-      </table></div>
-      <form id="trackerstats-form" class="row">
-        <label>Hôte vu par qBittorrent<input name="host" maxlength="100" placeholder="tracker.exemple" autocomplete="off" required></label>
-        <label>Compte P2P Aggregator (vide : retirer l’alias)<input name="account" maxlength="80" autocomplete="off"></label>
-        <button class="btn" type="submit">Relier</button>
-        <label class="check"><input id="trackerstats-alert" type="checkbox">Alerte sous le ratio exigé</label>
-      </form>
-      <p id="trackerstats-aliases" class="muted small"></p>
     </div>
       <div class="card" id="ratio-card">
       <h2>Objectifs de ratio</h2>
@@ -487,7 +471,7 @@
         <label>Clé d’API<input name="key" type="password" autocomplete="off"></label>
         <button class="btn primary" type="submit">Ajouter une source</button>
       </form>
-      <p class="muted small">Prowlarr et Jackett sont lus avec les clés de la boîte. Une source ajoutée doit répondre au format Torznab (t=search). Les trackers privés sans flux Torznab (ratio, messages non lus) restent dans P2P Aggregator.</p>
+      <p class="muted small">Prowlarr et Jackett sont lus avec les clés de la boîte. Une source ajoutée doit répondre au format Torznab (t=search). Les trackers privés sans flux Torznab (ratio, messages non lus, sessions protégées) ne sont pas lus ici.</p>
     </div>
     <div class="card" id="agg-health-card">
       <h2>Santé et historique</h2>
@@ -505,22 +489,6 @@
       <label>Résultats demandés par requête<input name="limit" type="number" min="10" max="300" autocomplete="off"></label>
       <label>Catégorie qBittorrent des envois<input name="category" maxlength="40" autocomplete="off" placeholder="agregateur"></label>
       <label class="check"><input name="alert" type="checkbox">Alerter quand une source échoue 3 collectes de suite</label>
-      <button class="btn primary" type="submit">Enregistrer</button>
-    </form>
-  </section>
-
-  <section id="view-p2p" class="view hidden">
-    <header class="page-head"><div><h1>P2P Aggregator</h1><p class="sub">Agrégateur de trackers privés intégré à l'appliance.</p></div></header>
-    <div class="card"><dl id="p2p-state" class="kv"></dl>
-      <div class="row">
-        <button id="p2p-update" class="btn primary" type="button">Mettre à jour</button>
-        <button id="p2p-session" class="btn" type="button">Activer tracker-session</button>
-      </div>
-      <p class="muted small">La mise à jour reconstruit l'application sur ce serveur, puis revient à la version précédente si elle ne démarre pas.</p>
-    </div>
-    <form id="token-form" class="card form">
-      <h2>Accès au dépôt privé</h2>
-      <label>Jeton GitHub en lecture seule<input name="token" type="password" required autocomplete="off"></label>
       <button class="btn primary" type="submit">Enregistrer</button>
     </form>
   </section>
@@ -900,7 +868,7 @@
     <div id="secrets-list" class="grid"></div>
     <form id="apppass-form" class="card form">
       <h2>Réinitialiser le mot de passe d’une application</h2>
-      <p class="muted small">Pour une application qui demande un compte que vous ne retrouvez plus. Jellyfin : choisissez le compte et saisissez le nouveau mot de passe (il n’est conservé nulle part). qBittorrent, autobrr, Audiobookshelf : laissez vide pour en générer un, visible ensuite ci-dessus. Le résultat est vérifié par une vraie connexion. Les comptes partagés (connexion unique, Jellyfin, Seerr, p2p-aggregator) se changent d’un coup dans la page Comptes.</p>
+      <p class="muted small">Pour une application qui demande un compte que vous ne retrouvez plus. Jellyfin : choisissez le compte et saisissez le nouveau mot de passe (il n’est conservé nulle part). qBittorrent, autobrr, Audiobookshelf : laissez vide pour en générer un, visible ensuite ci-dessus. Le résultat est vérifié par une vraie connexion. Les comptes partagés (connexion unique, Jellyfin, Seerr) se changent d’un coup dans la page Comptes.</p>
       <label>Application<select name="app" id="apppass-app"></select></label>
       <label>Compte<select name="login" id="apppass-login"></select></label>
       <label>Nouveau mot de passe<input name="password" type="password" minlength="8" autocomplete="new-password" placeholder="vide : généré"></label>
@@ -1243,7 +1211,7 @@
         <div class="form">
           <label>Dépôt GitHub<input id="appliance-repo" placeholder="propriétaire/dépôt" autocomplete="off"></label>
           <label>Branche ou étiquette<input id="appliance-ref" placeholder="main" autocomplete="off"></label>
-          <label>Jeton GitHub (dépôt privé, lecture seule ; partagé avec P2P Aggregator)<input id="appliance-token" type="password" autocomplete="off" placeholder="laisser vide pour conserver le jeton actuel"></label>
+          <label>Jeton GitHub (dépôt privé, lecture seule)<input id="appliance-token" type="password" autocomplete="off" placeholder="laisser vide pour conserver le jeton actuel"></label>
           <button id="appliance-source-save" class="btn" type="button">Enregistrer</button>
         </div>
       </details>
@@ -1282,7 +1250,6 @@
       <label class="check"><input name="enabled" type="checkbox">Mettre à jour automatiquement les conteneurs (Watchtower)</label>
       <div class="days" id="apps-days"></div>
       <label>Heure<input name="time" type="time" required></label>
-      <label class="check"><input name="p2p" type="checkbox">Mettre aussi à jour P2P Aggregator (jeton GitHub requis)</label>
       <p id="apps-next" class="muted small"></p>
       <div class="row">
         <button class="btn primary" type="submit">Enregistrer</button>

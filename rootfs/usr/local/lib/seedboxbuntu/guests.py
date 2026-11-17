@@ -2,7 +2,7 @@
 
 Invitation : l'administrateur crée un lien à usage limité (validité de 1 à 30 jours, 1 à 20 utilisations). La
 personne invitée ouvre le lien (https://serveur/invite/...), choisit son identifiant et son mot de passe, et son
-compte est créé comme par la console (Authelia, Jellyfin, Seerr, p2p-aggregator), avec le rôle « utilisateur »
+compte est créé comme par la console (Authelia, Jellyfin, Seerr), avec le rôle « utilisateur »
 uniquement. Les liens ne sont jamais enregistrés en clair : seul leur condensé SHA-256 est conservé, le lien
 complet n'est montré qu'à la création.
 

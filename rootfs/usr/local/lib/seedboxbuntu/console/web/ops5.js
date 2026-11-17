@@ -255,35 +255,6 @@ async function saveGuestquotaSettings(event) {
   } catch (error) { showError(error); }
 }
 
-// --- ratios réels des trackers (page Trackers) ----------------------------------------------------------------------
-async function loadTrackerstats() {
-  const data = await api('/api/trackerstats');
-  const state = $('trackerstats-state');
-  const session = data.session;
-  state.className = `notice ${!data.available ? 'warn' : data.trackers.some((t) => t.danger && t.enabled) ? 'warn' : 'info'}`;
-  state.textContent = !data.available ? 'Aucune lecture pour le moment : cliquez sur Actualiser (P2P Aggregator doit être démarré).'
-    : `Relevé du ${fmtDateTime(data.at)}${session ? ` · tracker-session : ${session.healthy ? 'prêt' : session.reachable ? 'dégradé' : 'injoignable'}${session.latency_ms ? ` (${session.latency_ms} ms)` : ''}` : ''}.`;
-  $('trackerstats-alert').checked = data.settings.alert;
-  $('trackerstats-list').replaceChildren(...(data.trackers.length ? data.trackers.map((t) => el('tr', {},
-    el('td', {}, t.name, el('div', { class: 'muted small' }, t.host || t.key)), el('td', {}, ratioText(t.ratio)), el('td', {}, ratioText(t.required)),
-    el('td', {}, bytesOrDash(t.up)), el('td', {}, bytesOrDash(t.down)),
-    el('td', {}, t.trend ? `${signedSize(t.trend.up)} sur ${fmtNumber(t.trend.days, 0)} jours` : '-'),
-    el('td', {}, !t.enabled ? pill('désactivé', 'unknown') : t.error ? pill(t.error, 'err') : t.danger ? pill('sous le ratio exigé', 'warn') : t.ratio === null ? pill('non pris en charge', 'unknown') : pill('en règle', 'ok'))))
-    : [emptyRow(7, 'Aucun compte tracker lu.')]));
-  const aliases = Object.entries(data.settings.aliases);
-  $('trackerstats-aliases').textContent = aliases.length ? `Alias : ${aliases.map(([host, name]) => `${host} → ${name}`).join(' ; ')}` : '';
-}
-async function saveTrackerAlias(event) {
-  event.preventDefault();
-  const form = event.target;
-  try {
-    await api('/api/trackerstats/alias', { host: form.elements.host.value.trim().toLowerCase(), account: form.elements.account.value.trim() });
-    toast('ok', 'Alias enregistré.');
-    form.reset();
-    loadTrackerstats().catch(showError);
-  } catch (error) { showError(error); }
-}
-
 // --- réseau de l'appliance (page Adresse) --------------------------------------------------------------------------------
 let networkTimer = null;
 function networkAddressLink(pending) {
@@ -745,9 +716,4 @@ function initOps5() {
   $('subsgap-form').addEventListener('submit', saveSubsgap);
   $('energy-form').addEventListener('submit', saveEnergy);
   $('guestquota-card').addEventListener('submit', saveGuestquotaSettings);
-  $('trackerstats-refresh').addEventListener('click', () => runJob('/api/trackerstats/refresh', {}, () => loadTrackerstats().catch(showError)));
-  $('trackerstats-form').addEventListener('submit', saveTrackerAlias);
-  $('trackerstats-alert').addEventListener('change', async (event) => {
-    try { await api('/api/trackerstats/settings', { alert: event.target.checked }); toast('ok', 'Réglage enregistré.'); } catch (error) { showError(error); }
-  });
 }

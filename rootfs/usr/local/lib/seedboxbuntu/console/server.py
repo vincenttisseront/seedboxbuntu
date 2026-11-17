@@ -48,7 +48,7 @@ TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
          ".webmanifest": "application/manifest+json"}
 
 
-CARE_NAMES = ("spacefore", "libreport", "dormant", "integrity", "renamer", "subsgap", "guestquota", "energy", "trackerstats")
+CARE_NAMES = ("spacefore", "libreport", "dormant", "integrity", "renamer", "subsgap", "guestquota", "energy")
 CARE_GET = tuple(f"/api/{name}" for name in CARE_NAMES)
 CARE_POST = tuple(f"/api/{name}/" for name in CARE_NAMES)
 
@@ -582,8 +582,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/check":
             items = ctl.health().run_checks()
             return self.send_json({"items": items, "summary": ctl.health().summary(items)})
-        if path == "/api/p2p":
-            return self.send_json(ctl.p2p_status())
         if path == "/api/shares":
             return self.send_json(ctl.shares().overview())
         if path == "/api/shares/folders":
@@ -836,14 +834,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.energy().set_standby(str(data.get("disk", "")), data.get("minutes")))
             if path == "/api/energy/settings":
                 return self.send_json({"settings": ctl.energy().save(data)})
-            if path == "/api/trackerstats/refresh":
-                return self.send_json({"job": start_job("Ratios réels des trackers", ["trackerstats", "refresh"])})
-            if path == "/api/trackerstats/alias":
-                module = ctl.trackerstats()
-                account = str(data.get("account", "")).strip()
-                return self.send_json({"settings": module.set_alias(str(data.get("host", "")), account) if account else module.remove_alias(str(data.get("host", "")))})
-            if path == "/api/trackerstats/settings":
-                return self.send_json({"settings": ctl.trackerstats().set_alert(data.get("alert"))})
         if path.startswith(("/api/library/", "/api/copyaudit/", "/api/replacer/", "/api/mediaslim/", "/api/shareprofile/", "/api/relocate/", "/api/seedopt/", "/api/llm/")):
             who = self.headers.get("Remote-User", "")[:30] or "console"
             ids = [str(x) for x in data.get("ids", [])] if isinstance(data.get("ids"), list) else []
@@ -1129,13 +1119,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             argv = ["trackers", "rule", data["keyword"], "--min-seed-hours", str(int(data.get("min_seed_hours", 0))),
                     "--max-ratio", str(float(data.get("max_ratio", -1)))]
             return self.send_json({"job": start_job(f"Règle du tracker {data['keyword']}", argv)})
-        if path == "/api/p2p/token":
-            ctl.p2p_set_token(data["token"])
+        if path == "/api/github/token":
+            ctl.github_set_token(data["token"])
             return self.send_json({"ok": True})
-        if path == "/api/p2p/update":
-            return self.send_json({"job": start_job("Mise à jour de p2p-aggregator", ["p2p", "update"])})
-        if path == "/api/p2p/session":
-            return self.send_json({"job": start_job("Activation de tracker-session", ["p2p", "session"])})
         if path == "/api/appliance/check":
             ctl.appliance().check()
             return self.send_json(ctl.appliance().overview())

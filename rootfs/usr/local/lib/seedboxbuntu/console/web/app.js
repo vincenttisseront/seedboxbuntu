@@ -206,16 +206,6 @@ async function loadVpn() {
   );
 }
 
-async function loadP2p() {
-  const p2p = await api('/api/p2p');
-  const state = p2p.update_available === null ? 'à vérifier (jeton requis)' : p2p.update_available ? 'mise à jour disponible' : 'à jour';
-  $('p2p-state').replaceChildren(
-    el('dt', {}, 'Version'), el('dd', {}, `${p2p.version || '?'}${p2p.commit ? ` (${p2p.commit})` : ''}`),
-    el('dt', {}, 'Dépôt'), el('dd', {}, p2p.error || state),
-    el('dt', {}, 'Jeton GitHub'), el('dd', {}, p2p.token ? 'enregistré' : 'absent'),
-  );
-}
-
 const KIND_LABEL = { smb: 'SMB', nfs: 'NFS', disk: 'Disque' };
 let sharesData = null;
 let foundShares = [];
@@ -733,7 +723,7 @@ async function loadVersions() {
   $('versions-list').replaceChildren(...rows);
 }
 
-const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadResources().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: async () => { await loadAlerts(); loadMessageLanguage().catch(showError); loadPush().catch(showError); }, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); loadBackupDiff().catch(showError); loadRestoredrill().catch(showError); }, catalog: loadCatalog, settings: async () => { await loadSettings(); loadWindow().catch(showError); loadLlm().catch(showError); }, apps: async () => { await loadApps(); loadRollout().catch(showError); }, users: async () => { await loadUsers(); loadEmergency().catch(showError); }, trackers: async () => { await loadTrackers(); loadRatio().catch(showError); loadTrackerstats().catch(showError); }, shares: loadShares, vpn: async () => { await loadVpn(); loadVpnwatch().catch(showError); }, domain: async () => { await loadApps(); await loadRemote(); loadNetwork().catch(showError); loadSubdomains().catch(showError); }, p2p: loadP2p, aggregator: loadAggregator, bans: loadBans, secrets: async () => { await loadRotation(); loadAppPasswords().catch(showError); },
+const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: async () => { await loadSystem(); loadHistory().catch(showError); loadResources().catch(showError); if (!readonlyMode()) loadGpu().catch(showError); }, alerts: async () => { await loadAlerts(); loadMessageLanguage().catch(showError); loadPush().catch(showError); }, backup: async () => { await loadBackup(); loadOffsite().catch(showError); loadImport().catch(showError); loadBackupDiff().catch(showError); loadRestoredrill().catch(showError); }, catalog: loadCatalog, settings: async () => { await loadSettings(); loadWindow().catch(showError); loadLlm().catch(showError); }, apps: async () => { await loadApps(); loadRollout().catch(showError); }, users: async () => { await loadUsers(); loadEmergency().catch(showError); }, trackers: async () => { await loadTrackers(); loadRatio().catch(showError); }, shares: loadShares, vpn: async () => { await loadVpn(); loadVpnwatch().catch(showError); }, domain: async () => { await loadApps(); await loadRemote(); loadNetwork().catch(showError); loadSubdomains().catch(showError); }, aggregator: loadAggregator, bans: loadBans, secrets: async () => { await loadRotation(); loadAppPasswords().catch(showError); },
   guests: async () => { await loadGuests(); loadTitleshare().catch(showError); loadPeoplereport().catch(showError); loadGuestquota().catch(showError); }, cleanup: loadCleanup, journal: () => loadJournal(), setup: loadSetup, report: loadReport,
   activity: loadActivity, vulns: loadVulns, netcheck: loadNetcheck, vacation: loadVacation,
   disks: async () => { await loadDisks(); loadDiskusage().catch(showError); }, changes: loadChanges, quality: loadQuality, library: loadLibrary, care: loadCare, upgrades: loadUpgrades, seeds: loadSeeds, maison: loadMaison, bandwidth: loadBandwidth, diagnose: loadDiagnose, medialist: loadMedialist, telecommande: loadTelecommande };
@@ -779,7 +769,7 @@ function saveUpdates(section, form, days) {
     try {
       const values = formData(form);
       const payload = { enabled: values.enabled, time: values.time, days: readDays(days) };
-      for (const key of ['scope', 'reboot', 'reboot_time', 'p2p']) if (key in values) payload[key] = values[key];
+      for (const key of ['scope', 'reboot', 'reboot_time']) if (key in values) payload[key] = values[key];
       runJob('/api/settings/updates', { [section]: payload }, loadSettings);
     } catch (error) { showError(error); }
   };
@@ -852,7 +842,7 @@ $('appliance-rollback').addEventListener('click', (event) => confirmAction(event
 $('appliance-source-save').addEventListener('click', async () => {
   try {
     const token = $('appliance-token').value.trim();
-    if (token) { await api('/api/p2p/token', { token }); $('appliance-token').value = ''; }
+    if (token) { await api('/api/github/token', { token }); $('appliance-token').value = ''; }
     renderAppliance(await api('/api/appliance/source', { repo: $('appliance-repo').value.trim(), ref: $('appliance-ref').value.trim() }));
   } catch (error) { showError(error); }
 });
@@ -868,14 +858,6 @@ $('catalog-url-form').addEventListener('submit', (event) => {
     () => runJob('/api/catalog/refresh', {}, loadCatalog));
 });
 bindForm('domain-form', '/api/domain', loadApps);
-$('token-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  try {
-    await api('/api/p2p/token', formData(event.target));
-    event.target.reset();
-    loadP2p();
-  } catch (error) { showError(error); }
-});
 $('share-kind').addEventListener('change', () => { foundShares = []; $('share-discover-state').textContent = ''; showKindFields(); });
 $('share-discover').addEventListener('click', discoverShares);
 $('share-pick').addEventListener('change', pickShare);
@@ -894,8 +876,6 @@ $('share-credentials').addEventListener('submit', (event) => {
 $('deploy').addEventListener('click', () => runJob('/api/deploy', {}, loadApps));
 $('trackers-sync').addEventListener('click', () => runJob('/api/trackers/sync', {}, loadTrackers));
 $('vpn-disable').addEventListener('click', (event) => confirmAction(event.currentTarget, 'qBittorrent repasse en accès direct : son trafic ne passe plus par le tunnel VPN.', () => runJob('/api/vpn/disable', {}, loadVpn)));
-$('p2p-update').addEventListener('click', () => runJob('/api/p2p/update', {}, loadP2p));
-$('p2p-session').addEventListener('click', () => runJob('/api/p2p/session', {}, loadP2p));
 $('secrets-show').addEventListener('click', async () => {
   try { renderSecrets(await api('/api/credentials')); } catch (error) { showError(error); }
 });

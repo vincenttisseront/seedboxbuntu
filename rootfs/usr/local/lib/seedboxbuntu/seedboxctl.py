@@ -8,14 +8,14 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl deploy                     déploiement complet (premier démarrage)
   seedboxctl provision                  relie les applications entre elles
   seedboxctl status | credentials       état, identifiants
-  seedboxctl user list|add|passwd|del   comptes (Authelia, Jellyfin, Seerr, p2p-aggregator)
+  seedboxctl user list|add|passwd|del   comptes (Authelia, Jellyfin, Seerr)
   seedboxctl domain DOMAINE [--email E] nom personnalisé (vide : adresse IP du serveur)
   seedboxctl vpn direct|set|status      qBittorrent sans VPN (par défaut) ou dans un tunnel VPN
   seedboxctl check [--json]             contrôle de santé : API et liaisons entre applications
   seedboxctl rotate SERVICE             renouvelle un mot de passe ou une clé de service
   seedboxctl apppass show|reset APP     réinitialise le mot de passe d'une application (Jellyfin, qBittorrent...)
   seedboxctl trackers list|sync|rule    trackers et règles de seed
-  seedboxctl p2p status|update|token    application p2p-aggregator
+  seedboxctl github token [JETON]       jeton de lecture GitHub (dépôt privé de l'appliance)
   seedboxctl share list|add|role|...    partages réseau (SMB, NFS) et disques externes
   seedboxctl import scan|show|run|clear    importer une autre seedbox
   seedboxctl audit show|sync|verify|export|logs   journal d'audit, recherche dans les journaux
@@ -72,7 +72,6 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl subsgap show|set                 titres sans sous-titres dans les langues voulues
   seedboxctl guestquota show|default|quota|...  quotas de lecture par compte invité
   seedboxctl energy show|sample|standby|set   veille des disques et coût par To
-  seedboxctl trackerstats show|refresh|alias  ratios réels des trackers (p2p-aggregator)
   seedboxctl aggregator show|sync|sources|add|config|send   catalogue des releases par œuvre (Prowlarr, Jackett, Torznab)
   seedboxctl bans show|unban|ban|ignore|set      fail2ban : adresses bannies, adresses ignorées, seuils
   seedboxctl space show|scan|fix                 où est passé l'espace disque, et correctifs sûrs
@@ -109,7 +108,6 @@ STATE = Path(os.environ.get("SB_STATE", "/var/lib/seedboxbuntu"))
 ENV_FILE = BASE / ".env"
 CONFIG = BASE / "config"
 APPS_DIR = BASE / "apps"
-P2P_SRC = APPS_DIR / "p2p-aggregator"
 TRACKERS_FILE = CONFIG / "trackers.json"
 USERS_FILE = CONFIG / "authelia" / "users_database.yml"
 TOKEN_FILE = ETC / "github-token"
@@ -117,11 +115,10 @@ TOKEN_FILE = ETC / "github-token"
 PASSWORD_FILE = ETC / "initial-password"
 CONFIGURED_FLAG = STATE / "configured"
 LOCK_FILE = STATE / "seedboxctl.lock"
-P2P_REPO = os.environ.get("SB_P2P_REPO", "https://github.com/vincenttisseront/p2p-aggregator.git")
-P2P_IMAGE = "seedbox/p2p-aggregator"
-SESSION_IMAGE = "seedbox/tracker-session"
+# Anciennes applications retirées : leurs conteneurs, images et sources sont supprimés à la mise à jour (jamais leurs données)
+RETIRED_CONTAINERS = ("p2p-aggregator", "tracker-session")
+RETIRED_IMAGES = ("seedbox/p2p-aggregator", "seedbox/tracker-session")
 TRAEFIK_IP = "172.30.0.2"
-P2P_SERVICE_USER = "seedbox-service"
 
 ROLES = ("admin", "manager", "user", "observer")
 # Groupe Authelia de chaque rôle. « manager » : Radarr, Sonarr, Prowlarr, qBittorrent et les applications
@@ -139,7 +136,6 @@ APPS = [
     {"id": "homepage", "name": "Tableau de bord", "path": "/", "service": "homepage", "login": "sso"},
     {"id": "jellyfin", "name": "Jellyfin", "path": "/jellyfin/", "service": "jellyfin", "login": "comptes"},
     {"id": "seerr", "name": "Seerr", "port": 5055, "service": "seerr", "login": "comptes"},
-    {"id": "p2p", "name": "P2P Aggregator", "port": 3000, "service": "p2p-aggregator", "login": "comptes"},
     {"id": "qbittorrent", "name": "qBittorrent", "path": "/qbittorrent/", "service": "qbittorrent", "login": "sso"},
     {"id": "prowlarr", "name": "Prowlarr", "path": "/prowlarr/", "service": "prowlarr", "login": "sso"},
     {"id": "jackett", "name": "Jackett", "path": "/jackett/", "service": "jackett", "login": "sso"},
@@ -154,7 +150,7 @@ APPS = [
 # Chemin de base des applications servies dans un sous-chemin : leurs API internes le portent aussi
 BASE_PATHS = {"radarr": "/radarr", "sonarr": "/sonarr", "prowlarr": "/prowlarr", "jellyfin": "/jellyfin", "jackett": "/jackett", "lidarr": "/lidarr",
               "autobrr": "/autobrr"}
-P2P_PORT, SEERR_PORT = 3000, 5055
+SEERR_PORT = 5055
 
 
 class SeedboxError(Exception):
@@ -513,10 +509,6 @@ def energy():
     return _lazy("energy")
 
 
-def trackerstats():
-    return _lazy("trackerstats")
-
-
 def backupdiff():
     return _lazy("backupdiff")
 
@@ -650,8 +642,7 @@ def generate_secrets():
     env = env_read()
     sizes = {
         "AUTHELIA_SESSION_SECRET": 32, "AUTHELIA_STORAGE_KEY": 32, "AUTHELIA_JWT_SECRET": 32, "AUTHELIA_REDIS_PASSWORD": 24,
-        "AUTOBRR_SESSION_SECRET": 16, "AUTOBRR_ADMIN_PASSWORD": 16, "CONSOLE_PROXY_SECRET": 32, "P2P_JWT_SECRET": 32,
-        "P2P_CREDENTIAL_KEY": 32, "P2P_SESSION_API_KEY": 24, "P2P_SERVICE_PASSWORD": 24,
+        "AUTOBRR_SESSION_SECRET": 16, "AUTOBRR_ADMIN_PASSWORD": 16, "CONSOLE_PROXY_SECRET": 32,
         "QBIT_PASSWORD": 16,
         "RADARR_API_KEY": 16, "SONARR_API_KEY": 16, "PROWLARR_API_KEY": 16, "JACKETT_API_KEY": 16,
     }
@@ -1125,14 +1116,14 @@ def set_ownership():
     uid, gid = int(env["PUID"]), int(env["PGID"])
     paths = [STORAGE, ENV_FILE]
     paths += [p for p in STORAGE.glob("*") if p.is_dir()] + [p for p in STORAGE.glob("*/*") if p.is_dir()]
-    # Traefik, Dockge et p2p-aggregator gèrent eux-mêmes les droits de leurs données
+    # Traefik et Dockge gèrent eux-mêmes les droits de leurs données
     for child in CONFIG.iterdir():
-        if child.is_dir() and child.name not in ("traefik", "dockge", "p2p-aggregator"):
+        if child.is_dir() and child.name not in ("traefik", "dockge"):
             paths.append(child)
     root = SHARE / "templates" / "config"
     for source in root.rglob("*"):
         relative = source.relative_to(root)
-        if relative.parts[0] not in ("traefik", "dockge", "p2p-aggregator") and (CONFIG / relative).exists():
+        if relative.parts[0] not in ("traefik", "dockge") and (CONFIG / relative).exists():
             paths.append(CONFIG / relative)
     for path in paths:
         os.chown(path, uid, gid)
@@ -1214,14 +1205,14 @@ def init():
     for path in (STATE, ETC, APPS_DIR, shares().ROOT):
         path.mkdir(parents=True, exist_ok=True)
     for name in ("downloads/radarr", "downloads/sonarr", "downloads/autobrr", "downloads/cross-seed",
-                 "downloads/p2p-aggregator", "media/movies", "media/tv", "media/music", "media/books"):
+                 "media/movies", "media/tv", "media/music", "media/books"):
         (STORAGE / name).mkdir(parents=True, exist_ok=True)
     # Jellyfin n'enregistre pas une bibliothèque vide et ignore alors les notifications :
     # sans ce fichier masqué, le premier film n'apparaîtrait qu'à l'analyse suivante, 12 h plus tard
     for name in ("media/movies", "media/tv"):
         (STORAGE / name / ".seedbox-bibliotheque").touch()
     for name in ("authelia", "autobrr", "cross-seed", "dockge", "gluetun", "homepage", "jellyfin",
-                 "p2p-aggregator", "prowlarr", "redis", "jackett/Jackett", "qbit-manage", "qbittorrent/qBittorrent/data/BT_backup",
+                 "prowlarr", "redis", "jackett/Jackett", "qbit-manage", "qbittorrent/qBittorrent/data/BT_backup",
                  "radarr", "seerr", "sonarr", "traefik/dynamic"):
         (CONFIG / name).mkdir(parents=True, exist_ok=True)
     shutil.copy(SHARE / "stack" / "docker-compose.yml", BASE / "docker-compose.yml")
@@ -1350,32 +1341,6 @@ def seerr_api(method, path, body=None, cookie=None):
     env = env_read()
     headers = {"Cookie": cookie} if cookie else {"X-Api-Key": env.get("SEERR_API_KEY", "")}
     return request(method, f"{svc('seerr', 5055)}/api/v1{path}", headers=headers, body=body, timeout=60)
-
-
-def p2p_headers(env):
-    """Origine identique à celle d'un navigateur passé par Traefik : p2p-aggregator la vérifie."""
-    public = f"{env.get('DOMAIN') or 'localhost'}:{P2P_PORT}"
-    return {"Origin": f"https://{public}", "X-Forwarded-Proto": "https", "Host": public}
-
-
-def p2p_login(username, password):
-    return request("POST", svc("p2p-aggregator", 3000) + "/api/auth/login",
-                   body={"username": username, "password": password}, headers=p2p_headers(env_read()), timeout=30)
-
-
-def p2p_session():
-    """Le compte de service évite de conserver le mot de passe de l'administrateur."""
-    result = p2p_login(P2P_SERVICE_USER, env_read()["P2P_SERVICE_PASSWORD"])
-    if not result.ok:
-        raise SeedboxError(f"connexion à p2p-aggregator refusée (HTTP {result.status})")
-    return result.cookies()
-
-
-def p2p_api(method, path, body=None, cookie=None):
-    env = env_read()
-    cookie = cookie or p2p_session()
-    return request(method, svc("p2p-aggregator", 3000) + path, body=body, timeout=60,
-                   headers={"Cookie": cookie, **p2p_headers(env)})
 
 
 def autobrr_session():
@@ -1806,42 +1771,6 @@ def provision_autobrr():
         raise SeedboxError(f"autobrr : client refusé (HTTP {result.status}) {result.text[:200]}")
 
 
-def provision_p2p():
-    env = env_read()
-    if not container_running("p2p-aggregator"):
-        return
-    wait_http("p2p-aggregator", 3000, "/api/health")
-    if not p2p_login(P2P_SERVICE_USER, env["P2P_SERVICE_PASSWORD"]).ok:
-        first = p2p_login("admin", env["ADMIN_INITIAL_PASSWORD"])
-        if not first.ok:
-            raise SeedboxError(f"p2p-aggregator : compte admin refusé (HTTP {first.status})")
-        say("p2p-aggregator : compte de service")
-        result = p2p_api("POST", "/api/admin/users", {"username": P2P_SERVICE_USER,
-                         "password": env["P2P_SERVICE_PASSWORD"], "role": "ADMIN"}, cookie=first.cookies())
-        if not result.ok:
-            raise SeedboxError(f"p2p-aggregator : compte de service refusé (HTTP {result.status})")
-        # Le compte admin a été créé avec le mot de passe d'amorçage : il reçoit celui de l'assistant
-        if admin_password(env) != env["ADMIN_INITIAL_PASSWORD"]:
-            identifier = p2p_user_id("admin", p2p_session())
-            result = p2p_api("PATCH", f"/api/admin/users/{identifier}", {"password": admin_password(env)})
-            if not result.ok:
-                raise SeedboxError(f"p2p-aggregator : mot de passe admin refusé (HTTP {result.status})")
-    cookie = p2p_session()
-    payload = {"type": "QBITTORRENT", "name": "qBittorrent", "baseUrl": f"http://{qbit_host()}:8080",
-               "password": env["QBIT_PASSWORD"], "username": env["QBIT_USERNAME"], "isDefault": True,
-               "enabled": True, "downloadLocation": shares().location("complete").rstrip("/") + "/p2p-aggregator"}
-    clients = p2p_api("GET", "/api/user/download-clients", cookie=cookie).json()
-    clients = clients.get("items", clients.get("clients", [])) if isinstance(clients, dict) else clients
-    existing = [c for c in clients if c.get("name") == "qBittorrent"]
-    if existing:
-        result = p2p_api("PUT", f"/api/user/download-clients/{existing[0]['id']}", payload, cookie=cookie)
-    else:
-        say("p2p-aggregator : client qBittorrent")
-        result = p2p_api("POST", "/api/user/download-clients", payload, cookie=cookie)
-    if not result.ok:
-        raise SeedboxError(f"p2p-aggregator : client refusé (HTTP {result.status}) {result.text[:200]}")
-
-
 PROVISION_STATUS = STATE / "provision-status.json"
 UPGRADE_LOG = Path("/var/log/seedboxbuntu-upgrade.log")
 # Seules ces étapes font échouer un déploiement ou une mise à jour (qui sont alors relancés). Les autres
@@ -1855,7 +1784,7 @@ def provision_steps():
             ("Jackett", provision_jackett), ("FlareSolverr dans Prowlarr", provision_prowlarr_flaresolverr),
             ("qBittorrent : emplacements", lambda: shares().apply_qbittorrent()),
             ("Applications ajoutées", provision_apps), ("Seerr", provision_seerr), ("Dockge", provision_dockge),
-            ("autobrr", provision_autobrr), ("p2p-aggregator", provision_p2p),
+            ("autobrr", provision_autobrr),
             ("Jackett vers Prowlarr", jackett_sync), ("trackers", trackers_sync)]
 
 
@@ -2032,28 +1961,8 @@ def write_cross_seed(env, indexers):
     return len(torznab), changed
 
 
-def sync_p2p_trackers(indexers):
-    """Déclare chaque indexeur Prowlarr comme source Torznab de p2p-aggregator."""
-    if not container_running("p2p-aggregator") or not indexers:
-        return 0
-    env = env_read()
-    cookie = p2p_session()
-    accounts = p2p_api("GET", "/api/trackers/accounts", cookie=cookie).json()
-    accounts = accounts.get("accounts", accounts.get("items", [])) if isinstance(accounts, dict) else accounts
-    known = {a.get("name") for a in accounts}
-    created = 0
-    for indexer in indexers:
-        if not indexer.get("enable") or indexer.get("protocol") != "torrent" or indexer["name"] in known:
-            continue
-        result = p2p_api("POST", "/api/trackers/accounts", {
-            "trackerKey": "generic", "name": indexer["name"], "apiBaseUrl": f"http://prowlarr:9696/prowlarr/{indexer['id']}/api",
-            "secret": env["PROWLARR_API_KEY"], "enabled": True}, cookie=cookie)
-        created += 1 if result.ok else 0
-    return created
-
-
 def trackers_sync():
-    """Propage les indexeurs de Prowlarr vers qbit_manage, cross-seed et p2p-aggregator."""
+    """Propage les indexeurs de Prowlarr vers qbit_manage et cross-seed."""
     env = env_read()
     indexers = prowlarr_indexers()
     rules = load_trackers()
@@ -2071,15 +1980,10 @@ def trackers_sync():
     count, changed = write_cross_seed(env, indexers)
     if changed:
         restart.append("cross-seed")
-    created = 0
-    try:
-        created = sync_p2p_trackers(indexers)
-    except SeedboxError as error:
-        say(f"p2p-aggregator : synchronisation reportée ({error})")
     for service in restart:
         if container_running(service):
             run("docker", "restart", service, capture=True)
-    say(f"trackers : {len(indexers)} indexeur(s), {count} dans cross-seed, {created} ajouté(s) à p2p-aggregator")
+    say(f"trackers : {len(indexers)} indexeur(s), {count} dans cross-seed")
 
 
 def render_qbm(env):
@@ -2200,15 +2104,6 @@ def seerr_user_id(jellyfin_id):
     return None
 
 
-def p2p_user_id(login, cookie):
-    users = p2p_api("GET", "/api/admin/users", cookie=cookie).json()
-    users = users.get("users", users.get("items", [])) if isinstance(users, dict) else users
-    for user in users:
-        if user["username"] == login:
-            return user["id"]
-    return None
-
-
 def user_add(login, password, role="user"):
     validate_account(login, password)
     if role not in ROLES:
@@ -2234,23 +2129,12 @@ def user_add(login, password, role="user"):
                 seerr_api("POST", f"/user/{seerr_id}/settings/permissions", {"permissions": SEERR_PERMISSIONS[role]})
     except (SeedboxError, OSError, ValueError) as error:
         warnings.append(f"Seerr : {error}")
-    try:
-        cookie = p2p_session()
-        grade = "ADMIN" if role == "admin" else "USER"
-        result = p2p_api("POST", "/api/admin/users", {"username": login, "password": password, "role": grade}, cookie=cookie)
-        if result.status == 409:  # compte désactivé par une suppression précédente
-            result = p2p_api("PATCH", f"/api/admin/users/{p2p_user_id(login, cookie)}",
-                             {"password": password, "role": grade, "active": True}, cookie=cookie)
-        if not result.ok:
-            warnings.append(f"p2p-aggregator : création refusée (HTTP {result.status})")
-    except (SeedboxError, OSError, ValueError) as error:
-        warnings.append(f"p2p-aggregator : {error}")
     users_store_add(login, password, role)
     return warnings
 
 
 def user_set_role(login, role):
-    """Change le rôle d'un compte existant partout : Authelia, Jellyfin, Seerr, p2p-aggregator."""
+    """Change le rôle d'un compte existant partout : Authelia, Jellyfin, Seerr."""
     if role not in ROLES:
         raise SeedboxError("rôle invalide : admin, manager, user ou observer")
     users = users_load()
@@ -2274,13 +2158,6 @@ def user_set_role(login, role):
                 seerr_api("POST", f"/user/{seerr_id}/settings/permissions", {"permissions": SEERR_PERMISSIONS[role]})
         except (SeedboxError, OSError, ValueError) as error:
             warnings.append(f"Seerr : {error}")
-    try:
-        cookie = p2p_session()
-        identifier = p2p_user_id("admin" if login == env_read()["ADMIN_USER"] else login, cookie)
-        if identifier:
-            p2p_api("PATCH", f"/api/admin/users/{identifier}", {"role": "ADMIN" if role == "admin" else "USER"}, cookie=cookie)
-    except (SeedboxError, OSError, ValueError) as error:
-        warnings.append(f"p2p-aggregator : {error}")
     users[login]["groups"] = [ROLE_GROUPS[role]]
     users_save(users)
     say(f"{login} : rôle {role}" + (" (reconnexion nécessaire pour appliquer les nouveaux droits)" if role != "admin" else ""))
@@ -2298,16 +2175,6 @@ def user_passwd(login, password):
         result = jellyfin_api("POST", f"/Users/{jellyfin['Id']}/Password", {"NewPw": password, "ResetPassword": False})
         if not result.ok:
             warnings.append(f"Jellyfin : changement refusé (HTTP {result.status})")
-    try:
-        cookie = p2p_session()
-        target = "admin" if login == env_read()["ADMIN_USER"] else login
-        identifier = p2p_user_id(target, cookie)
-        if identifier:
-            result = p2p_api("PATCH", f"/api/admin/users/{identifier}", {"password": password}, cookie=cookie)
-            if not result.ok:
-                warnings.append(f"p2p-aggregator : changement refusé (HTTP {result.status})")
-    except (SeedboxError, OSError, ValueError) as error:
-        warnings.append(f"p2p-aggregator : {error}")
     users[login]["password"] = authelia_hash(password)
     users_save(users)
     if login == env_read()["ADMIN_USER"]:
@@ -2332,13 +2199,6 @@ def user_del(login):
         except (SeedboxError, OSError, ValueError) as error:
             warnings.append(f"Seerr : {error}")
         jellyfin_api("DELETE", f"/Users/{jellyfin['Id']}")
-    try:
-        cookie = p2p_session()
-        identifier = p2p_user_id(login, cookie)
-        if identifier:
-            p2p_api("PATCH", f"/api/admin/users/{identifier}", {"active": False}, cookie=cookie)
-    except (SeedboxError, OSError, ValueError) as error:
-        warnings.append(f"p2p-aggregator : {error}")
     del users[login]
     users_save(users)
     return warnings
@@ -2484,7 +2344,7 @@ def public_ip():
 
 
 # ----------------------------------------------------------------------------
-#  p2p-aggregator : image, version, mises à jour
+#  Jeton GitHub, images Docker et retrait des anciennes applications
 # ----------------------------------------------------------------------------
 def github_env():
     """Le jeton passe par l'environnement de git : jamais dans la ligne de commande."""
@@ -2497,7 +2357,27 @@ def github_env():
     return env
 
 
-def p2p_set_token(token):
+def retire_old_apps():
+    """Retire p2p-aggregator et tracker-session (remplacés par l'agrégateur intégré) : conteneurs, images, sources et archive
+    d'image. Le dossier de données (config/p2p-aggregator : base, comptes de trackers) n'est jamais effacé."""
+    for name in RETIRED_CONTAINERS:
+        run("docker", "rm", "-f", name, check=False, capture=True)
+    for image in RETIRED_IMAGES:
+        for tag in ("current", "previous", "candidate"):
+            run("docker", "rmi", "-f", f"{image}:{tag}", check=False, capture=True)
+    removed = False
+    for leftover in (APPS_DIR / "p2p-aggregator", STATE / "images" / "p2p-aggregator.tar.zst"):
+        if leftover.is_dir():
+            shutil.rmtree(leftover, ignore_errors=True)
+            removed = True
+        elif leftover.exists():
+            leftover.unlink()
+            removed = True
+    if removed:
+        say("p2p-aggregator retiré (ses données restent dans config/p2p-aggregator)")
+
+
+def github_set_token(token):
     token = token.strip()
     if not re.fullmatch(r"[A-Za-z0-9_]{20,255}", token):
         raise SeedboxError("jeton GitHub invalide")
@@ -2507,75 +2387,8 @@ def p2p_set_token(token):
         handle.write(token + "\n")
 
 
-def git(*args, capture=True, check=True):
-    # root travaille sur un dépôt dont le propriétaire est seedbox
-    return run("git", "-c", "safe.directory=*", "-C", P2P_SRC, *args, capture=capture, check=check, env=github_env())
-
-
 def docker_image_exists(image):
     return run("docker", "image", "inspect", image, check=False, capture=True).returncode == 0
-
-
-def p2p_apply_patches():
-    """Correctifs de l'appliance : ignorés dès que le dépôt les a intégrés."""
-    for patch in sorted((SHARE / "p2p" / "patches").glob("*.patch")):
-        if git("apply", "--check", patch, check=False).returncode == 0:
-            git("apply", patch)
-            say(f"correctif appliqué : {patch.name}")
-        else:
-            say(f"correctif déjà intégré ou sans objet : {patch.name}")
-
-
-def p2p_build(tag):
-    """Construit l'image depuis le dépôt, avec les correctifs de sécurité et de compatibilité."""
-    p2p_apply_patches()
-    example, dotenv = P2P_SRC / ".env.example", P2P_SRC / ".env"
-    if example.exists() and not dotenv.exists():
-        # prisma.config.ts exige DATABASE_URL pendant le build ; ce fichier ne va pas dans l'image finale
-        shutil.copy(example, dotenv)
-    say("construction de l'image p2p-aggregator (plusieurs minutes)")
-    run("docker", "build", "--target", "runner", "-t", f"{P2P_IMAGE}:{tag}", P2P_SRC)
-
-
-def p2p_ensure_image():
-    if docker_image_exists(f"{P2P_IMAGE}:current"):
-        return
-    archive = STATE / "images" / "p2p-aggregator.tar.zst"
-    if archive.exists():
-        say("chargement de l'image p2p-aggregator embarquée")
-        run("sh", "-c", f"zstd -dc {archive} | docker load")
-        if docker_image_exists(f"{P2P_IMAGE}:current"):
-            archive.unlink()
-            return
-    if not (P2P_SRC / "package.json").exists():
-        raise SeedboxError("sources de p2p-aggregator absentes")
-    p2p_build("current")
-
-
-def p2p_version():
-    package = P2P_SRC / "package.json"
-    version = json.loads(package.read_text()).get("version") if package.exists() else None
-    commit = None
-    if (P2P_SRC / ".git").exists():
-        commit = git("rev-parse", "--short", "HEAD", check=False).stdout.strip() or None
-    return version, commit
-
-
-def p2p_status():
-    version, commit = p2p_version()
-    status = {"version": version, "commit": commit, "token": TOKEN_FILE.exists(), "running": container_running("p2p-aggregator"),
-              "latest": None, "update_available": None, "error": None}
-    if not status["token"] or not (P2P_SRC / ".git").exists():
-        return status
-    result = git("ls-remote", "origin", "HEAD", check=False)
-    if result.returncode != 0:
-        status["error"] = "accès au dépôt refusé : vérifiez le jeton GitHub"
-        return status
-    remote = result.stdout.split()[0] if result.stdout else None
-    status["latest"] = remote[:7] if remote else None
-    if remote and commit:
-        status["update_available"] = not remote.startswith(commit)
-    return status
 
 
 def wait_healthy(name, timeout=240):
@@ -2589,69 +2402,6 @@ def wait_healthy(name, timeout=240):
             return False
         time.sleep(3)
     return False
-
-
-def p2p_cleanup():
-    """Une construction laisse plusieurs Go de cache : ce disque est celui des médias."""
-    run("docker", "rmi", f"{P2P_IMAGE}:candidate", check=False, capture=True)
-    run("docker", "builder", "prune", "-af", check=False, capture=True)
-    run("docker", "image", "prune", "-f", check=False, capture=True)
-
-
-def p2p_update(force=False):
-    """Met à jour vers la branche principale ; revient à la version précédente en cas d'échec."""
-    if not (P2P_SRC / ".git").exists():
-        raise SeedboxError("dépôt p2p-aggregator absent")
-    if not TOKEN_FILE.exists():
-        raise SeedboxError("jeton GitHub manquant : renseignez-le dans la console")
-    previous = git("rev-parse", "HEAD").stdout.strip()
-    say("récupération des sources")
-    result = git("fetch", "--depth", "1", "origin", "HEAD", check=False)
-    if result.returncode != 0:
-        raise SeedboxError("dépôt inaccessible : vérifiez le jeton GitHub")
-    target = git("rev-parse", "FETCH_HEAD").stdout.strip()
-    if target == previous and not force:
-        say("déjà à jour")
-        return False
-    git("checkout", "--force", "--detach", target)
-    database = CONFIG / "p2p-aggregator" / "p2p.db"
-    backup = database.with_suffix(".db.avant-maj")
-    try:
-        try:
-            p2p_build("candidate")
-        except SeedboxError:
-            git("checkout", "--force", "--detach", previous, check=False)
-            raise SeedboxError("construction échouée : la version en service n'a pas été modifiée")
-        if database.exists():
-            with sqlite3.connect(database) as source, sqlite3.connect(backup) as destination:
-                source.backup(destination)
-        run("docker", "tag", f"{P2P_IMAGE}:current", f"{P2P_IMAGE}:previous")
-        run("docker", "tag", f"{P2P_IMAGE}:candidate", f"{P2P_IMAGE}:current")
-        compose("up", "-d", "p2p-aggregator", capture=True)
-        if wait_healthy("p2p-aggregator"):
-            say(f"p2p-aggregator mis à jour : {target[:7]}")
-            return True
-        say("échec au démarrage : retour à la version précédente")
-        run("docker", "tag", f"{P2P_IMAGE}:previous", f"{P2P_IMAGE}:current")
-        compose("stop", "p2p-aggregator", capture=True)
-        if backup.exists():
-            shutil.copy(backup, database)
-        compose("up", "-d", "p2p-aggregator", capture=True)
-        git("checkout", "--force", "--detach", previous, check=False)
-        raise SeedboxError("la nouvelle version ne démarre pas : version précédente restaurée")
-    finally:
-        p2p_cleanup()
-
-
-def session_enable():
-    """Construit et démarre tracker-session, utile aux trackers à connexion protégée."""
-    if not docker_image_exists(f"{SESSION_IMAGE}:current"):
-        say("construction de tracker-session (image volumineuse)")
-        run("docker", "build", "-t", f"{SESSION_IMAGE}:current", P2P_SRC / "tracker-session")
-    profiles = set(filter(None, env_read().get("COMPOSE_PROFILES", "").split(",")))
-    profiles.add("session")
-    env_set(COMPOSE_PROFILES=",".join(sorted(profiles)))
-    compose("up", "-d", capture=True)
 
 
 # ----------------------------------------------------------------------------
@@ -2727,9 +2477,8 @@ def credentials():
 
 
 def prepare():
-    """Pendant l'assistant de premier démarrage : téléchargement des images et construction de
-    p2p-aggregator, qui ne dépendent ni de l'adresse ni du mot de passe. Un échec n'est pas
-    bloquant : le déploiement reprend ce qui manque."""
+    """Pendant l'assistant de premier démarrage : téléchargement des images, qui ne dépend ni de
+    l'adresse ni du mot de passe. Un échec n'est pas bloquant : le déploiement reprend ce qui manque."""
     for path in (STATE, ETC, APPS_DIR):
         path.mkdir(parents=True, exist_ok=True)
     shutil.copy(SHARE / "stack" / "docker-compose.yml", BASE / "docker-compose.yml")
@@ -2738,10 +2487,6 @@ def prepare():
     result = compose("--profile", "vpn", "--profile", "direct", "pull", "--ignore-pull-failures", "--quiet", check=False, capture=True)
     if result.returncode != 0:
         say(f"téléchargement incomplet, repris au déploiement : {(result.stderr or '').strip()[-300:]}")
-    try:
-        p2p_ensure_image()
-    except SeedboxError as error:
-        say(f"image p2p-aggregator reportée au déploiement : {error}")
 
 
 def wait_configured():
@@ -2767,7 +2512,7 @@ def deploy():
         prepare()
         wait_configured()
     init()
-    p2p_ensure_image()
+    retire_old_apps()
     say("démarrage de la stack (téléchargement des images au premier lancement)")
     compose("up", "-d", "--remove-orphans")
     refresh_firewall_safely()   # port de partage de qBittorrent (mode direct)
@@ -2804,7 +2549,7 @@ def upgrade():
         render_templates()
         seed_jackett(env_read())
         set_ownership()
-        p2p_ensure_image()
+        retire_old_apps()
         say("démarrage de la stack avec les nouveaux fichiers")
         compose("up", "-d", "--remove-orphans")
         refresh_firewall_safely()
@@ -2882,7 +2627,7 @@ def restart():
 
 CARE_HELP = {"spacefore": "prévision de saturation", "libreport": "rapport hebdomadaire", "dormant": "titres jamais lus, séries abandonnées",
              "integrity": "contrôle d'intégrité", "renamer": "normalisation des noms", "subsgap": "sous-titres manquants",
-             "guestquota": "quotas de lecture", "energy": "énergie des disques", "trackerstats": "ratios réels des trackers"}
+             "guestquota": "quotas de lecture", "energy": "énergie des disques"}
 _KV = [("key", {}), ("value", {})]
 _IDS = [("app", {"choices": ("radarr", "sonarr")}), ("ids", {"nargs": "+", "type": int})]
 CARE_COMMANDS = {
@@ -2895,7 +2640,6 @@ CARE_COMMANDS = {
     "guestquota": {"show": [], "tick": [], "default": [("count", {"type": int})], "quota": [("login", {}), ("count", {"type": int})],
                    "unquota": [("login", {})], "enforce": [("mode", {"choices": ("on", "off")})], "resume": [("login", {})]},
     "energy": {"show": [], "sample": [], "tick": [], "standby": [("disk", {}), ("minutes", {"type": int})], "set": _KV},
-    "trackerstats": {"show": [], "refresh": [], "alias": [("host", {}), ("account", {})], "unalias": [("host", {})], "alert": [("mode", {"choices": ("on", "off")})]},
 }
 
 
@@ -2912,9 +2656,6 @@ def run_care(args):
         out = {"default": lambda: module.set_default(args.count), "quota": lambda: module.set_quota(args.login, args.count),
                "unquota": lambda: module.remove_quota(args.login), "enforce": lambda: module.set_enforce(args.mode == "on"),
                "resume": lambda: module.resume(args.login), "tick": lambda: module.tick(force=True)}[action]()
-    elif args.command == "trackerstats":
-        out = {"refresh": lambda: module.refresh(force_test=True), "alias": lambda: module.set_alias(args.host, args.account),
-               "unalias": lambda: module.remove_alias(args.host), "alert": lambda: module.set_alert(args.mode == "on")}[action]()
     elif args.command == "dormant":
         out = module.scan() if action == "scan" else locked(module.unmonitor)(args.app, args.ids)
     elif args.command == "integrity":
@@ -3336,7 +3077,7 @@ def main():
     updates.add_parser("show")
     set_updates = updates.add_parser("set")
     for prefix, options in (("security", ("enabled", "days", "time", "scope", "reboot", "reboot-time")),
-                            ("apps", ("enabled", "days", "time", "p2p"))):
+                            ("apps", ("enabled", "days", "time"))):
         for option in options:
             set_updates.add_argument(f"--{prefix}-{option}", default=None)
     updates.add_parser("run").add_argument("what", choices=("security", "apps"))
@@ -3426,13 +3167,9 @@ def main():
     app.add_parser("auto", help="mise à jour planifiée (lancée par le minuteur seedbox-appliance)")
     signer_cmd = app.add_parser("signer", help="clés publiques SSH qui signent les versions publiées (lues sur l'entrée standard)")
     signer_cmd.add_argument("--set", action="store_true", help="remplace les clés par celles de l'entrée standard (vide : aucune)")
-    p2p = commands.add_parser("p2p").add_subparsers(dest="action", required=True)
-    p2p.add_parser("status")
-    update = p2p.add_parser("update")
-    update.add_argument("--force", action="store_true")
-    token = p2p.add_parser("token")
+    github = commands.add_parser("github").add_subparsers(dest="action", required=True)
+    token = github.add_parser("token")
     token.add_argument("value", nargs="?", default="")
-    p2p.add_parser("session")
     share = commands.add_parser("share").add_subparsers(dest="action", required=True)
     share.add_parser("list")
     share.add_parser("disks")
@@ -4176,15 +3913,8 @@ def main():
                 module.set_config(args.repo, args.ref, **options)
             else:
                 print(json.dumps(module.config(), ensure_ascii=False))
-    elif args.command == "p2p":
-        if args.action == "status":
-            print(json.dumps(p2p_status(), indent=2, ensure_ascii=False))
-        elif args.action == "update":
-            locked(p2p_update)(args.force)
-        elif args.action == "token":
-            p2p_set_token(args.value or read_password(""))
-        else:
-            locked(session_enable)()
+    elif args.command == "github":
+        github_set_token(args.value or read_password(""))
     elif args.command == "share":
         module = shares()
         if args.action == "list":

@@ -204,7 +204,7 @@ def fake_compose(*args, check=True, capture=False):
     args = list(args)
     compose_log.append(args)
     if args[0] == "config":
-        return Done("\n".join(["radarr", "sonarr", "p2p-aggregator"]) + "\n")
+        return Done("\n".join(["radarr", "sonarr"]) + "\n")
     if args[0] == "pull":
         service = args[-1]
         ref = containers[service]["ref"]
@@ -257,8 +257,7 @@ except ctl.SeedboxError as error:
 check("mise à jour défaillante : ancienne version relancée", containers["radarr"]["running"] and containers["radarr"]["image"].endswith("a" * 64),
       containers["radarr"])
 
-for label, call in {"service inconnu": lambda: ver.update("inconnu"), "nom invalide": lambda: ver.update("../x"),
-                    "image locale": lambda: ver.update("p2p-aggregator")}.items():
+for label, call in {"service inconnu": lambda: ver.update("inconnu"), "nom invalide": lambda: ver.update("../x")}.items():
     try:
         call()
         check(f"refusé : {label}", False)

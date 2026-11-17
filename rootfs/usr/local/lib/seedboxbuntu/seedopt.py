@@ -328,11 +328,9 @@ def goals_from_ratiogoals():
 
 
 def site_stats(torrents):
-    """Ratios réels des trackers (p2p-aggregator, depuis le cache) pour les hôtes de ces torrents ; {} si indisponible."""
-    try:
-        return ctl.trackerstats().by_host({host_of(t) for t in torrents})
-    except Exception:  # noqa: BLE001 - le ratio du site est un complément, jamais une condition
-        return {}
+    """Ratios réels des trackers pour les hôtes de ces torrents. Aucune source depuis le retrait de p2p-aggregator :
+    {} (l'optimisation des seeds se rabat sur le ratio mesuré par qBittorrent) ; à rebrancher sur des lecteurs de trackers natifs."""
+    return {}
 
 
 def overview(host=None, torrents=None, now=None):

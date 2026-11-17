@@ -43,12 +43,6 @@ entryPoints:
       tls: @@TRAEFIK_TLS@@
       middlewares:
         - error-pages@file
-  p2p:
-    address: ":3000"
-    http:
-      tls: @@TRAEFIK_TLS@@
-      middlewares:
-        - error-pages@file
 
 providers:
   docker:

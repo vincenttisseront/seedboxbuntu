@@ -10,9 +10,7 @@ build_iso() {
         "$W/iso/autoinstall-update.yaml" /autoinstall-update.yaml
         "$W/iso/seedboxbuntu/VERSION" /seedboxbuntu/VERSION
         "$W/iso/seedboxbuntu/rootfs.tar" /seedboxbuntu/rootfs.tar
-        "$W/iso/seedboxbuntu/p2p-source.tar.zst" /seedboxbuntu/p2p-source.tar.zst
         "${GRUB_MAPS[@]}")
-  [[ -f $W/iso/seedboxbuntu/p2p-image.tar.zst ]] && MAPS+=("$W/iso/seedboxbuntu/p2p-image.tar.zst" /seedboxbuntu/p2p-image.tar.zst)
 
   # md5sum.txt (utilisé par la vérification d'intégrité du support)
   if grep -qxF /md5sum.txt "$W/iso-files.txt" && iso_extract "$SRC_ISO" /md5sum.txt "$W/src/md5sum.txt"; then

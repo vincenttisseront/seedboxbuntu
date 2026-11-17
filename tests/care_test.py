@@ -282,50 +282,19 @@ check("énergie : coût par To d'après les watts et la veille", rep["device"] =
 ran.clear()
 check("énergie : réapplication après redémarrage, une fois par démarrage", en.reapply(lambda c, **k: ran.append(c) or subprocess.CompletedProcess(c, 0, "", "")) == 1 and en.reapply(lambda c, **k: ran.append(c)) == 0 and len(ran) == 1)
 
-# --- 9. ratios réels des trackers ---------------------------------------------------------------------------------------------------
-ts = ctl.trackerstats()
-dash = {"trackers": [
-    {"id": "a1", "name": "C411", "trackerKey": "c411", "enabled": True, "siteUrl": "https://c411.org", "stats": {"ratio": 0.8, "requiredRatio": 1.0, "uploadedBytes": "800", "downloadedBytes": "1000", "ratioHealth": "danger", "supported": True}},
-    {"id": "a2", "name": "Torr9", "trackerKey": "torr9", "enabled": True, "siteUrl": "https://torr9.net", "stats": {"ratio": 3.2, "requiredRatio": 1.0, "uploadedBytes": "3200", "downloadedBytes": "1000"}},
-    {"id": "a3", "name": "YGG", "trackerKey": "ygg", "enabled": True, "siteUrl": "https://www.yggtorrent.org", "stats": {}}]}
-rows = ts.normalise(dash)
-check("ratios : lecture normalisée, danger déduit du ratio exigé", rows[0]["danger"] and not rows[1]["danger"] and rows[0]["up"] == 800 and rows[2]["ratio"] is None)
-check("ratios : rapprochement par nom de domaine, alias prioritaire", ts.match("tracker.c411.org", rows, {})["name"] == "C411" and ts.match("announce.torr9.net", rows, {})["name"] == "Torr9"
-      and ts.match("exotic.example", rows, {"exotic.example": "YGG"})["name"] == "YGG" and ts.match("inconnu.example", rows, {}) is None)
-api_calls = []
-
-
-def p2p(method, path, body=None, cookie=None):
-    api_calls.append((method, path))
-    if path == "/api/dashboard/stats":
-        return Reply(dash)
-    if path == "/api/admin/tracker-session":
-        return Reply({"state": "ready", "reachable": True, "healthy": True, "latencyMs": 68, "message": "ok", "supportedTrackers": ["c411", "ygg"]})
-    return Reply({})
-
-
-ts.refresh(p2p, now=NOW, force_test=True)
-check("ratios : actualisation = test de chaque compte puis relecture, santé de tracker-session", ("POST", "/api/trackers/a1/test") in api_calls and ts.cache()["session"]["state"] == "ready")
-dash["trackers"][0]["stats"]["uploadedBytes"] = "1800"
-ts.refresh(p2p, now=NOW + 2 * DAY)
-tr = ts.trend("C411", NOW + 2 * DAY)
-check("ratios : évolution de l'envoyé sur la période", tr and tr["up"] == 1000 and tr["days"] == 2.0, str(tr))
-SENT.clear()
-ts.tick(NOW + 5 * DAY, p2p)
-check("ratios : alerte quand le ratio est sous l'exigé, une fois par jour", len(SENT) == 1 and "C411" in SENT[0][0] and ts.tick(NOW + 5 * DAY + 4000, p2p) == 0)
-ts.set_alias("tracker.exemple", "Torr9")
-check("ratios : alias enregistré et validé", ts.settings()["aliases"] == {"tracker.exemple": "Torr9"} and raises(ts.set_alias, "pas un hôte!", "x"))
+# --- 9. optimisation des seeds : ratio du site fourni par une source externe -----------------------------------------------------
+site = {"tracker.c411.org": {"ratio": 0.8, "required": 1.0, "danger": True}}
 so = ctl.seedopt()
 torrents = [{"hash": "a" * 40, "name": "x", "tracker": "https://tracker.c411.org/announce", "size": GB, "uploaded": 0, "downloaded": GB, "amount_left": 0, "state": "stalledUP",
              "num_complete": 20, "num_incomplete": 0, "upspeed": 0, "completion_on": NOW - 90 * DAY, "added_on": NOW - 90 * DAY}]
 so.save_rules = None
 history = {"days": {}}
-res = so.analyse(torrents, history, so.settings(), NOW, {}, ts.by_host({"tracker.c411.org"}))
+res = so.analyse(torrents, history, so.settings(), NOW, {}, site)
 check("seeds : ratio du site sous l'exigé -> torrents protégés + conseil", res["rows"][0]["class"] == "protégé" and "ratio du site" in res["trackers"][0]["advice"][0], str(res["rows"][0]["class"]))
 
 # --- 10. ligne de commande ---------------------------------------------------------------------------------------------------------
 env = dict(os.environ, SB_SRC=str(SRC))
-for command in (["spacefore", "show"], ["libreport", "show"], ["integrity", "show"], ["trackerstats", "show"], ["subsgap", "show"], ["energy", "show"]):
+for command in (["spacefore", "show"], ["libreport", "show"], ["integrity", "show"], ["subsgap", "show"], ["energy", "show"]):
     result = subprocess.run([sys.executable, str(SRC / "rootfs/usr/local/lib/seedboxbuntu/seedboxctl.py"), *command], capture_output=True, text=True, env=env, timeout=60)
     check(f"CLI : {' '.join(command)}", result.returncode == 0 and result.stdout.strip().startswith("{"), (result.stderr or result.stdout)[-160:])
 

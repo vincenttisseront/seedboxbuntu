@@ -343,7 +343,7 @@ const NAV = [
   { id: 'overview', label: 'Vue d’ensemble', icon: 'home', items: [{ view: 'overview', label: 'Vue d’ensemble', icon: 'home' }, { view: 'maison', label: 'Maison', icon: 'monitor' }] },
   { id: 'services', label: 'Services', icon: 'layers', items: [
     { view: 'apps', label: 'Applications', icon: 'apps' }, { view: 'catalog', label: 'Catalogue', icon: 'package' },
-    { view: 'trackers', label: 'Trackers', icon: 'target' }, { view: 'aggregator', label: 'Agrégateur', icon: 'search' }, { view: 'p2p', label: 'P2P Aggregator', icon: 'share' },
+    { view: 'trackers', label: 'Trackers', icon: 'target' }, { view: 'aggregator', label: 'Agrégateur', icon: 'search' },
     { view: 'quality', label: 'Qualité des médias', icon: 'check-circle' }, { view: 'upgrades', label: 'Remplacements', icon: 'upload' },
     { view: 'seeds', label: 'Optimisation des seeds', icon: 'activity' }] },
   { id: 'storage', label: 'Stockage', icon: 'disk', items: [

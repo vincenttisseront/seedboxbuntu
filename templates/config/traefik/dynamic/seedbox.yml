@@ -135,7 +135,6 @@ http:
         - websecure
         - seerr
         - dockge
-        - p2p
       service: noop@internal
       middlewares:
         - to-main-address

@@ -216,10 +216,6 @@ def route(p, q, role="admin", PREFS=None):
     if p == "/api/energy": return {"settings": {"watts_hdd": 6.0, "watts_ssd": 2.0, "watts_standby": 1.0, "price_kwh": 0.2}, "hdparm": True, "system_device": "sda", "volumes": [
         {"volume": "local", "device": "sda", "rotational": False, "total": 2e12, "free": 4.2e11, "used": 1.58e12, "idle": 0.7, "read": 3e9, "read_share": 0.1, "standby": 0, "watts": 2.0, "kwh_year": 17.5, "eur_year": 3.5, "eur_tb_year": 1.75, "eur_tb_used_year": 2.2},
         {"volume": "nas", "device": "sdb", "rotational": True, "total": 8e12, "free": 3.1e12, "used": 4.9e12, "idle": 0.8, "read": 1e9, "read_share": 0.05, "standby": 20, "watts": 3.0, "kwh_year": 26.0, "eur_year": 5.2, "eur_tb_year": 0.65, "eur_tb_used_year": 1.06}]}
-    if p == "/api/trackerstats": return {"settings": {"aliases": {"c411.org": "c411"}, "alert": True}, "at": now - 900, "available": True,
-        "session": {"state": "ready", "reachable": True, "healthy": True, "latency_ms": 42, "message": "", "trackers": 4, "service": "tracker-session"},
-        "trackers": [{"name": "c411", "key": "c411", "host": "c411.org", "enabled": True, "id": 1, "ratio": 1.8, "required": 1.0, "up": 5e11, "down": 2.8e11, "unread": 0, "fetched_at": now - 900, "error": "", "supported": True, "danger": False, "trend": {"up": 2e10, "days": 7}},
-                     {"name": "torr9", "key": "torr9", "host": "torr9.net", "enabled": True, "id": 2, "ratio": 0.7, "required": 1.0, "up": 1e11, "down": 1.4e11, "unread": 0, "fetched_at": now - 900, "error": "", "supported": True, "danger": True, "trend": None}]}
     if p == "/api/vacation": return {"active": False, "until": 0, "started": 0, "by": "", "paused": 0, "max_days": 120, "qbittorrent": True}
     if p == "/api/push": return {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 2}
     if p == "/api/messages-language": return {"notify": "fr", "choices": ["fr", "en"]}
@@ -332,7 +328,6 @@ def route(p, q, role="admin", PREFS=None):
         return {"works": works, "total": 3, "page": 1, "pages": 1, "per_page": 20, "period": (q.get("period") or ["24h"])[0], "category": (q.get("category") or [""])[0], "q": (q.get("q") or [""])[0],
                 "sort": "publishedAt", "direction": "desc", "counts": {"films": 1, "series": 1, "musique": 1}, "periods": {"24h": 3, "week": 5, "all": 5}, "trackers": ["Tracker A", "Tracker B", "Tracker C"],
                 "qualities": ["4K", "FHD", "HD", "SD", "AUDIO", "EBOOK", "GAME", "OTHER"], "categories": [{"id": c, "label": l} for c, l in (("films", "Films"), ("series", "Séries"), ("musique", "Musique"), ("jeux", "Jeux"), ("livres", "Livres"), ("presse", "Presse"), ("logiciels", "Logiciels"))]}
-    if p == "/api/p2p": return {"version": "1.8.2", "commit": "a1b2c3d", "update_available": False, "error": "", "token": True}
     if p == "/api/alerts": return {"settings": {"enabled": True, "disk_percent": 90, "repeat_hours": 24, "ntfy": {"url": "https://ntfy.sh", "topic": "xxxx"}}, "active": [
         {"level": "critical", "title": "Radarr ne répond plus", "detail": "depuis 12 minutes", "notified": True}, {"level": "warning", "title": "Disque « Stockage » à 88 %", "detail": "", "notified": False}]}
     if p == "/api/versions": return {"services": [{"service": "radarr", "version": "5.14", "created": "2026-11-01", "local": False, "pinned": False, "running": True, "previous": [{"id": "x", "version": "5.13", "created": "2026-10-20"}]}, {"service": "p2p-aggregator", "version": "1.8.2", "created": "2026-11-05", "local": True, "pinned": False, "running": True, "previous": []}]}
@@ -435,7 +430,7 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith(("/api/replacer/settings", "/api/mediaslim/settings", "/api/shareprofile/set", "/api/shareprofile/unset", "/api/shareprofile/auto", "/api/relocate/settings",
                                "/api/seedopt/rule", "/api/seedopt/unrule", "/api/seedopt/thresholds", "/api/llm/settings")): return self.send(200, {"settings": body})
         if self.path.endswith(("/api/spacefore/settings", "/api/libreport/settings", "/api/dormant/settings", "/api/integrity/settings", "/api/subsgap/settings", "/api/guestquota/settings",
-                               "/api/energy/settings", "/api/trackerstats/settings", "/api/trackerstats/alias")): return self.send(200, {"settings": body})
+                               "/api/energy/settings")): return self.send(200, {"settings": body})
         if self.path.endswith("/api/network/apply"): return self.send(200, {"pending": {"seconds_left": 120, "deadline": now + 120, "new": {}}, "address": body.get("address", "").split("/")[0], "mode": body.get("mode", "")})
         if self.path.endswith(("/api/network/confirm", "/api/network/revert")): return self.send(200, {"kept": True})
         if self.path.endswith("/api/shares/discover"):

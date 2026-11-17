@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-HASHED_DIRS = ("rootfs", "stack", "templates", "p2p")
+HASHED_DIRS = ("rootfs", "stack", "templates")
 NAMESPACE = "seedboxbuntu-release"
 PRINCIPAL = "seedboxbuntu"
 

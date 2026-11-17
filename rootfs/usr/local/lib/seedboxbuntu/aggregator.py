@@ -1,6 +1,6 @@
 """SeedBoxBuntu - agrégateur de releases : catalogue par œuvre, collecte planifiée, envoi vers qBittorrent.
 
-Reprend les fonctions de P2P Aggregator sans l'application elle-même :
+Remplace P2P Aggregator (retiré) :
   - collecte : les indexeurs de Prowlarr et de Jackett (installés avec la boîte) et toute source Torznab ajoutée à la main,
     par catégories (films, séries, musique, jeux, logiciels, livres/presse), toutes les 15 min à 6 h (1 h par défaut) ;
   - catalogue : les torrents sont regroupés par œuvre (IMDb, TMDB, revue, titre + année, avec rapprochement des titres proches),
@@ -13,8 +13,8 @@ Reprend les fonctions de P2P Aggregator sans l'application elle-même :
   - santé : état de chaque source ; alerte (une fois par jour) après 3 collectes en échec de suite.
 Données : base SQLite dans /var/lib/seedboxbuntu/aggregator.db ; réglages et sources dans /etc/seedboxbuntu/aggregator.json
 (clés d'API : fichier lisible par root seul).
-Limites : les trackers privés qui n'ont pas d'API Torznab (ratio, messages non lus, sessions) ne sont pas lus ici ; ils restent
-du ressort de p2p-aggregator et de tracker-session tant qu'ils sont installés.
+Limites : les trackers privés qui n'ont pas d'API Torznab (ratio, messages non lus, sessions protégées) ne sont pas lus ici :
+ces fonctions de P2P Aggregator et de tracker-session ont été retirées avec eux.
     seedboxctl aggregator show | sync | sources | add NOM URL [--key CLE] | remove ID | enable ID | disable ID | test ID
                           | config [--interval MIN] [--retention JOURS] [--limit N] [--category NOM] [--enable|--disable] | send ID | purge
 """

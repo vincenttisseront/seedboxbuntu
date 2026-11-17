@@ -4,7 +4,7 @@ Mises à jour
     Sécurité du système : unattended-upgrades, déclenché par les minuteurs apt-daily de
     systemd dont l'heure et les jours viennent de /etc/seedboxbuntu/maintenance.json
     (redémarrage automatique facultatif). Applications : Watchtower, dont l'expression cron
-    est tenue à jour dans .env ; un minuteur facultatif met aussi à jour p2p-aggregator.
+    est tenue à jour dans .env.
 
 Durcissement (« seedboxctl harden », rejouable)
     - ufw : refus par défaut en entrée ; seuls SSH, HTTPS/HTTP de Traefik et les ports
@@ -47,8 +47,8 @@ SSH_CONF = (
     "ClientAliveCountMax 2\n"
 )
 # Applications publiées par Traefik : accès web, puis un port HTTPS dédié pour celles qui ne
-# fonctionnent pas dans un sous-chemin (Seerr, Dockge, p2p-aggregator)
-APP_PORTS = [80, 443, 5055, 5001, 3000]
+# fonctionnent pas dans un sous-chemin (Seerr, Dockge)
+APP_PORTS = [80, 443, 5055, 5001]
 CONSOLE_RULE = ("allow", "in", "on", "br-seedbox", "to", "172.30.0.1", "port", "8090", "proto", "tcp")
 PACKAGES = ["ufw", "fail2ban", "unattended-upgrades", "smartmontools", "hdparm", "smbclient"]
 # Services inutiles sur un serveur : apport (rapports d'erreur), annonces du jour d'Ubuntu
@@ -59,7 +59,7 @@ DAY_LABEL = dict(zip(DAYS, ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "
 DEFAULTS = {
     "security": {"enabled": True, "days": "daily", "time": "03:30", "scope": "security",
                  "reboot": False, "reboot_time": "04:30"},
-    "apps": {"enabled": True, "days": "daily", "time": "03:00", "p2p": False},
+    "apps": {"enabled": True, "days": "daily", "time": "03:00"},
 }
 SCOPES = {"security": "Correctifs de sécurité uniquement", "all": "Sécurité et mises à jour ordinaires d'Ubuntu"}
 
@@ -136,7 +136,7 @@ def validate(section, values):
     for key, value in values.items():
         if key not in current or value is None:
             continue
-        if key in ("enabled", "reboot", "p2p"):
+        if key in ("enabled", "reboot"):
             result[key] = value if isinstance(value, bool) else str(value).lower() in ("1", "true", "on", "oui", "yes")
         elif key == "days":
             result[key] = check_days(value)
@@ -288,18 +288,9 @@ def run_app_updates():
 
 
 def autoupdate():
-    """Minuteur seedbox-autoupdate : p2p-aggregator, dont l'image est construite sur place."""
-    if not settings()["apps"]["p2p"]:
-        return
-    status = ctl.p2p_status()
-    if not status.get("token"):
-        say("p2p-aggregator : jeton GitHub absent, mise à jour automatique impossible")
-        return
-    if status.get("update_available"):
-        say(f"p2p-aggregator : mise à jour vers {status.get('latest')}")
-        ctl.p2p_update()
-    else:
-        say("p2p-aggregator est à jour")
+    """Minuteur seedbox-autoupdate : plus rien à faire ici (p2p-aggregator, seule application construite sur place,
+    est retirée) ; les images des applications sont tenues à jour par Watchtower. Conservé pour le minuteur existant."""
+    say("rien à mettre à jour ici : les applications sont tenues à jour par Watchtower")
 
 
 # ----------------------------------------------------------------------------

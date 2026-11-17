@@ -1,7 +1,7 @@
 """SeedBoxBuntu - mise à jour de l'appliance depuis GitHub, sans passer par l'ISO.
 
 Principe
-    Les fichiers de l'appliance (rootfs/, stack/, templates/, p2p/ du dépôt) sont les mêmes que ceux
+    Les fichiers de l'appliance (rootfs/, stack/, templates/ du dépôt) sont les mêmes que ceux
     embarqués dans l'ISO. Cette mise à jour télécharge l'archive d'un commit du dépôt, la vérifie, puis
     fait ce que fait la mise à jour par l'ISO : sauvegarde des fichiers remplacés, remplacement, activation
     des services (postinstall.sh), puis « seedboxctl upgrade » (stack, modèles, liaisons). Aucun redémarrage
@@ -14,7 +14,7 @@ Sécurité
     - Rien n'est installé si une vérification échoue (Python, shell, JSON, fichiers indispensables,
       lancement de la nouvelle version, validité du docker-compose.yml).
     - Les fichiers remplacés sont archivés : « seedboxctl appliance rollback » revient en arrière.
-    - Le jeton GitHub (le même que celui de P2P Aggregator) n'est envoyé qu'à l'API GitHub, jamais à
+    - Le jeton GitHub n'est envoyé qu'à l'API GitHub, jamais à
       l'adresse de téléchargement vers laquelle GitHub redirige.
 
 Canaux
@@ -80,7 +80,7 @@ SIGN_NAMESPACE = "seedboxbuntu-release"
 SIGN_PRINCIPAL = "seedboxbuntu"
 MANIFEST_NAME, SIGNATURE_NAME = "manifest.json", "manifest.json.sig"
 MAX_ASSET = 5 * 1024 * 1024
-SHARE_DIRS = ("stack", "templates", "p2p")
+SHARE_DIRS = ("stack", "templates")
 SHARE_SYSTEM = "/usr/share/seedboxbuntu"
 MAX_DOWNLOAD = 100 * 1024 * 1024
 MAX_FILES = 5000
@@ -242,10 +242,10 @@ def explain(error, repo):
         if error.code in (401, 403) and error.headers.get("X-RateLimit-Remaining") == "0":
             return "limite de requêtes GitHub atteinte (enregistrez un jeton GitHub, ou réessayez plus tard)"
         if error.code == 401:
-            return "jeton GitHub refusé : enregistrez-en un valide (page P2P Aggregator ou menu de l'appliance)"
+            return "jeton GitHub refusé : enregistrez-en un valide (page Mise à jour ou menu de l'appliance)"
         if error.code in (403, 404):
             return (f"dépôt ou branche introuvable : {repo}. Pour un dépôt privé, enregistrez un jeton GitHub "
-                    "ayant accès en lecture à ce dépôt (page P2P Aggregator ou menu de l'appliance)")
+                    "ayant accès en lecture à ce dépôt (page Mise à jour ou menu de l'appliance)")
         return f"GitHub a répondu HTTP {error.code}"
     return f"GitHub injoignable : {getattr(error, 'reason', error)}"
 
@@ -481,7 +481,7 @@ def compose_valid(path):
 # ----------------------------------------------------------------------------
 #  Signatures : manifeste de la version publiée
 # ----------------------------------------------------------------------------
-HASHED_DIRS = ("rootfs", "stack", "templates", "p2p")
+HASHED_DIRS = ("rootfs", "stack", "templates")
 KEY_RE = re.compile(r"((?:ssh|sk-ssh|ecdsa-sha2)-[A-Za-z0-9@.-]+)\s+([A-Za-z0-9+/=]{20,})")
 
 

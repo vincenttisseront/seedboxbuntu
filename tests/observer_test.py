@@ -172,7 +172,7 @@ for path in sorted(server.OBSERVER_GET):
     status, _ = call(path, "observers", "obs1")
     check(f"observateur : lecture de {path}", status == 200, status)
 for path in ("/api/credentials", "/api/users", "/api/backup", "/api/backup/key", "/api/audit", "/api/system/logs?source=x", "/api/logs/search",
-             "/api/guests", "/api/shares", "/api/offsite", "/api/steps", "/api/auth", "/api/cleanup", "/api/assistant", "/api/remote", "/api/p2p",
+             "/api/guests", "/api/shares", "/api/offsite", "/api/steps", "/api/auth", "/api/cleanup", "/api/assistant", "/api/remote",
              "/api/settings/updates", "/api/security", "/api/check", "/api/catalog"):
     check(f"observateur : {path} refusé", call(path, "observers", "obs1")[0] == 403)
 for path in ("/api/deploy", "/api/users", "/api/backup/create", "/api/services/radarr/restart", "/api/report/send", "/api/report/settings",

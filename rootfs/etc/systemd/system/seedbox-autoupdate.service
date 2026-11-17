@@ -1,5 +1,5 @@
 [Unit]
-Description=SeedBoxBuntu - mise à jour automatique de p2p-aggregator
+Description=SeedBoxBuntu - mise à jour automatique (réservée)
 After=docker.service network-online.target
 Wants=network-online.target
 ConditionPathExists=/var/lib/seedboxbuntu/deployed

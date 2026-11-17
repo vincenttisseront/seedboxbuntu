@@ -54,7 +54,7 @@ def check(label, ok, detail=""):
 
 
 # --- dépôt de démonstration : l'arbre des sources, avec trois états successifs ------------------------------------
-KEEP_DIRS = ("rootfs", "stack", "templates", "p2p")
+KEEP_DIRS = ("rootfs", "stack", "templates")
 
 
 def make_tree(destination):

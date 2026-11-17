@@ -27,6 +27,5 @@ check_deps() {
     fi
   fi
   [[ $GRUB_TIMEOUT =~ ^[0-9]+$ ]] || die "GRUB_TIMEOUT doit être un nombre de secondes"
-  [[ $P2P_PREBUILD =~ ^(auto|0|1)$ ]] || die "P2P_PREBUILD doit valoir auto, 0 ou 1"
   mkdir -p "$CACHE" "$W"
 }

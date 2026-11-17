@@ -85,21 +85,17 @@ for login, role, label in (("root1", "user", "administrateur principal protégé
     try:
         ctl.user_set_role(login, role); check(label, False)
     except ctl.SeedboxError: check(label, True)
-# le changement de rôle d'Alice passe par Jellyfin/Seerr/p2p : simulés
+# le changement de rôle d'Alice passe par Jellyfin/Seerr : simulés
 calls = []
 ctl.jellyfin_user = lambda login: {"Id": "J1", "Policy": {"IsAdministrator": False}}
 ctl.jellyfin_api = lambda method, path, body=None, token=None: (calls.append(("jf", path, body)), type("R", (), {"ok": True, "status": 200})())[1]
 ctl.seerr_user_id = lambda jid: 7
 ctl.seerr_api = lambda method, path, body=None, cookie=None: (calls.append(("seerr", path, body)), type("R", (), {"ok": True})())[1]
-ctl.p2p_session = lambda: "c"
-ctl.p2p_user_id = lambda login, cookie: 3
-ctl.p2p_api = lambda method, path, body=None, cookie=None: (calls.append(("p2p", path, body)), type("R", (), {"ok": True})())[1]
 ctl.say = lambda m: None
 ctl.user_set_role("alice", "admin")
-check("alice -> admin : groupe, Jellyfin, Seerr, p2p", "admins" in ctl.users_load()["alice"]["groups"]
+check("alice -> admin : groupe, Jellyfin, Seerr", "admins" in ctl.users_load()["alice"]["groups"]
       and ("jf", "/Users/J1/Policy", {"IsAdministrator": True}) in calls
-      and ("seerr", "/user/7/settings/permissions", {"permissions": 2}) in calls
-      and ("p2p", "/api/admin/users/3", {"role": "ADMIN"}) in calls, calls)
+      and ("seerr", "/user/7/settings/permissions", {"permissions": 2}) in calls, calls)
 ctl.user_set_role("alice", "manager")
 check("alice -> manager : droits Seerr de gestion des demandes", ("seerr", "/user/7/settings/permissions", {"permissions": 176}) in calls
       and ("jf", "/Users/J1/Policy", {"IsAdministrator": False}) in calls)

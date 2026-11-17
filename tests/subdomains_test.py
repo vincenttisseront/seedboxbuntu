@@ -120,7 +120,6 @@ check("application générique du catalogue : chemin ajouté, Authelia, puis ret
       heimdall.index("sub-heimdall-prefix") < heimdall.index("authelia@file") < heimdall.index("sub-heimdall-strip"), str(heimdall))
 check("Seerr : à la racine, sans chemin ni Authelia (comptes Jellyfin), avec limitation",
       routers["sub-seerr"]["middlewares"] == ["rate-limit@file", "secure-headers@file"] and "sub-seerr-prefix" not in middlewares)
-check("P2P : à la racine", routers["sub-p2p"]["service"] == "p2p@docker" and "authelia@file" not in routers["sub-p2p"]["middlewares"])
 check("Dockge : chaîne Authelia dédiée (chemin fictif /dockge/)", routers["sub-dockge"]["middlewares"][0] == "authelia-dockge@file")
 check("Jellyfin : /jellyfin ajouté, aucune connexion Authelia (comptes Jellyfin)",
       "authelia@file" not in routers["sub-jellyfin"]["middlewares"] and middlewares["sub-jellyfin-prefix"]["addPrefix"]["prefix"] == "/jellyfin")
@@ -241,7 +240,7 @@ sub.rename("seerr", "overseerr")
 doc = yaml.safe_load(sub.DYNAMIC_FILE.read_text())
 check("renommer : le nouveau nom sert la route (alias DNS existant « overseerr »)", doc["http"]["routers"]["sub-seerr"]["rule"] == "Host(`overseerr.ar-systems.fr`)")
 check("renommer : sans redémarrage de conteneur (relu à chaud)", calls == ["render", "owner"], str(calls))
-check("renommer : l'ancien nom est libéré", fails(sub.check_name, "p2p", "overseerr") is not None and fails(sub.check_name, "p2p", "seerr") is None)
+check("renommer : l'ancien nom est libéré", fails(sub.check_name, "dockge", "overseerr") is not None and fails(sub.check_name, "dockge", "seerr") is None)
 sub.rename("seerr", "")
 check("renommer : vide rétablit le nom par défaut", "seerr" not in sub.settings()["names"])
 sub.set_enabled("dockge", False)
