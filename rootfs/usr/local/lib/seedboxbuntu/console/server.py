@@ -841,6 +841,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json({"job": start_job("Relevé des bibliothèques", ["libscan", "scan"])})
             if path == "/api/copyaudit/scan":
                 return self.send_json({"job": start_job("Recherche des copies cachées", ["copyaudit", "scan"])})
+            if path == "/api/copyaudit/relink" and data.get("all") is True:
+                return self.send_json({"job": start_job("Liens durs : toutes les copies cachées", ["copyaudit", "relink", "--all"])})
             if path == "/api/copyaudit/relink":
                 return self.send_json(ctl.copyaudit().relink([str(x) for x in data.get("paths", [])][:200], by=who))
             if path == "/api/replacer/search":

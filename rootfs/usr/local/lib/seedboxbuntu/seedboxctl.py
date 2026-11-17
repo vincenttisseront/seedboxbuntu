@@ -56,7 +56,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl titleshare list|create|revoke|tick   partager un seul titre, pour une durée limitée
   seedboxctl libscan show|scan                relevé des bibliothèques Radarr et Sonarr, par partage
   seedboxctl libmap show                      carte des bibliothèques et versions multiples
-  seedboxctl copyaudit show|scan|relink       copies cachées entre téléchargements et médiathèque
+  seedboxctl copyaudit show|scan|relink [--all]  copies cachées entre téléchargements et médiathèque
   seedboxctl replacer show|search|apply|...   remplacer un média par une meilleure version, sous budget d'espace
   seedboxctl mediaslim show|add|run|...       recompression x265 et retrait des pistes inutiles
   seedboxctl shareprofile show|set|apply      un profil de qualité par partage
@@ -2936,7 +2936,9 @@ def main():
     ca = commands.add_parser("copyaudit", help="copies cachées").add_subparsers(dest="action", required=True)
     for name in ("show", "scan"):
         ca.add_parser(name)
-    ca.add_parser("relink").add_argument("paths", nargs="+")
+    relink_parser = ca.add_parser("relink")
+    relink_parser.add_argument("paths", nargs="*")
+    relink_parser.add_argument("--all", action="store_true", help="relier toutes les copies possibles")
     rp = commands.add_parser("replacer", help="remplacements sous budget").add_subparsers(dest="action", required=True)
     rp.add_parser("show")
     rp.add_parser("search").add_argument("count", nargs="?", type=int, default=None)
@@ -3673,7 +3675,9 @@ def main():
         elif args.action == "scan":
             module.scan()
         else:
-            print(json.dumps(locked(module.relink)(args.paths), ensure_ascii=False))
+            if not args.all and not args.paths:
+                raise SeedboxError("indiquez des fichiers ou --all")
+            print(json.dumps(locked(module.relink)(None if args.all else args.paths), ensure_ascii=False))
     elif args.command == "replacer":
         module = replacer()
         if args.action == "show":

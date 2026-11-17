@@ -1368,6 +1368,8 @@ window.I18N_EN = {
   "Espace récupérable": "Recoverable space",
   "Copies cachées": "Hidden copies",
   "Relier la sélection": "Link the selection",
+  "Tout relier": "Link all",
+  "Toutes les copies reliables sont comparées octet par octet au fichier de la médiathèque, puis remplacées par un lien vers lui. Le torrent continue de partager le même contenu ; les fichiers de la médiathèque ne sont jamais modifiés. Les copies sur deux disques sont laissées telles quelles.": "Every copy that can be linked is compared byte by byte with the media library file, then replaced by a link to it. The torrent keeps sharing the same content; the media library files are never modified. Copies on two different disks are left as they are.",
   "Un fichier présent deux fois, dans les téléchargements et dans la médiathèque, alors qu’un lien dur suffirait. « Relier » remplace la copie des téléchargements par un lien vers le fichier de la médiathèque, après comparaison octet par octet : le torrent continue de partager, l’espace de la copie est récupéré, le fichier de la médiathèque n’est jamais touché.": "A file present twice, in the downloads and in the media library, when a hard link would do. “Link” replaces the downloads copy with a link to the media library file, after a byte-by-byte comparison: the torrent keeps sharing, the copy’s space is recovered, and the media library file is never touched.",
   "Fichier des téléchargements": "Downloads file",
   "Profil de qualité par partage": "Quality profile per share",

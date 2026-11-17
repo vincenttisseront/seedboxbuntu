@@ -509,6 +509,16 @@ def journeys_ops2(page, base):
     if not page.is_disabled('input[aria-label="Relier Alien"]'):
         fail("parcours : une copie sur deux disques ne doit pas pouvoir être reliée")
     ui_mock.CALLS.clear()
+    page.click("#copyaudit-relink-all")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/copyaudit/relink") and body.get("all") is True]:
+        fail("parcours : « Tout relier » n'envoie pas la demande en masse")
+    page.check("#copyaudit-all")
+    if not page.is_checked('input[aria-label="Relier Dune"]') or page.is_checked('input[aria-label="Relier Alien"]'):
+        fail("parcours : la case de l'en-tête doit cocher les copies reliables et laisser les autres")
+    ui_mock.CALLS.clear()
     page.check('input[aria-label="Déplacer Metropolis"]')
     page.click("#relocate-move")
     page.wait_for_selector("#dialog[open]")

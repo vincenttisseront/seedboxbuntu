@@ -108,7 +108,11 @@ async function loadCopyaudit() {
   state.className = 'notice info';
   state.textContent = data.at ? `Recherche du ${fmtDateTime(data.at)} : ${data.total} copie(s), ${fmtSize(data.saving)} récupérables${data.blocked ? `, ${fmtSize(data.blocked)} sur deux disques (lien impossible)` : ''}.`
     : 'Aucune recherche pour le moment : cliquez sur Analyser (quelques minutes sur un gros dossier).';
-  $('copyaudit-relink').disabled = !data.items.some((i) => i.same_disk);
+  const possible = data.items.filter((i) => i.same_disk);
+  $('copyaudit-relink').disabled = !possible.length;
+  $('copyaudit-relink-all').disabled = !possible.length;
+  $('copyaudit-all').checked = false;
+  $('copyaudit-all').disabled = !possible.length;
   $('copyaudit-list').replaceChildren(...(data.items.length ? data.items.map((i) => el('tr', {},
     checkCell(i.download, `Relier ${i.title}`, i.same_disk ? {} : { disabled: '' }), el('td', { class: 'small' }, i.download), el('td', {}, i.title),
     el('td', {}, fmtSize(i.size)), el('td', {}, pill(i.same_disk ? 'possible' : 'deux disques', i.same_disk ? 'ok' : 'warn')))) : [emptyRow(5, 'Aucune copie cachée.')]));
@@ -443,6 +447,10 @@ function initOps4() {
   $('library-ai').addEventListener('click', () => askAi('library'));
   $('seeds-ai').addEventListener('click', () => askAi('seeds'));
   $('copyaudit-scan').addEventListener('click', () => runJob('/api/copyaudit/scan', {}, () => loadCopyaudit().catch(showError)));
+  $('copyaudit-all').addEventListener('change', (event) => $('copyaudit-list').querySelectorAll('input[type=checkbox]:not(:disabled)').forEach((box) => { box.checked = event.target.checked; }));
+  $('copyaudit-relink-all').addEventListener('click', (event) => confirmAction(event.currentTarget,
+    'Toutes les copies reliables sont comparées octet par octet au fichier de la médiathèque, puis remplacées par un lien vers lui. Le torrent continue de partager le même contenu ; les fichiers de la médiathèque ne sont jamais modifiés. Les copies sur deux disques sont laissées telles quelles.',
+    () => runJob('/api/copyaudit/relink', { all: true }, () => loadCopyaudit().catch(showError))));
   $('copyaudit-relink').addEventListener('click', (event) => confirmAction(event.currentTarget,
     'Chaque copie cochée est comparée octet par octet au fichier de la médiathèque, puis remplacée par un lien vers lui. Le torrent continue de partager le même contenu ; le fichier de la médiathèque n’est jamais modifié.', relinkCopies));
   $('shareprofile-apply').addEventListener('click', (event) => confirmAction(event.currentTarget,

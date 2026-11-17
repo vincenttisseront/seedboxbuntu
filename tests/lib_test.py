@@ -159,6 +159,9 @@ try:
 finally:
     builtins.open = real_open
 check("copies : un fichier que le partage refuse de lire est ignoré et compté, sans planter", str(dl2) not in [e["download"] for e in unreadable["items"]] and unreadable["unreadable"] == 1, unreadable)
+bulk = copies.relink(None, small)
+check("copies : « tout relier » relie toutes les copies possibles sans liste", bulk["done"] == 1 and os.stat(dl2).st_ino == os.stat(media_file).st_ino, bulk)
+check("copies : « tout relier » sans rien à relier -> erreur", raises(copies.relink, None, small) is not None)
 
 # --- 4. remplacements sous budget ----------------------------------------------------------------------------------------------------
 rep = ctl.replacer()

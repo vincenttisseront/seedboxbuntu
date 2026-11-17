@@ -417,6 +417,7 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith(("/api/bandwidth/settings", "/api/ratio/settings", "/api/catalogexport/settings")): return self.send(200, {"settings": body})
         if self.path.endswith("/api/push/unsubscribe"): return self.send(200, {"available": True, "key": "BP" + "A" * 85, "mine": 0, "total": 1})
         if self.path.endswith("/guests/invite"): return self.send(200, {"id": "ab12", "token": "T" * 32, "path": "/invite/" + "T" * 32, "expires": now + 86400 * 7})
+        if self.path.endswith("/api/copyaudit/relink") and body.get("all"): return self.send(200, {"job": "j1"})
         if self.path.endswith("/api/copyaudit/relink"): return self.send(200, {"done": 1, "saved": 9e9, "skipped": []})
         if self.path.endswith("/api/replacer/apply"): return self.send(200, {"done": 1, "skipped": []})
         if self.path.endswith("/api/replacer/safety"): return self.send(200, {"ok": True})
