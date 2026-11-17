@@ -142,6 +142,9 @@ def route(p, q, role="admin", PREFS=None):
         "versions": [{"kind": "film", "title": "Dune", "year": 2021, "saving": 4e9, "files": [
             {"path": "/data/media/films/Dune/dune.mkv", "size": 9e9, "quality": "Bluray-1080p", "volume": "local", "app": "radarr"},
             {"path": "/data/media/films/Dune (2)/dune.mkv", "size": 5e9, "quality": "WEBDL-1080p", "volume": "local", "app": "radarr"}]}], "versions_total": 1, "versions_saving": 4e9}
+    if p == "/api/jobs": return {"running": 1, "busy": True, "jobs": [
+        {"id": "a1b2c3d4e5f6", "title": "Liens durs : toutes les copies cachées", "state": "running", "started": now - 95, "log": "[seedboxctl] 2/5 : Dune.mkv (1 reliée(s), 9000000000 octets récupérés)\n"},
+        {"id": "a1b2c3d4e5f7", "title": "Relevé des bibliothèques", "state": "ok", "started": now - 4000, "log": ""}]}
     if p == "/api/copyaudit": return {"at": now - 7200, "walked": 1200, "total": 2, "saving": 9e9, "blocked": 3e9, "items": [
         {"download": "/mnt/storage/downloads/Dune.2021.1080p.mkv", "media": "/mnt/storage/media/films/Dune/dune.mkv", "size": 9e9, "title": "Dune", "same_disk": True},
         {"download": "/mnt/storage/downloads/Alien.mkv", "media": "/mnt/shares/nas/Films/Alien/alien.mkv", "size": 3e9, "title": "Alien", "same_disk": False}]}

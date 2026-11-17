@@ -23,6 +23,7 @@ let latestJob = null;
 // Une tâche longue : notification qui suit son avancement, détails dans le tiroir (ouvert d'office en cas d'échec)
 function followJob(id, done, onPoll) {
   latestJob = id;
+  jobsView = false;
   const note = toast('info', 'Tâche en cours…', { sticky: true, busy: true, action: { label: 'Détails', run: () => drawer.open() } });
   drawer.show('Tâche en cours', 'info', 'en cours', '');
   const poll = async () => {

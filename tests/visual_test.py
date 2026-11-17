@@ -496,6 +496,14 @@ def journeys_ops2(page, base):
     page.goto(base + "#library")
     settle(page, "library")
     page.wait_for_timeout(500)
+    page.locator("[data-jobs-open]:visible").first.click()
+    page.wait_for_selector("#drawer:not(.hidden)")
+    page.wait_for_timeout(400)
+    if "Liens durs" not in page.inner_text("#drawer-log") or "1 en cours" not in page.inner_text("#drawer-state"):
+        fail("parcours : le bouton « Tâches en cours » n'affiche pas les tâches de la console")
+    if page.locator("#jobs-badge").count() and page.locator("#jobs-badge").is_visible() and page.inner_text("#jobs-badge").strip() != "1":
+        fail("parcours : le badge du bouton « Tâches en cours » doit compter les tâches en cours")
+    page.click("#drawer-close")
     if "nas" not in page.inner_text("#library-volumes") or "Dune" not in page.inner_text("#multiver-list"):
         fail("parcours : la carte des bibliothèques n'affiche pas les volumes et les versions multiples")
     ui_mock.CALLS.clear()

@@ -8,6 +8,7 @@ l'utilisateur vient des en-têtes posés par Authelia ; le groupe admins est exi
 
 Bibliothèque standard de Python 3 uniquement : rien à installer.
 """
+import fcntl
 import hmac
 import http.server
 import json
@@ -77,6 +78,25 @@ def start_job(title, argv, stdin=None):
 
     threading.Thread(target=worker, daemon=True).start()
     return identifier
+
+
+def jobs_overview():
+    """Tâches de la console (les plus récentes d'abord) et verrou général : une autre opération (mise à jour, sauvegarde,
+    minuteur) peut tenir le verrou sans avoir été lancée depuis la console."""
+    with JOBS_LOCK:
+        jobs = sorted(JOBS.values(), key=lambda j: -j["started"])
+        listing = [{"id": j["id"], "title": j["title"], "state": j["state"], "started": j["started"], "log": j["log"][-600:]} for j in jobs]
+    busy = False
+    try:
+        with open(ctl.LOCK_FILE, "a") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(handle, fcntl.LOCK_UN)
+            except BlockingIOError:
+                busy = True
+    except OSError:
+        pass
+    return {"jobs": listing[:15], "running": sum(1 for j in listing if j["state"] == "running"), "busy": busy}
 
 
 # Routes de lecture ouvertes aux observateurs (rôle « observer ») : aucun secret, aucun journal, aucun réglage
@@ -598,6 +618,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.maintenance().security_overview())
         if path == "/api/ca.crt":
             return self.send_certificate()
+        if path == "/api/jobs":
+            return self.send_json(jobs_overview())
         match = re.fullmatch(r"/api/jobs/([0-9a-f]{12})", path)
         if match and match.group(1) in JOBS:
             return self.send_json(JOBS[match.group(1)])

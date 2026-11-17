@@ -467,7 +467,41 @@ async function loadUpgrades() {
 // ---------------------------------------------------------------------------------------------------------------
 //  Branchements
 // ---------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------
+//  Tâches en cours : bouton en bas à gauche (barre du haut sur mobile) et tiroir de suivi
+// ---------------------------------------------------------------------------------------------------------------
+let jobsView = false;
+const jobAge = (started) => {
+  const seconds = Math.max(0, Math.round(Date.now() / 1000 - started));
+  return seconds < 90 ? `${seconds} s` : `${Math.round(seconds / 60)} min`;
+};
+async function refreshJobs() {
+  let data;
+  try { data = await api('/api/jobs'); } catch (error) { return; }          // rôle sans accès : le bouton reste muet
+  const badge = $('jobs-badge');
+  badge.textContent = String(data.running);
+  badge.classList.toggle('hidden', !data.running);
+  if (!jobsView) return;
+  const lines = data.jobs.map((j) => {
+    const word = (JOB_STATE[j.state] || ['', j.state])[1];
+    const tail = j.state === 'running' ? j.log.trim().split('\n').slice(-3).map((l) => `    ${l}`).join('\n') : '';
+    return `[${word}] ${j.title} (${jobAge(j.started)})${tail ? `\n${tail}` : ''}`;
+  });
+  const other = data.busy && !data.running ? 'Une autre opération tient le verrou (mise à jour, sauvegarde ou tâche planifiée). Elle se termine seule ; réessayez ensuite.\n\n' : '';
+  drawer.show('Tâches', data.running || data.busy ? 'info' : 'ok', data.running ? `${data.running} en cours` : data.busy ? 'verrou pris' : 'aucune en cours',
+    other + (lines.length ? lines.join('\n\n') : 'Aucune tâche lancée depuis la console depuis son démarrage.'));
+}
+function openJobs() {
+  jobsView = true;
+  drawer.open();
+  refreshJobs();
+}
+
 function initOps4() {
+  for (const button of document.querySelectorAll('[data-jobs-open]')) button.addEventListener('click', openJobs);
+  $('drawer-close').addEventListener('click', () => { jobsView = false; });
+  setInterval(() => { if (!document.hidden) refreshJobs(); }, 5000);
+  refreshJobs();
   $('library-scan').addEventListener('click', () => runJob('/api/library/scan', {}, () => loadLibrary().catch(showError)));
   $('library-ai').addEventListener('click', () => askAi('library'));
   $('seeds-ai').addEventListener('click', () => askAi('seeds'));
