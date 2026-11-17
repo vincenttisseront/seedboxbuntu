@@ -2357,24 +2357,39 @@ def github_env():
     return env
 
 
-def retire_old_apps():
-    """Retire p2p-aggregator et tracker-session (remplacés par l'agrégateur intégré) : conteneurs, images, sources et archive
-    d'image. Le dossier de données (config/p2p-aggregator : base, comptes de trackers) n'est jamais effacé."""
-    for name in RETIRED_CONTAINERS:
-        run("docker", "rm", "-f", name, check=False, capture=True)
+RETIRED_MARKER = STATE / "retired-apps"
+RETIRED_GRACE = 6 * 3600          # images et sources gardées ce temps après la mise à jour : un retour arrière doit pouvoir les relancer
+
+
+def retire_old_apps(purge=False):
+    """Retire p2p-aggregator et tracker-session (remplacés par l'agrégateur intégré). Les conteneurs sont supprimés tout de suite ;
+    images, sources et archive d'image ne le sont que RETIRED_GRACE secondes plus tard (purge=True, depuis refresh) : si la mise
+    à jour est annulée, l'ancienne version doit pouvoir les relancer. Le dossier de données (config/p2p-aggregator : base,
+    comptes de trackers) n'est jamais effacé."""
+    leftovers = [APPS_DIR / "p2p-aggregator", STATE / "images" / "p2p-aggregator.tar.zst"]
+    if not purge:
+        for name in RETIRED_CONTAINERS:
+            run("docker", "rm", "-f", name, check=False, capture=True)
+        if any(path.exists() for path in leftovers) and not RETIRED_MARKER.exists():
+            RETIRED_MARKER.parent.mkdir(parents=True, exist_ok=True)
+            RETIRED_MARKER.write_text(str(int(time.time())) + "\n")
+        return
+    try:
+        since = int(RETIRED_MARKER.read_text().strip())
+    except (OSError, ValueError):
+        since = None
+    if since is None or time.time() - since < RETIRED_GRACE:
+        return
     for image in RETIRED_IMAGES:
         for tag in ("current", "previous", "candidate"):
             run("docker", "rmi", "-f", f"{image}:{tag}", check=False, capture=True)
-    removed = False
-    for leftover in (APPS_DIR / "p2p-aggregator", STATE / "images" / "p2p-aggregator.tar.zst"):
+    for leftover in leftovers:
         if leftover.is_dir():
             shutil.rmtree(leftover, ignore_errors=True)
-            removed = True
         elif leftover.exists():
             leftover.unlink()
-            removed = True
-    if removed:
-        say("p2p-aggregator retiré (ses données restent dans config/p2p-aggregator)")
+    RETIRED_MARKER.unlink(missing_ok=True)
+    say("p2p-aggregator : image et sources supprimées (ses données restent dans config/p2p-aggregator)")
 
 
 def github_set_token(token):
@@ -2577,6 +2592,10 @@ def refresh():
         say(f"nouvelles adresses : {env_read()['PUBLIC_HOSTS']}")
         for warning in apply_addresses():
             say(f"attention : {warning}")
+    try:
+        retire_old_apps(purge=True)     # supprime l'image et les sources de p2p-aggregator une fois le délai de retour arrière passé
+    except (SeedboxError, OSError) as error:
+        say(f"p2p-aggregator : {error}")
     try:
         qbit_heal_interface()   # qBittorrent lié à tun0 sans VPN : plus aucune connexion
     except (SeedboxError, OSError) as error:

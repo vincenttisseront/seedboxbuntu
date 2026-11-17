@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 SRC = os.environ.get("SB_SRC") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,13 +42,20 @@ data.mkdir(parents=True)
 
 ctl.retire_old_apps()
 check("conteneurs p2p-aggregator et tracker-session supprimés", ("docker", "rm", "-f", "p2p-aggregator") in calls and ("docker", "rm", "-f", "tracker-session") in calls, str(calls))
+check("mise à jour : images, sources et archive gardées (retour arrière possible)", sources.exists() and archive.exists() and not any(c[1] == "rmi" for c in calls), str(calls))
+check("mise à jour : le délai de grâce démarre", ctl.RETIRED_MARKER.exists())
+calls.clear()
+ctl.retire_old_apps(purge=True)
+check("purge trop tôt : rien n'est supprimé", sources.exists() and archive.exists() and not calls)
+ctl.RETIRED_MARKER.write_text(str(int(time.time()) - ctl.RETIRED_GRACE - 60) + "\n")
+ctl.retire_old_apps(purge=True)
 check("images supprimées (current, previous, candidate)", all(("docker", "rmi", "-f", f"seedbox/{n}:{t}") in calls for n in ("p2p-aggregator", "tracker-session") for t in ("current", "previous", "candidate")))
-check("sources et archive d'image supprimées", not sources.exists() and not archive.exists())
+check("sources et archive d'image supprimées, délai effacé", not sources.exists() and not archive.exists() and not ctl.RETIRED_MARKER.exists())
 check("les données (base, comptes de trackers) ne sont jamais effacées", (data / "p2p.db").read_text() == "comptes de trackers")
 check("l'utilisateur est informé, données mentionnées", any("restent dans config/p2p-aggregator" in m for m in said), str(said))
 calls.clear(); said.clear()
-ctl.retire_old_apps()
-check("relancé : idempotent, rien d'à signaler", not said and ("docker", "rm", "-f", "p2p-aggregator") in calls)
+ctl.retire_old_apps(purge=True)
+check("purge relancée : idempotente, rien à signaler", not said and not calls)
 
 # --- plus aucune trace dans la stack et les modèles -----------------------------------------------------------------------------------------
 compose = yaml.safe_load((Path(SRC) / "stack/docker-compose.yml").read_text())
