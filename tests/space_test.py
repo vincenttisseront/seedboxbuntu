@@ -117,6 +117,12 @@ class Shares:
     def mounted_targets():
         return []
 
+    on_share = set()
+
+    @classmethod
+    def volume(cls, role):
+        return "nas" if role in cls.on_share else "local"
+
 
 ctl.shares = lambda: Shares
 found = space.remedies(scan_data, volume)
@@ -140,6 +146,15 @@ calm = space.remedies({"items": [{"id": "media", "size": G, "children": []}]}, {
 check("disque sain : aucun remède superflu", calm == [], str(calm))
 Shares.mounted_targets = staticmethod(lambda: [root / "mnt/shares/nas"])
 mounted = space.remedies({"items": [{"id": "media", "size": 20 * G, "children": []}]}, volume)
+# bibliothèque déjà sur un partage mais ancien contenu resté en local
+Shares.on_share = {"movies", "music"}
+stranded = space.remedies({"items": [{"id": "media", "size": 30 * G, "children": [{"name": "movies", "size": 25 * G}, {"name": "tv", "size": 4 * G}, {"name": "music", "size": 100 * M}]}]}, volume)
+sid = {r["id"]: r for r in stranded}
+check("conseil : films restés en local alors que le partage est réglé", "media-stranded" in sid and sid["media-stranded"]["reclaim"] == 25 * G and "Films" in sid["media-stranded"]["why"] and sid["media-stranded"]["view"] == "library", str(sid.get("media-stranded")))
+check("conseil : sous 1 Gio resté en local, la musique n'est pas citée", "Musique" not in sid["media-stranded"]["why"])
+check("conseil : le reste en local (sous 5 % du disque) ne redéclenche pas « ranger sur un partage »", "media-share" not in sid)
+Shares.on_share = set()
+check("conseil : aucune bibliothèque sur un partage → pas de déplacement proposé", "media-stranded" not in {r["id"]: r for r in space.remedies(scan_data, volume)})
 check("conseil : partage monté → pas de mention d'absence", "aucun partage" not in {r["id"]: r for r in mounted}["media-share"]["why"].lower())
 
 # --- analyse, mémoire, aperçu --------------------------------------------------------------------------------------------------

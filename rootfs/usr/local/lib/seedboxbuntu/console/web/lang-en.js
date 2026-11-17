@@ -1786,6 +1786,7 @@ window.I18N_EN = {
   "Les torrents terminés restent en seed ; qbit_manage peut retirer ceux qui ont atteint leur objectif.": "Finished torrents keep seeding; qbit_manage can remove those that have reached their goal.",
   "Agrandir le disque": "Grow the disk",
   "Agrandissez le disque virtuel dans votre hyperviseur, puis étendez la partition et le système de fichiers (growpart puis resize2fs, ou lvextend, selon votre disposition).": "Enlarge the virtual disk in your hypervisor, then extend the partition and the file system (growpart then resize2fs, or lvextend, depending on your layout).",
+  "Déplacer vers le partage ce qui est resté sur le disque local": "Move to the share what stayed on the local disk",
   "Bannissements": "Bans",
   "fail2ban bloque pendant un temps croissant l’adresse qui échoue trop souvent à se connecter en SSH. Ici : qui est banni, débannir ou bannir une adresse, adresses jamais bannies, seuils. La connexion web a sa propre protection (5 essais, puis 10 minutes).": "fail2ban blocks, for a growing time, any address that fails too often to log in over SSH. Here: who is banned, unban or ban an address, addresses never banned, thresholds. Web sign-in has its own protection (5 attempts, then 10 minutes).",
   "Ne jamais bannir mon adresse": "Never ban my address",
@@ -2154,6 +2155,7 @@ window.I18N_PATTERNS = [
   P(/^environ (.+)$/, (a) => `about ${a}`),
   P(/^Dernière mesure : ((?:(?! · ).)+)\. Le remplissage affiché est celui du moment\.$/, (a) => `Last measurement: ${a}. The fill level shown is the current one.`),
   P(/^Conserve les (\d+) Mo les plus récents\.$/, (a) => `Keeps the ${a} MB most recent.`),
+  P(/^Vos bibliothèques \((.+)\) sont déjà réglées sur un partage, mais d'anciens titres sont restés sur le disque local : changer l'emplacement ne déplace pas l'existant\. Dans Radarr ou Sonarr, « Édition en masse » → « Déplacer les fichiers » vers le dossier racine du partage, ou la page Bibliothèques pour déplacer les titres inactifs\.$/, (a) => `Your libraries (${a.split(', ').map((part) => window.tr(part)).join(', ')}) are already set to a share, but old titles stayed on the local disk: changing the location does not move existing files. In Radarr or Sonarr, use “Mass Editor” → “Move files” to the share's root folder, or the Libraries page to move inactive titles.`),
   // --- étiquettes d'accessibilité des listes à cocher (en queue : elles ne passent qu'à défaut d'un modèle plus précis) ---
   P(/^Relier (.+)$/, (a) => `Link ${a}`),
   P(/^Déplacer (.+)$/, (a) => `Move ${a}`),

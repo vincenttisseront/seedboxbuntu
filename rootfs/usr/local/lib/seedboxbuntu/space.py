@@ -82,6 +82,8 @@ def journal_bytes():
     return ctl.sysinfo().size_to_bytes(found.group(1).replace(",", ".") + (found.group(2) + "iB" if found.group(2) else "B")) if found else 0
 
 
+LIBRARY_DIRS = {"movies": "Films", "tv": "Séries", "music": "Musique", "books": "Livres", "audiobooks": "Livres audio"}
+STRANDED_MIN = 1 << 30           # moins de 1 Gio resté en local : pas la peine d'en parler
 DOCKER_LABELS = {"Images": "Images Docker", "Containers": "Conteneurs Docker", "Local Volumes": "Volumes Docker", "Build Cache": "Cache de construction Docker"}
 
 
@@ -253,10 +255,28 @@ def remedies(volume_scan, live):
         has_share = bool(ctl.shares().mounted_targets())
     except Exception:  # noqa: BLE001 - partages illisibles : conseil non proposé
         has_share = False
-    if media and media["size"] > live["total"] * 0.05:
+    # Bibliothèques déjà réglées sur un partage mais dont l'ancien contenu est resté sur le disque local : changer
+    # l'emplacement ne déplace rien, c'est la cause la plus fréquente d'une médiathèque « locale » encore lourde.
+    stranded, stranded_roles = 0, []
+    if media:
+        for role, label in LIBRARY_DIRS.items():
+            try:
+                on_share = ctl.shares().volume(role) not in ("local", None)
+            except Exception:  # noqa: BLE001 - rôle illisible : on ne conclut rien
+                on_share = False
+            size = sum(c["size"] for c in media.get("children", []) if c["name"] == role)
+            if on_share and size > STRANDED_MIN:
+                stranded += size
+                stranded_roles.append(label)
+    if stranded:
+        add("media-stranded", "Déplacer vers le partage ce qui est resté sur le disque local",
+            "Vos bibliothèques (" + ", ".join(stranded_roles) + ") sont déjà réglées sur un partage, mais d'anciens titres sont restés sur le disque local : "
+            "changer l'emplacement ne déplace pas l'existant. Dans Radarr ou Sonarr, « Édition en masse » → « Déplacer les fichiers » vers le dossier racine du partage, "
+            "ou la page Bibliothèques pour déplacer les titres inactifs.", stranded, "advice", view="library")
+    if media and media["size"] - stranded > live["total"] * 0.05:
         add("media-share", "Ranger la médiathèque sur un partage réseau" if has_share else "Ranger la médiathèque sur un partage réseau (NAS)",
             "Définissez l'emplacement des films, séries, musique ou livres sur un partage : ils ne sont plus sur le disque local."
-            + ("" if has_share else " Aucun partage n'est monté pour l'instant : ajoutez-en un dans Partages."), media["size"], "advice", view="shares")
+            + ("" if has_share else " Aucun partage n'est monté pour l'instant : ajoutez-en un dans Partages."), media["size"] - stranded, "advice", view="shares")
     downloads = items.get("downloads")
     if downloads and downloads["size"] > live["total"] * 0.10:
         add("seeds", "Régler la durée et le ratio des seeds", "Les torrents terminés restent en seed ; qbit_manage peut retirer ceux qui ont atteint leur objectif.",
