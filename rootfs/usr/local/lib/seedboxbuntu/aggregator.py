@@ -839,9 +839,19 @@ def qbit_session():
     base = ctl.svc(ctl.qbit_host(), 8080) + "/api/v2"
     body = urllib.parse.urlencode({"username": env.get("QBIT_USERNAME", ""), "password": env.get("QBIT_PASSWORD", "")}).encode()
     reply = call("POST", base + "/auth/login", {"Content-Type": "application/x-www-form-urlencoded"}, body, 20)
-    if reply.status != 200 or reply.body.strip() != b"Ok.":
-        raise ctl.SeedboxError(f"qBittorrent : connexion refusée (HTTP {reply.status})")
-    return base, {"Cookie": reply.cookie}
+    if reply.status == 200 and reply.body.strip() == b"Ok.":
+        return base, {"Cookie": reply.cookie}
+    if reply.status == 204 or (reply.status == 200 and not reply.body.strip()):
+        # Réponse vide : qBittorrent n'exige pas de session pour cette adresse (réseau de confiance) ; on le vérifie avant de continuer
+        probe = call("GET", base + "/app/version", {}, None, 20)
+        if probe.status == 200:
+            return base, {}
+        raise ctl.SeedboxError(f"qBittorrent : connexion sans session refusée (login HTTP {reply.status}, puis HTTP {probe.status})")
+    if reply.status == 200:
+        raise ctl.SeedboxError("qBittorrent : identifiant ou mot de passe refusé (comparez QBIT_USERNAME et QBIT_PASSWORD avec l'interface de qBittorrent)")
+    if reply.status == 403:
+        raise ctl.SeedboxError("qBittorrent : adresse temporairement bannie après trop d'échecs de connexion (HTTP 403) ; attendez quelques minutes")
+    raise ctl.SeedboxError(f"qBittorrent : connexion refusée (HTTP {reply.status})")
 
 
 def send(torrent_id, force=False, now=None):

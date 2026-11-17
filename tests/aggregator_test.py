@@ -309,7 +309,7 @@ check("envoi : redirection vers un magnet suivie, ajouté par adresse", magnet["
 check("envoi : réponse qui n'est pas un .torrent → message clair", "n'a pas fourni" in (fails(agg.send, row_id("Film.Casse.2024.1080p")) or ""))
 check("envoi : torrent purgé → message clair", "introuvable" in (fails(agg.send, 99999) or ""))
 world["qbit_login"] = False
-check("envoi : connexion qBittorrent refusée → message clair", "connexion refusée" in (fails(agg.send, row_id("Film.Envoi.2024.1080p"), True) or ""))
+check("envoi : connexion qBittorrent refusée → message clair", "mot de passe refusé" in (fails(agg.send, row_id("Film.Envoi.2024.1080p"), True) or ""))
 world["qbit_login"] = True
 running_before = ctl.container_running
 ctl.container_running = lambda name: name in ("prowlarr", "jackett")
@@ -381,6 +381,27 @@ with agg.connect() as con:
 check("migration : colonne « details » ajoutée, lignes conservées", "details" in columns and kept["title"] == "Ancien.2019" and kept["details"] is None)
 with agg.connect() as con:
     check("migration : un second accès ne refait rien", "details" in {r["name"] for r in con.execute("PRAGMA table_info(torrents)")})
+
+# --- connexion à qBittorrent : réponses de connexion inhabituelles ---------------------------------------------------------
+real_call = agg.call
+def qbit_reply(login, probe=None):
+    def fake(method, url, headers=None, data=None, timeout=60):
+        if url.endswith("/auth/login"):
+            return login
+        if url.endswith("/app/version"):
+            return probe
+        raise AssertionError(url)
+    agg.call = fake
+    try:
+        return agg.qbit_session()
+    except ctl.SeedboxError as error:
+        return str(error)
+    finally:
+        agg.call = real_call
+check("qBittorrent : réponse 204 sans session acceptée quand l'adresse est de confiance", qbit_reply(Reply(204, {}, b"", ""), Reply(200, {}, b"v5", ""))[1] == {})
+check("qBittorrent : réponse 204 puis accès refusé -> message précis", "login HTTP 204, puis HTTP 403" in qbit_reply(Reply(204, {}, b"", ""), Reply(403, {}, b"", "")))
+check("qBittorrent : « Fails. » -> identifiants refusés", "mot de passe refusé" in qbit_reply(Reply(200, {}, b"Fails.", "")))
+check("qBittorrent : 403 -> adresse bannie", "bannie" in qbit_reply(Reply(403, {}, b"", "")))
 
 print(f"échecs : {bad}")
 sys.exit(1 if bad else 0)
