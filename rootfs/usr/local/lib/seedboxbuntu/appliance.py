@@ -765,6 +765,21 @@ def health_snapshot():
     return {f"{item['group']} : {item['label']}": item["status"] for item in items}
 
 
+def reload_modules():
+    """Oublie les modules de l'appliance déjà importés : après le remplacement des fichiers, le contrôle de santé doit
+    être celui de la NOUVELLE version (sinon un service retiré serait encore attendu et provoquerait un retour arrière)."""
+    here = Path(__file__).resolve().parent
+    for name, module in list(sys.modules.items()):
+        if name in ("appliance", "seedboxctl", "__main__"):   # seedboxctl reste : ses exceptions doivent rester les mêmes
+            continue
+        try:
+            origin = Path(getattr(module, "__file__", "") or "").resolve()
+        except (OSError, RuntimeError):
+            continue
+        if origin.parent == here:
+            sys.modules.pop(name, None)
+
+
 def guard_wait(baseline):
     """Observe jusqu'à GUARD_WAIT secondes. (sain, contrôles qui échouent maintenant et réussissaient avant)."""
     known = {name for name, state in baseline.items() if state == "fail"}
@@ -882,6 +897,7 @@ def apply(ref=None, force=False):
     complete = finalize(f"de {before} vers {new_version} (console, {head['short']})")
     healthy, problems = True, []
     if baseline is not None:
+        reload_modules()                                      # les contrôles de la nouvelle version, pas ceux de l'ancienne
         healthy, problems = guard_wait(baseline)
     elif cfg["guard"]:
         ctl.say("garde-fou : contrôle de santé indisponible avant la mise à jour, pas de retour automatique")

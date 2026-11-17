@@ -430,6 +430,20 @@ app.health_snapshot = lambda: None
 check("garde-fou : contrôle indisponible -> pas de retour automatique", app.guard_wait({"A": "ok"})[0] is True)
 app.health_snapshot = fake_health
 
+# Le garde-fou doit juger avec les contrôles de la NOUVELLE version : un service retiré ne doit plus être attendu
+import types
+from pathlib import Path
+fake = types.ModuleType("health_ancien")
+fake.__file__ = str(Path(app.__file__).resolve().parent / "health_ancien.py")
+sys.modules["health_ancien"] = fake
+dehors = types.ModuleType("module_exterieur")
+dehors.__file__ = "/usr/lib/python3/dehors.py"
+sys.modules["module_exterieur"] = dehors
+app.reload_modules()
+check("garde-fou : les modules de l'appliance sont rechargés après l'installation", "health_ancien" not in sys.modules)
+check("garde-fou : les modules extérieurs et appliance sont conservés", "module_exterieur" in sys.modules and "seedboxctl" in sys.modules)
+sys.modules.pop("module_exterieur", None)
+
 STATE_SERVER["head"] = "sick"
 TARBALLS[SHA["sick"]] = tarball(None, SHA["sick"], add_v2)
 before_sick = snapshot(SYSTEM)
