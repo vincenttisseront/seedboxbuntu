@@ -493,6 +493,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.bans().overview(self.client_address_text()))
         if path == "/api/subdomains":
             return self.send_json(ctl.subdomains().overview())
+        if path == "/api/space":
+            return self.send_json(ctl.space().overview())
         if path == "/api/aggregator":
             return self.send_json(ctl.aggregator().dashboard())
         if path == "/api/aggregator/catalogue":
@@ -700,6 +702,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ctl.SeedboxError(f"mot de passe invalide : {ctl.MIN_PASSWORD} caractères au minimum")
             argv = ["apppass", "reset", app] + (["--login", login] if login else [])
             return self.send_json({"job": start_job("Mot de passe de " + ctl.apppasswords().APPS[app], argv, password)})
+        if path == "/api/space/scan":
+            return self.send_json({"job": start_job("Analyse de l'espace disque", ["space", "scan"])})
+        if path == "/api/space/fix":
+            name = str(data.get("id", ""))
+            if name not in ctl.space().FIXES:
+                raise ctl.SeedboxError("correctif inconnu")
+            return self.send_json({"job": start_job("Libération d'espace", ["space", "fix", name])})
         if path.startswith("/api/subdomains/"):
             module = ctl.subdomains()
             if path == "/api/subdomains/set":

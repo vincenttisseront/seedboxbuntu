@@ -108,6 +108,30 @@ pr = agg.parse_prowlarr(json.dumps([{"title": "X.2020.1080p", "guid": "u", "inde
 check("Prowlarr : champs lus", (pr[0]["tracker"], pr[0]["imdb"], pr[0]["cats"], pr[0]["seeders"]) == ("I", "tt0123456", ["2040"], 4), str(pr))
 check("Prowlarr : message d'erreur remonté", "Unauthorized" in (fails(agg.parse_prowlarr, json.dumps({"message": "Unauthorized"}), "P") or ""))
 
+# ------------------------------------------------------------------ page du torrent sur le tracker
+rss = ('<?xml version="1.0"?><rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel>'
+       '<item><title>Page.Un.2020.1080p</title><guid>https://tracker.exemple/torrent/42</guid><comments>https://tracker.exemple/torrent/42#comments</comments>'
+       '<link>http://j/dl/idx/?jackett_apikey=SECRET&amp;path=abc</link><jackettindexer id="x">T</jackettindexer></item>'
+       '<item><title>Page.Deux.2020.1080p</title><guid>https://tracker.exemple/details.php?id=7</guid><link>http://j/dl/idx/?jackett_apikey=SECRET</link></item>'
+       '<item><title>Page.Trois.2020.1080p</title><guid>https://tracker.exemple/dl/7?passkey=ABC</guid><comments>https://tracker.exemple/t/7?apikey=XYZ</comments><link>http://j/dl/3</link></item>'
+       '<item><title>Page.Quatre.2020.1080p</title><guid>abc-123</guid><link>http://j/dl/4</link></item>'
+       '<item><title>Page.Cinq.2020.1080p</title><guid>javascript:alert(1)</guid><comments>magnet:?xt=urn:btih:' + "c" * 40 + '</comments><link>http://j/dl/5</link></item>'
+       '</channel></rss>')
+pages = {r["title"]: r["details"] for r in agg.parse_torznab(rss, "Jackett")}
+check("page tracker : lue depuis <comments>", pages["Page.Un.2020.1080p"] == "https://tracker.exemple/torrent/42#comments", str(pages))
+check("page tracker : à défaut, le guid quand c'est une page web", pages["Page.Deux.2020.1080p"] == "https://tracker.exemple/details.php?id=7")
+check("page tracker : jamais une adresse qui porte une clé ou un téléchargement", pages["Page.Trois.2020.1080p"] == "")
+check("page tracker : guid qui n'est pas une adresse ignoré", pages["Page.Quatre.2020.1080p"] == "")
+check("page tracker : schémas javascript et magnet refusés", pages["Page.Cinq.2020.1080p"] == "")
+check("page tracker : l'adresse de téléchargement n'est jamais une page", agg.page_url("http://j/dl/1", download="http://j/dl/1") == "")
+check("page tracker : jeton dans l'adresse refusé", agg.page_url("https://t.exemple/x?token=1") == "" and agg.page_url("https://t.exemple/x?rss_key=1") == "")
+check("page tracker : adresse trop longue refusée", agg.page_url("https://t.exemple/" + "a" * 600) == "")
+check("page tracker : un guid de type « guid » n'est pas pris pour une clé", agg.page_url("https://t.exemple/t?guid=5") == "https://t.exemple/t?guid=5")
+pr2 = agg.parse_prowlarr(json.dumps([{"title": "P.Un.2020.1080p", "guid": "https://t.exemple/t/1", "infoUrl": "https://t.exemple/torrent/1", "downloadUrl": "http://p/1/download?apikey=K&file=x"},
+                                     {"title": "P.Deux.2020.1080p", "guid": "https://t.exemple/t/2", "downloadUrl": "http://p/2/download"},
+                                     {"title": "P.Trois.2020.1080p", "guid": "xyz", "downloadUrl": "http://p/3/download"}]), "Prowlarr")
+check("Prowlarr : infoUrl, sinon guid web, sinon rien", [r["details"] for r in pr2] == ["https://t.exemple/torrent/1", "https://t.exemple/t/2", ""], str([r["details"] for r in pr2]))
+
 # ------------------------------------------------------------------ simulation des services
 ctl.container_running = lambda name: name in ("prowlarr", "jackett", "qbittorrent")
 ctl.svc = lambda name, port: f"http://{name}:{port}"
@@ -319,6 +343,44 @@ agg.configure(enabled=True)
 agg.LOCK_FILE.write_text(str(os.getppid()))
 check("collecte déjà en cours : seconde refusée", "déjà en cours" in (fails(agg.sync) or "") and agg.tick(late + 10 ** 6, launcher=lambda: launched.append(3)) is False)
 agg.LOCK_FILE.unlink()
+
+# ------------------------------------------------------------------ la page du tracker traverse le catalogue
+with agg.connect() as con:
+    idx = agg.Index(con)
+    agg.ingest(con, agg.parse_torznab(rss, "Jackett")[:2], "src-page", late, idx, 0)
+    agg.ingest(con, [{**agg.parse_torznab(rss, "Jackett")[3], "details": ""}], "src-page", late, idx, 0)
+    refreshed = [{**agg.parse_torznab(rss, "Jackett")[0], "details": "https://tracker.exemple/torrent/42"}]
+    agg.ingest(con, refreshed, "src-page", late + 5, idx, 0)
+    stored = {r["title"]: r["details"] for r in con.execute("SELECT title, details FROM torrents WHERE source = 'src-page'")}
+check("page tracker : enregistrée à l'insertion", stored["Page.Deux.2020.1080p"] == "https://tracker.exemple/details.php?id=7", str(stored))
+check("page tracker : mise à jour quand elle change", stored["Page.Un.2020.1080p"] == "https://tracker.exemple/torrent/42")
+check("page tracker : absente = chaîne vide, pas de valeur nulle", stored["Page.Quatre.2020.1080p"] == "")
+shown = {v["torrent_title"]: v["details"] for w in agg.catalogue(period="all", q="Page", now=late + 10)["works"] for g in (w["groups"] or []) for v in g["variants"]}
+check("page tracker : exposée par le catalogue, sans aucune clé", shown.get("Page.Deux.2020.1080p") == "https://tracker.exemple/details.php?id=7"
+      and not any("apikey" in (v or "").lower() for v in shown.values()), str(shown))
+with agg.connect() as con:
+    con.execute("UPDATE torrents SET details = NULL WHERE title = 'Page.Deux.2020.1080p'")
+    agg.ingest(con, [agg.parse_torznab(rss, "Jackett")[1]], "src-page", late + 9, agg.Index(con), 0)
+    con.execute("UPDATE torrents SET details = NULL")
+check("catalogue : une ancienne ligne sans page ne casse rien", all(isinstance(v, str) for w in agg.catalogue(period="all", now=late + 11)["works"] for g in (w["groups"] or []) for v in g["variants"] for v in [v["details"]]))
+
+# ancienne base (avant la colonne « page ») : migrée au premier accès, données conservées
+import sqlite3 as _sqlite3
+agg.DB_FILE.unlink()
+legacy = _sqlite3.connect(agg.DB_FILE)
+legacy.execute("CREATE TABLE torrents (id INTEGER PRIMARY KEY, work_id INTEGER NOT NULL, source TEXT NOT NULL, guid TEXT NOT NULL, ref TEXT NOT NULL, title TEXT NOT NULL, "
+               "norm_title TEXT NOT NULL, tracker TEXT NOT NULL, category TEXT NOT NULL, bucket TEXT NOT NULL, qrank INTEGER NOT NULL, link TEXT, magnet TEXT, infohash TEXT, "
+               "size INTEGER NOT NULL DEFAULT 0, seeders INTEGER NOT NULL DEFAULT 0, leechers INTEGER NOT NULL DEFAULT 0, grabs INTEGER NOT NULL DEFAULT 0, published INTEGER, "
+               "first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, UNIQUE(source, guid))")
+legacy.execute("INSERT INTO torrents(work_id, source, guid, ref, title, norm_title, tracker, category, bucket, qrank, first_seen, last_seen) VALUES(1,'s','g','r','Ancien.2019','ancien','T','films','FHD',1,1,1)")
+legacy.commit()
+legacy.close()
+with agg.connect() as con:
+    columns = {r["name"] for r in con.execute("PRAGMA table_info(torrents)")}
+    kept = con.execute("SELECT title, details FROM torrents").fetchone()
+check("migration : colonne « details » ajoutée, lignes conservées", "details" in columns and kept["title"] == "Ancien.2019" and kept["details"] is None)
+with agg.connect() as con:
+    check("migration : un second accès ne refait rien", "details" in {r["name"] for r in con.execute("PRAGMA table_info(torrents)")})
 
 print(f"échecs : {bad}")
 sys.exit(1 if bad else 0)

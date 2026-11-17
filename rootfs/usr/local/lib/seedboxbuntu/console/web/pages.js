@@ -37,6 +37,9 @@ async function overviewSpace() {
   const kind = levelOf(worst.percent);
   setTile('tile-space', kind, fmtPercent(worst.percent), `${worst.label} : ${fmtSize(Math.max(0, worst.total - worst.used))} libres sur ${fmtSize(worst.total)}`,
     kind === 'ok' ? 'OK' : kind === 'err' ? 'Critique' : 'Presque plein');
+  const more = $('tile-space').querySelector('.more-link');
+  more.setAttribute('href', kind === 'ok' ? '#system' : '#cleanup');
+  more.textContent = kind === 'ok' ? 'Voir le système' : 'Voir ce qui prend de la place';
 }
 
 async function overviewUpdates() {
@@ -56,7 +59,8 @@ async function overviewAlerts() {
   setTile('tile-alerts', worst, String(active.length), active.length ? active[0].title : 'Aucun problème constaté.', worst === 'ok' ? 'OK' : worst === 'err' ? 'Erreur' : 'Attention');
   $('overview-alerts').replaceChildren(...(active.length
     ? active.map((a) => el('li', {}, pill(a.notified ? 'signalé' : 'constaté', { critical: 'err', warning: 'warn' }[a.level] || 'warn'), ` ${a.title}`,
-      a.detail ? el('span', { class: 'muted' }, ` : ${a.detail}`) : null))
+      a.detail ? el('span', { class: 'muted' }, ` : ${a.detail}`) : null,
+      a.key && a.key.startsWith('disque:') ? [' ', el('a', { href: '#cleanup' }, 'Voir ce qui prend de la place')] : null))
     : [emptyItem('Aucun problème constaté.')]));
 }
 

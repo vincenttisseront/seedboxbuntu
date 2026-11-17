@@ -246,6 +246,20 @@ def route(p, q, role="admin", PREFS=None):
                      {"login": "marie", "guest": False, "label": "", "expires": 0, "created": 0, "profile": {"account_days": 0, "max_sessions": 0, "bitrate_mbps": 0, "downloads": True, "seerr_movie_limit": 0, "seerr_movie_days": 7, "seerr_tv_limit": 0, "seerr_tv_days": 7}}],
         "defaults": {"account_days": 0, "max_sessions": 0, "bitrate_mbps": 0, "downloads": True, "seerr_movie_limit": 0, "seerr_movie_days": 7, "seerr_tv_limit": 0, "seerr_tv_days": 7},
         "limits": {"account_days": [0, 365], "max_sessions": [0, 10], "bitrate_mbps": [0, 200], "seerr_movie_limit": [0, 100], "seerr_movie_days": [1, 90], "seerr_tv_limit": [0, 100], "seerr_tv_days": [1, 90]}, "history": ["2026-11-10 invitation créée : Marie", "2026-11-10 compte paul créé"]}
+    if p == "/api/space": return {"scanned": now - 900, "volumes": [
+        {"label": "stockage", "path": "/mnt/storage", "total": 94.86e9, "used": 86.44e9, "free": 8.42e9, "percent": 91, "level": "warning",
+         "items": [{"id": "downloads", "label": "Téléchargements", "path": "/mnt/storage/downloads", "size": 52e9, "hint": "Fichiers de qBittorrent : seeds en cours et téléchargements terminés.",
+                    "children": [{"name": "radarr", "size": 38e9}, {"name": "sonarr", "size": 14e9}]},
+                   {"id": "media", "label": "Médiathèque locale", "path": "/mnt/storage/media", "size": 21e9, "hint": "Films, séries, musique et livres rangés sur ce disque.", "children": [{"name": "films", "size": 17e9}]},
+                   {"id": "docker-images", "label": "Images Docker", "path": "/var/lib/docker", "size": 6e9, "hint": "Géré par Docker (docker system df).", "children": [], "reclaimable": 3e9},
+                   {"id": "trash", "label": "Corbeille du nettoyage", "path": "/mnt/storage/.corbeille", "size": 2e9, "hint": "Éléments mis de côté.", "children": []}],
+         "other": 5.44e9, "biggest": [{"path": "downloads/radarr/Gros.Film.2020.2160p", "size": 25e9}, {"path": "media/films/Titre (2019)", "size": 12e9}],
+         "remedies": [{"id": "cleanup-orphan", "title": "Supprimer les téléchargements orphelins", "why": "Fichiers que qBittorrent ne suit plus et qui n'ont pas de copie en médiathèque.", "reclaim": 12e9, "kind": "page", "view": "cleanup"},
+                      {"id": "docker", "title": "Nettoyer Docker (images inutilisées et cache de construction)", "why": "Anciennes versions d'images laissées par les mises à jour.", "reclaim": 3e9, "kind": "fix", "fix": "docker"},
+                      {"id": "trash-empty", "title": "Vider la corbeille du nettoyage", "why": "Ces éléments sont déjà mis de côté.", "reclaim": 2e9, "kind": "fix", "fix": "trash-empty"},
+                      {"id": "media-share", "title": "Ranger la médiathèque sur un partage réseau", "why": "Définissez l'emplacement des films, séries, musique ou livres sur un partage : ils ne sont plus sur le disque local.", "reclaim": 21e9, "kind": "advice", "view": "shares"},
+                      {"id": "seeds", "title": "Régler la durée et le ratio des seeds", "why": "Les torrents terminés restent en seed ; qbit_manage peut retirer ceux qui ont atteint leur objectif.", "reclaim": 15e9, "kind": "advice", "view": "seeds", "estimate": True},
+                      {"id": "grow", "title": "Agrandir le disque", "why": "Agrandissez le disque virtuel dans votre hyperviseur, puis étendez la partition et le système de fichiers (growpart puis resize2fs, ou lvextend, selon votre disposition).", "reclaim": 0, "kind": "advice"}]}]}
     if p == "/api/cleanup": return {"scanned": now - 600, "notes": ["Analyse limitée aux 400 plus gros éléments par catégorie."], "total": 120e9, "categories": [
         {"id": "orphan", "label": "Téléchargements orphelins", "hint": "Plus suivis par qBittorrent et sans copie en bibliothèque", "trashable": True, "count": 2, "size": 90e9, "items": [
             {"id": "a1" * 6, "category": "orphan", "path": "/mnt/storage/downloads/Film.2019.2160p.mkv", "name": "Film.2019.2160p.mkv", "size": 60e9, "mtime": now - 86400 * 50, "reason": "torrent supprimé il y a 50 jours, aucun lien dur"},
@@ -303,7 +317,8 @@ def route(p, q, role="admin", PREFS=None):
                     {"id": "mon-indexeur", "name": "Mon indexeur", "auto": False, "enabled": False, "present": True, "state": "off", "last": None, "error": None, "collected": 0, "new": 0, "ms": 0, "fails": 0, "torrents": 2, "url": "https://indexeur.exemple/api?apikey=•••", "has_key": True}]}
     if p == "/api/aggregator/catalogue":
         def variant(i, title, tracker, bucket, seeders, label=None, sent=False):
-            return {"id": i, "torrent_title": title, "label": label, "tracker": tracker, "bucket": bucket, "size": 4.2e9, "seeders": seeders, "leechers": 2, "grabs": 40, "published": now - 3600 * i, "sent": sent, "magnet": False, "link": True}
+            return {"id": i, "torrent_title": title, "label": label, "tracker": tracker, "bucket": bucket, "size": 4.2e9, "seeders": seeders, "leechers": 2, "grabs": 40, "published": now - 3600 * i, "sent": sent, "magnet": False, "link": True,
+                    "details": "" if i in (4, 5, 6) else f"https://tracker-{tracker[-1].lower()}.exemple/torrent/{i}"}
         works = [{"id": 1, "title": "The Matrix", "category": "films", "label": "Films", "year": 1999, "imdb": "tt0133093", "tmdb": None, "latest": now - 3600, "seeders": 30, "leechers": 2, "grabs": 40, "count": 3,
                   "trackers": ["Tracker A", "Tracker B"], "qualities": ["4K", "FHD"], "seasons": None,
                   "groups": [{"bucket": "4K", "variants": [variant(2, "Matrix 1999 2160p UHD", "Tracker B", "4K", 5)]},

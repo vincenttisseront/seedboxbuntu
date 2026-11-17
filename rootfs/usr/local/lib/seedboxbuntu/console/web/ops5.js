@@ -398,37 +398,64 @@ function resetAppPassword(event) {
 const AGG_PERIODS = [['24h', 'Nouveautés 24 h'], ['week', 'Cette semaine'], ['all', 'Tout']];
 const AGG_SOURCE_STATE = { ok: ['ok', 'actif'], partial: ['warn', 'partiel'], error: ['err', 'en échec'], wait: ['info', 'en attente'], off: ['unknown', 'désactivé'], absent: ['unknown', 'non installé'] };
 const AGG_INTERVALS = { 15: '15 minutes', 30: '30 minutes', 60: '1 heure', 120: '2 heures', 180: '3 heures', 240: '4 heures', 360: '6 heures' };
-const aggState = { period: '24h', category: '', page: 1, pages: 1 };
+const aggState = { period: '24h', category: '', page: 1, pages: 1, open: new Set() };
+
+const aggPageLink = (v) => (v.details && /^https?:\/\//i.test(v.details)
+  ? el('a', { class: 'btn sm', href: v.details, target: '_blank', rel: 'noopener noreferrer', title: 'Page du torrent sur le tracker' }, 'Page ↗') : null);
+
+const aggSendCell = (v) => (v.sent ? pill('envoyé', 'ok')
+  : el('button', { class: 'btn sm primary', type: 'button', title: v.torrent_title, onclick: (event) => aggSend(event.currentTarget, v) }, 'Envoyer'));
 
 function aggVariantRow(v) {
-  const sendCell = v.sent ? pill('envoyé', 'ok') : el('button', { class: 'btn sm', type: 'button', onclick: (event) => aggSend(event.currentTarget, v) }, 'Envoyer');
   return el('tr', {},
-    el('td', {}, el('div', { class: 'no-i18n' }, v.torrent_title), v.label ? el('div', { class: 'muted small' }, v.label) : null),
+    el('td', { class: 'agg-name' }, el('div', { class: 'no-i18n' }, v.torrent_title), v.label ? el('div', { class: 'muted small' }, v.label) : null),
     el('td', {}, v.tracker), el('td', {}, v.size ? fmtSize(v.size) : '-'),
-    el('td', {}, `${fmtNumber(v.seeders, 0)} / ${fmtNumber(v.leechers, 0)}`), el('td', {}, fmtNumber(v.grabs, 0)),
-    el('td', {}, fmtDateTime(v.published)), el('td', {}, sendCell));
+    el('td', {}, `${fmtNumber(v.seeders, 0)} / ${fmtNumber(v.leechers, 0)}`),
+    el('td', {}, fmtDateTime(v.published)), el('td', { class: 'agg-actions' }, aggSendCell(v), aggPageLink(v)));
 }
 
 function aggVariantTable(groups) {
   const rows = [];
   for (const group of groups) {
-    rows.push(el('tr', { class: 'group-row' }, el('th', { colspan: 7, scope: 'colgroup' }, group.bucket)));
+    rows.push(el('tr', { class: 'group-row' }, el('th', { colspan: 6, scope: 'colgroup' }, group.bucket)));
     rows.push(...group.variants.map(aggVariantRow));
   }
-  return el('div', { class: 'table-wrap' }, el('table', {},
-    el('thead', {}, el('tr', {}, el('th', {}, 'Torrent'), el('th', {}, 'Tracker'), el('th', {}, 'Taille'), el('th', {}, 'Seeders / leechers'), el('th', {}, 'Téléch.'),
+  return el('div', { class: 'table-wrap' }, el('table', { class: 'compact' },
+    el('thead', {}, el('tr', {}, el('th', {}, 'Torrent'), el('th', {}, 'Tracker'), el('th', {}, 'Taille'), el('th', {}, 'Seeders / leechers'),
       el('th', {}, 'Publié'), el('th', {}, ''))),
     el('tbody', {}, rows)));
 }
 
+// Version proposée en un clic : la meilleure qualité, puis le plus de seeders. Pour une série, plusieurs saisons et épisodes
+// sont en jeu : on n'envoie pas à la place de l'utilisateur, il choisit dans le détail.
+function aggQuickVariant(work) {
+  if (work.groups && work.groups.length) return work.groups[0].variants[0];
+  if (work.count === 1 && work.seasons && work.seasons.length) return work.seasons[0].groups[0].variants[0];
+  return null;
+}
+
 function aggWork(work) {
-  const body = work.seasons
-    ? work.seasons.map((season) => el('div', {}, el('h3', { class: 'small' }, season.label), aggVariantTable(season.groups)))
-    : [aggVariantTable(work.groups || [])];
-  return el('details', { class: 'agg-work' },
-    el('summary', {}, el('strong', { class: 'no-i18n' }, work.title), work.year ? el('span', { class: 'muted' }, ` (${work.year})`) : null, ' ',
-      pill(work.label, 'info'), ' ', el('span', { class: 'muted small' }, `${fmtNumber(work.count, 0)} torrent${work.count > 1 ? 's' : ''} · ${work.trackers.join(', ')} · ${work.qualities.join(' ')} · ${fmtNumber(work.seeders, 0)} seeders · ${fmtDateTime(work.latest)}`)),
-    ...body);
+  const many = work.count > 1;
+  const quick = aggQuickVariant(work);
+  const body = el('div', { class: 'agg-body' },
+    ...(work.seasons ? work.seasons.map((season) => el('div', {}, el('h3', { class: 'small' }, season.label), aggVariantTable(season.groups)))
+      : [aggVariantTable(work.groups || [])]));
+  const toggle = many ? el('button', { class: 'btn sm agg-toggle', type: 'button', 'aria-label': 'Afficher les versions', 'aria-expanded': 'false' }, '▸')
+    : el('span', { class: 'agg-toggle' });
+  const show = (open) => {
+    body.hidden = !open;
+    if (many) { toggle.setAttribute('aria-expanded', String(open)); toggle.textContent = open ? '▾' : '▸'; }
+    if (open) aggState.open.add(work.id); else aggState.open.delete(work.id);
+  };
+  const flip = () => show(body.hidden);
+  const title = el('span', { class: 'agg-title' }, el('strong', { class: 'no-i18n' }, work.title), work.year ? el('span', { class: 'muted' }, ` (${work.year})`) : null);
+  if (many) { toggle.addEventListener('click', flip); title.addEventListener('click', flip); title.classList.add('clickable'); }
+  const meta = el('span', { class: 'agg-meta' },
+    `${fmtNumber(work.count, 0)} torrent${work.count > 1 ? 's' : ''} · ${work.trackers.join(', ')} · ${work.qualities.join(' ')} · ${fmtNumber(work.seeders, 0)} seeders · ${fmtDateTime(work.latest)}`);
+  const row = el('div', { class: 'agg-row' }, toggle, title, pill(work.label, 'info'), meta,
+    el('span', { class: 'agg-actions' }, quick ? aggSendCell(quick) : null, quick ? aggPageLink(quick) : null));
+  show(many && aggState.open.has(work.id));
+  return el('div', { class: 'agg-work' }, row, body);
 }
 
 function aggSegments(box, items, current, choose) {
@@ -517,7 +544,7 @@ async function loadAggregator() {
     : !sources.length ? 'Aucune source active : Prowlarr et Jackett sont lus s’ils tournent, ou ajoutez une source Torznab ci-dessous.'
     : !data.last_sync ? 'Aucune collecte pour le moment : cliquez sur « Collecter maintenant ».'
     : `Dernière collecte : ${fmtDateTime(data.last_sync)}${data.next_sync ? ` · prochaine vers ${fmtDateTime(data.next_sync)}` : ''}.`;
-  state.replaceChildren(headline, data.problems.length ? el('span', { class: 'no-i18n' }, ` ${data.problems.join(' ; ')}`) : null);
+  state.replaceChildren(...[headline, data.problems.length ? el('span', { class: 'no-i18n' }, ` ${data.problems.join(' ; ')}`) : null].filter(Boolean));
   $('agg-sources').replaceChildren(...(data.sources.length ? data.sources.map(aggSourceRow) : [emptyRow(7, 'Aucune source.')]));
   const t = data.totals;
   $('agg-totals').replaceChildren(

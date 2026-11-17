@@ -213,6 +213,8 @@ def connect():
     except sqlite3.Error:
         pass
     con.executescript(SCHEMA)
+    if "details" not in {row["name"] for row in con.execute("PRAGMA table_info(torrents)")}:
+        con.execute("ALTER TABLE torrents ADD COLUMN details TEXT")     # page du torrent sur le tracker
     return con
 
 
@@ -296,6 +298,25 @@ def to_int(value):
         return 0
 
 
+SECRET_KEYS = re.compile(r"(api_?key|pass_?key|torrent_?pass|rss_?key|token|secret|key)$", re.I)
+
+
+def page_url(*candidates, download=""):
+    """Première adresse utilisable comme page du torrent sur le tracker : http(s) seulement, jamais une adresse de téléchargement ni une
+    adresse qui porte une clé (clé d'API, passkey...) : elle s'afficherait dans la console et serait copiée par un clic."""
+    for value in candidates:
+        value = str(value or "").strip()
+        parts = urllib.parse.urlsplit(value)
+        if parts.scheme not in ("http", "https") or not parts.netloc or len(value) > 500 or value == download:
+            continue
+        if any(SECRET_KEYS.search(key) for key, _ in urllib.parse.parse_qsl(parts.query)):
+            continue
+        if re.search(r"/(dl|download|torrent/download|get)(/|$)", parts.path, re.I) or parts.path.lower().endswith((".torrent", ".magnet")):
+            continue
+        return value
+    return ""
+
+
 def parse_torznab(text, label):
     """Flux Torznab (RSS) → liste de torrents bruts."""
     if "<!DOCTYPE" in text[:2000].upper() or "<!ENTITY" in text.upper():
@@ -328,7 +349,9 @@ def parse_torznab(text, label):
         peers = to_int(attrs.get("peers"))
         indexer = (item.findtext("jackettindexer") or item.findtext("prowlarrindexer") or "").strip()
         magnet = attrs.get("magneturl") or (link if link.startswith("magnet:") else "")
-        out.append({"guid": (item.findtext("guid") or link or title).strip(), "title": title, "tracker": indexer or label, "link": link if not link.startswith("magnet:") else "",
+        guid = (item.findtext("guid") or link or title).strip()
+        out.append({"guid": guid, "details": page_url(item.findtext("comments"), guid, download=link), "title": title, "tracker": indexer or label,
+                    "link": link if not link.startswith("magnet:") else "",
                     "magnet": magnet, "infohash": (attrs.get("infohash") or "").lower() or None, "size": size, "seeders": seeders,
                     "leechers": to_int(attrs.get("leechers")) if attrs.get("leechers") else max(peers - seeders, 0), "grabs": to_int(attrs.get("grabs")),
                     "published": to_epoch(item.findtext("pubDate")), "cats": cats, "imdb": imdb_id(attrs.get("imdbid") or attrs.get("imdb")),
@@ -352,7 +375,9 @@ def parse_prowlarr(text, label):
         link, magnet = str(row.get("downloadUrl") or ""), str(row.get("magnetUrl") or "")
         if link.startswith("magnet:"):
             link, magnet = "", magnet or link
-        out.append({"guid": str(row.get("guid") or link or title), "title": title, "tracker": str(row.get("indexer") or label), "link": link, "magnet": magnet,
+        guid = str(row.get("guid") or link or title)
+        out.append({"guid": guid, "details": page_url(row.get("infoUrl"), guid, download=link), "title": title, "tracker": str(row.get("indexer") or label),
+                    "link": link, "magnet": magnet,
                     "infohash": (str(row.get("infoHash") or "").lower() or None), "size": to_int(row.get("size")), "seeders": to_int(row.get("seeders")),
                     "leechers": to_int(row.get("leechers")), "grabs": to_int(row.get("grabs")), "published": to_epoch(row.get("publishDate")),
                     "cats": [str(c.get("id")) for c in row.get("categories") or [] if isinstance(c, dict) and c.get("id") is not None],
@@ -480,8 +505,8 @@ def ingest(con, items, source_id, now, index, cutoff):
         ref = hashlib.sha1(f"{source_id}\n{item['guid']}".encode()).hexdigest()[:24]
         found = con.execute("SELECT id, work_id FROM torrents WHERE source = ? AND guid = ?", (source_id, item["guid"])).fetchone()
         if found:
-            con.execute("UPDATE torrents SET seeders = ?, leechers = ?, grabs = ?, last_seen = ? WHERE id = ?",
-                        (item["seeders"], item["leechers"], item["grabs"], now, found["id"]))
+            con.execute("UPDATE torrents SET seeders = ?, leechers = ?, grabs = ?, last_seen = ?, details = CASE WHEN ? != '' THEN ? ELSE details END WHERE id = ?",
+                        (item["seeders"], item["leechers"], item["grabs"], now, item.get("details") or "", item.get("details") or "", found["id"]))
             touched.add(found["work_id"])
             continue
         info = classify(item)
@@ -507,10 +532,10 @@ def ingest(con, items, source_id, now, index, cutoff):
                 index.add(work)
         infohash = item.get("infohash") or infohash_of_magnet(item.get("magnet"))
         con.execute("INSERT INTO torrents(work_id, source, guid, ref, title, norm_title, tracker, category, bucket, qrank, link, magnet, infohash, size, seeders, "
-                    "leechers, grabs, published, first_seen, last_seen) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "leechers, grabs, published, first_seen, last_seen, details) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (work_id, source_id, item["guid"], ref, item["title"], P.normalize_key(item["title"]), item["tracker"], info["category"], info["bucket"],
                      P.QUALITY_ORDER.index(info["bucket"]), item.get("link") or "", item.get("magnet") or "", infohash, item["size"], item["seeders"],
-                     item["leechers"], item["grabs"], item.get("published"), now, now))
+                     item["leechers"], item["grabs"], item.get("published"), now, now, item.get("details") or ""))
         touched.add(work_id)
         new += 1
     return seen, new, skipped, touched
@@ -707,7 +732,7 @@ def variant(row, done):
     text = row["title"]
     return {"id": row["id"], "torrent_title": text, "label": P.episode_label(text), "tracker": row["tracker"], "bucket": row["bucket"], "size": row["size"],
             "seeders": row["seeders"], "leechers": row["leechers"], "grabs": row["grabs"], "published": row["published"] or row["first_seen"],
-            "sent": row["ref"] in done, "magnet": bool(row["magnet"]), "link": bool(row["link"])}
+            "sent": row["ref"] in done, "magnet": bool(row["magnet"]), "link": bool(row["link"]), "details": row["details"] or ""}
 
 
 def catalogue(period="24h", category="", q="", tracker="", quality="", sort="publishedAt", direction="desc", page=1, per_page=20, now=None):

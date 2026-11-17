@@ -75,6 +75,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl trackerstats show|refresh|alias  ratios réels des trackers (p2p-aggregator)
   seedboxctl aggregator show|sync|sources|add|config|send   catalogue des releases par œuvre (Prowlarr, Jackett, Torznab)
   seedboxctl bans show|unban|ban|ignore|set      fail2ban : adresses bannies, adresses ignorées, seuils
+  seedboxctl space show|scan|fix                 où est passé l'espace disque, et correctifs sûrs
   seedboxctl subdomains show|check|set|off|rename|enable|disable   chaque application sur son sous-domaine (radarr.exemple.fr)
   seedboxctl vpnwatch show|set|tick          surveillance du VPN (fuite, changement d'adresse)
   seedboxctl house                           état d'ensemble pour l'écran « maison »
@@ -410,6 +411,10 @@ def bans():
 
 def subdomains():
     return _lazy("subdomains")
+
+
+def space():
+    return _lazy("space")
 
 
 def mediaquality():
@@ -3102,6 +3107,10 @@ def main():
     bn_set.add_argument("--max-hours", type=int)
     bn_set.add_argument("--increment", dest="increment", action="store_true", default=None)
     bn_set.add_argument("--no-increment", dest="increment", action="store_false")
+    sp = commands.add_parser("space", help="occupation de l'espace disque et remèdes").add_subparsers(dest="action", required=True)
+    for name in ("show", "scan"):
+        sp.add_parser(name)
+    sp.add_parser("fix").add_argument("name")
     sd = commands.add_parser("subdomains", help="sous-domaines des applications").add_subparsers(dest="action", required=True)
     for name in ("show", "check", "off"):
         sd.add_parser(name)
@@ -3778,6 +3787,14 @@ def main():
             print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
         else:
             locked(module.rotate)(args.item, args.by)
+    elif args.command == "space":
+        module = space()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "scan":
+            locked(module.scan)()
+        else:
+            locked(module.fix)(args.name)
     elif args.command == "subdomains":
         module = subdomains()
         if args.action in ("show", "check"):

@@ -836,6 +836,11 @@
 
   <section id="view-cleanup" class="view hidden">
     <header class="page-head"><div><h1>Nettoyage</h1><p class="sub">Trouve ce qui prend de la place pour rien. L’analyse ne supprime rien : les éléments choisis vont dans une corbeille (sur le même disque, donc instantané) et ne sont effacés qu’au vidage, automatique après 14 jours. Chaque élément est revérifié juste avant d’être déplacé.</p></div><div class="actions"><button id="cleanup-scan" class="btn primary" type="button">Analyser</button></div></header>
+    <div class="card" id="space-card">
+      <div class="card-head"><h2>Où est passé l’espace ?</h2><button id="space-scan" class="btn sm" type="button">Mesurer l’occupation</button></div>
+      <p id="space-summary" class="small muted"></p>
+      <div id="space-volumes"></div>
+    </div>
     <p id="cleanup-summary" class="small muted"></p>
     <div id="cleanup-notes" class="notice hidden"></div>
     <div id="cleanup-categories"></div>

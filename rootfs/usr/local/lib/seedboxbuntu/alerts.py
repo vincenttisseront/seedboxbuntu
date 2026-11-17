@@ -348,6 +348,6 @@ def check():
 
 def overview():
     state = load_state()
-    return {"settings": masked(), "active": [{"title": v.get("title", k), "detail": v.get("detail", ""), "level": v.get("level", "warning"),
+    return {"settings": masked(), "active": [{"key": k, "title": v.get("title", k), "detail": v.get("detail", ""), "level": v.get("level", "warning"),
                                               "notified": bool(v.get("notified"))} for k, v in sorted(state.items())],
             "channels": [name for name, configured, _ in CHANNELS if configured(settings())]}

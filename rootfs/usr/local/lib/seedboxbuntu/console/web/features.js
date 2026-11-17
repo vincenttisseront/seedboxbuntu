@@ -417,7 +417,64 @@ function selectAll(box, table) {
   box.addEventListener('change', () => table.querySelectorAll('input[data-id]').forEach((b) => { b.checked = box.checked; }));
 }
 
+// --- où est passé l'espace (page Nettoyage) ------------------------------------------------------------------------------------
+const SPACE_KIND = { ok: 'ok', warning: 'warn', critical: 'err' };
+const SPACE_LEVEL = { ok: 'normal', warning: 'presque plein', critical: 'critique' };
+
+const spaceBar = (label, share) => el('progress', { class: 'space-bar', max: '100', value: String(Math.min(100, share)), 'aria-label': label });
+
+function spaceRemedy(volume, remedy) {
+  const gain = remedy.reclaim ? el('span', { class: 'muted small' }, remedy.estimate ? ` environ ${fmtSize(remedy.reclaim)}` : ` jusqu’à ${fmtSize(remedy.reclaim)}`) : null;
+  let action = null;
+  if (remedy.kind === 'fix') {
+    action = el('button', { class: 'btn sm primary', type: 'button', onclick: (event) => confirmAction(event.currentTarget, remedy.why,
+      () => runJob('/api/space/fix', { id: remedy.fix }, () => loadSpace().catch(showError))) }, 'Libérer');
+  } else if (remedy.kind === 'page') {
+    action = el('button', { class: 'btn sm', type: 'button', onclick: () => $('cleanup-categories').scrollIntoView({ behavior: 'smooth' }) }, 'Voir la liste');
+  } else if (remedy.view) {
+    action = el('a', { class: 'btn sm', href: `#${remedy.view}` }, 'Ouvrir');
+  }
+  return el('li', { class: 'space-remedy' }, el('div', {}, el('strong', {}, remedy.title), gain, el('div', { class: 'muted small' }, remedy.why)), action);
+}
+
+function spaceVolume(volume) {
+  const rows = volume.items.map((item) => {
+    const share = volume.used ? Math.max(1, Math.round(100 * item.size / volume.used)) : 0;
+    const children = item.children.length ? el('div', { class: 'muted small no-i18n' }, item.children.map((c) => `${c.name} ${fmtSize(c.size)}`).join(' · ')) : null;
+    return el('tr', {}, el('td', {}, el('strong', {}, item.label), el('div', { class: 'muted small' }, item.hint), children),
+      el('td', { class: 'num' }, fmtSize(item.size)),
+      el('td', { class: 'space-share' }, spaceBar(item.label, share), el('span', { class: 'small' }, `${share} %`)));
+  });
+  if (volume.other > 0) {
+    const share = Math.round(100 * volume.other / volume.used);
+    rows.push(el('tr', {}, el('td', {}, el('strong', {}, 'Non identifié'), el('div', { class: 'muted small' }, 'Système, paquets installés et fichiers hors des emplacements mesurés.')),
+      el('td', { class: 'num' }, fmtSize(volume.other)), el('td', { class: 'space-share' }, spaceBar('Non identifié', share), el('span', { class: 'small' }, `${share} %`))));
+  }
+  const table = volume.items.length
+    ? el('div', { class: 'table-wrap' }, el('table', { class: 'compact' }, el('thead', {}, el('tr', {}, el('th', {}, 'Ce qui occupe l’espace'), el('th', {}, 'Taille'), el('th', {}, 'Part du disque'))), el('tbody', {}, rows)))
+    : el('p', { class: 'muted small' }, 'Aucune mesure pour ce disque : cliquez sur « Mesurer l’occupation ».');
+  const biggest = volume.biggest.length
+    ? el('details', {}, el('summary', {}, 'Les plus gros éléments'),
+      el('div', { class: 'table-wrap' }, el('table', { class: 'compact' }, el('thead', {}, el('tr', {}, el('th', {}, 'Dossier'), el('th', {}, 'Taille'))),
+        el('tbody', {}, volume.biggest.map((b) => el('tr', {}, el('td', { class: 'no-i18n' }, b.path), el('td', { class: 'num' }, fmtSize(b.size))))))))
+    : null;
+  const remedies = volume.remedies.length
+    ? [el('h3', { class: 'small' }, 'Que faire ?'), el('ul', { class: 'space-remedies' }, volume.remedies.map((r) => spaceRemedy(volume, r)))] : [];
+  return el('section', { class: 'space-volume' },
+    el('h3', {}, volume.label.charAt(0).toUpperCase() + volume.label.slice(1), ' ', pill(`${fmtPercent(volume.percent)} · ${SPACE_LEVEL[volume.level]}`, SPACE_KIND[volume.level]),
+      el('span', { class: 'muted small no-i18n' }, ` ${volume.path} : ${fmtSize(volume.used)} / ${fmtSize(volume.total)}, ${fmtSize(volume.free)} libres`)),
+    table, biggest, ...remedies);
+}
+
+async function loadSpace() {
+  const data = await api('/api/space');
+  $('space-summary').textContent = data.scanned ? `Dernière mesure : ${fmtDateTime(data.scanned)}. Le remplissage affiché est celui du moment.`
+    : 'Pas encore de mesure : « Mesurer l’occupation » parcourt le disque (quelques minutes) et ne supprime rien.';
+  $('space-volumes').replaceChildren(...data.volumes.map(spaceVolume));
+}
+
 async function loadCleanup() {
+  loadSpace().catch(showError);
   const data = await api('/api/cleanup');
   $('cleanup-summary').textContent = data.scanned
     ? `Dernière analyse : ${fmtDateTime(data.scanned)} — ${fmtSize(data.total)} récupérables au total.` : 'Aucune analyse pour le moment : cliquez sur Analyser.';
@@ -587,6 +644,7 @@ function initFeatures() {
   $('guest-edit-cancel').addEventListener('click', () => $('guest-edit').classList.add('hidden'));
 
   $('cleanup-scan').addEventListener('click', () => runJob('/api/cleanup/scan', {}, loadCleanup));
+  $('space-scan').addEventListener('click', () => runJob('/api/space/scan', {}, loadCleanup));
   $('cleanup-restore').addEventListener('click', () => {
     const ids = checkedIds($('cleanup-trash'));
     if (!ids.length) { showError(new Error('Cochez au moins un élément')); return; }

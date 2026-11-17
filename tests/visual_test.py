@@ -38,7 +38,7 @@ BASELINE = ROOT / "tests/visual/baseline"
 CURRENT = ROOT / "tests/visual/current"
 TOLERANCE = 0.015
 VARIANTS = (("d", "dark", 1180), ("l", "light", 1180), ("m", "dark", 390))
-BUTTON_OK = {"btn", "tab", "seg", "icon-btn", "tabbar-item"}
+BUTTON_OK = {"btn", "tab", "seg", "icon-btn", "tabbar-item", "agg-toggle"}
 UPDATE = "--update" in sys.argv
 COMPARE = os.environ.get("VISUAL_COMPARE") != "off"   # CI : les captures dépendent des polices et du moteur du poste
 ONLY = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
@@ -395,21 +395,65 @@ def journeys_ops2(page, base):
         fail("parcours : les seuils doivent être envoyés")
     if "192.168.1.0/24" not in page.inner_text("#bans-ignored") or "toujours ignorée" not in page.inner_text("#bans-ignored"):
         fail("parcours : les adresses ignorées (dont 127.0.0.1) doivent être listées")
+    page.goto(base + "#cleanup")
+    settle(page, "cleanup")
+    page.wait_for_selector("#space-volumes .space-volume")
+    space_text = page.inner_text("#space-volumes")
+    if "Téléchargements" not in space_text or "Médiathèque locale" not in space_text or "Non identifié" not in space_text or "radarr" not in space_text:
+        fail("parcours : la page Nettoyage doit montrer ce qui prend de la place (dont le non identifié et le détail)")
+    if page.locator("#space-volumes .space-remedy").count() != 6:
+        fail("parcours : six remèdes attendus (correctifs sûrs, listes du nettoyage et conseils)")
+    if page.locator("#space-volumes .space-remedy >> nth=0 >> .btn").inner_text() != "Voir la liste":
+        fail("parcours : un remède de l'assistant doit renvoyer vers la liste du nettoyage")
+    if page.locator("#space-volumes a[href='#shares']").count() != 1 or page.locator("#space-volumes a[href='#seeds']").count() != 1:
+        fail("parcours : les conseils doivent ouvrir Partages et Optimisation des seeds")
+    ui_mock.CALLS.clear()
+    page.click("#space-volumes .space-remedy >> nth=1 >> button:has-text('Libérer')")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/space/fix") and body.get("id") == "docker"]:
+        fail("parcours : « Libérer » doit lancer le correctif choisi, après confirmation")
+    ui_mock.CALLS.clear()
+    page.click("#space-scan")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/space/scan")]:
+        fail("parcours : « Mesurer l'occupation » doit lancer la mesure")
     page.goto(base + "#aggregator")
     settle(page, "aggregator")
     page.wait_for_timeout(300)
-    if page.locator("#agg-list details.agg-work").count() != 3 or "The Matrix" not in page.inner_text("#agg-list"):
+    if page.locator("#agg-list .agg-work").count() != 3 or "The Matrix" not in page.inner_text("#agg-list"):
         fail("parcours : l'agrégateur doit lister les œuvres du catalogue")
     if page.locator("#agg-periods .seg").count() != 3 or page.locator("#agg-categories .seg").count() != 8:
         fail("parcours : l'agrégateur doit proposer 3 périodes et 7 catégories plus « Toutes »")
-    page.click("#agg-list details.agg-work >> nth=1 >> summary")
+    if page.locator("#agg-list .agg-work >> nth=0 >> .agg-row").bounding_box()["height"] > 48:
+        fail("parcours : une œuvre doit tenir sur une ligne compacte")
+    if page.locator("#agg-list .agg-body:visible").count() != 0:
+        fail("parcours : les versions doivent être repliées au départ")
+    page.click("#agg-list .agg-work >> nth=1 >> .agg-toggle")
     if "Saison 2" not in page.inner_text("#agg-list") or "S01E02" not in page.inner_text("#agg-list"):
         fail("parcours : une série doit se déplier par saison et par épisode")
-    page.click("#agg-list details.agg-work >> nth=0 >> summary")
-    page.click("#agg-list details.agg-work >> nth=0 >> button:has-text('Envoyer') >> nth=0")
+    if page.locator("#agg-list .agg-work >> nth=1 >> .agg-row button:has-text('Envoyer')").count() != 0:
+        fail("parcours : une série n'a pas d'envoi direct (plusieurs saisons et épisodes)")
+    if page.locator("#agg-list .agg-work >> nth=1 >> .agg-body button:has-text('Envoyer')").count() != 3:
+        fail("parcours : chaque épisode d'une série doit avoir son bouton « Envoyer »")
+    if page.locator("#agg-list .agg-work >> nth=1 >> a:has-text('Page')").count() != 0:
+        fail("parcours : sans page de tracker connue, aucun lien ne doit être affiché")
+    link = page.locator("#agg-list .agg-work >> nth=0 >> .agg-row a:has-text('Page')")
+    if link.count() != 1 or link.get_attribute("href") != "https://tracker-b.exemple/torrent/2" or link.get_attribute("target") != "_blank" or "noopener" not in (link.get_attribute("rel") or ""):
+        fail("parcours : le lien vers la page du torrent doit s'ouvrir dans un nouvel onglet, sans lien avec la console")
+    page.click("#agg-list .agg-work >> nth=0 >> .agg-toggle")
+    if page.locator("#agg-list .agg-work >> nth=0 >> .agg-body a:has-text('Page')").count() != 3:
+        fail("parcours : chaque version d'un film doit proposer la page du tracker")
+    ui_mock.CALLS.clear()
+    page.click("#agg-list .agg-work >> nth=0 >> .agg-row button:has-text('Envoyer')")
     page.wait_for_timeout(300)
     if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/aggregator/send") and body.get("id") == 2]:
-        fail("parcours : « Envoyer » doit transmettre le torrent choisi")
+        fail("parcours : « Envoyer » doit transmettre la meilleure version")
+    if page.locator("#agg-list .agg-work >> nth=0 >> .agg-body:visible").count() != 1 or page.locator("#agg-list .agg-work >> nth=1 >> .agg-body:visible").count() != 1:
+        fail("parcours : après un envoi, les œuvres dépliées doivent le rester")
+    if "null" in page.inner_text("#agg-state"):
+        fail("parcours : l'état de la collecte ne doit pas afficher « null »")
     page.click("#agg-categories .seg:has-text('Séries')")
     page.wait_for_timeout(300)
     page.fill("#agg-form [name=q]", "matrix")
