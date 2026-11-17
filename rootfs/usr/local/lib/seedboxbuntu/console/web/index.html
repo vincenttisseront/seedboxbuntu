@@ -1283,20 +1283,20 @@
       <h2>Assistant IA externe (Ollama)</h2>
       <p class="muted small">Un serveur Ollama sur une autre machine donne un second avis, en français, sur les chiffres de la page Seeds et de la page Bibliothèques. Seuls des chiffres partent : jamais le nom d’un torrent, d’un film ou d’une personne ; les trackers sont renommés « tracker A », « tracker B ». Le modèle ne commande rien et peut se tromper : ses phrases ne remplacent pas les tableaux. Un serveur en http expose le résumé sur votre réseau local.</p>
       <p id="llm-state" class="notice info"></p>
+      <p id="llm-test-state" class="notice info hidden" role="status"></p>
       <label class="check"><input name="enabled" type="checkbox">Activer le connecteur</label>
       <label>Adresse du serveur<input name="url" maxlength="200" placeholder="http://192.168.1.50:11434" autocomplete="off"></label>
       <div class="split">
-        <label>Modèle<input name="model" maxlength="100" placeholder="llama3.1:8b" list="llm-models" autocomplete="off"></label>
+        <label>Modèle<select name="model" id="llm-model"><option value="">Testez la connexion pour lister les modèles</option></select></label>
         <label>Jeton d’un proxy (facultatif)<input name="token" type="password" maxlength="500" autocomplete="new-password" placeholder="inchangé si vide"></label>
       </div>
-      <datalist id="llm-models"></datalist>
       <div class="split">
         <label>Délai de réponse (secondes)<input name="timeout" type="number" min="10" max="900"></label>
         <label class="check"><input name="verify_tls" type="checkbox">Vérifier le certificat HTTPS</label>
       </div>
       <label class="check"><input name="send_trackers" type="checkbox">Envoyer les vrais noms de trackers (sensible pour un tracker privé)</label>
       <label class="check"><input name="send_titles" type="checkbox">Inclure quelques titres de films dans l’analyse de bibliothèque</label>
-      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button id="llm-test" class="btn" type="button">Tester</button><button id="llm-token-clear" class="btn danger" type="button">Retirer le jeton</button></div>
+      <div class="row"><button class="btn primary" type="submit">Enregistrer</button><button id="llm-test" class="btn" type="button">Tester la connexion</button><button id="llm-token-clear" class="btn danger" type="button">Retirer le jeton</button></div>
     </form>
   </section>
   <section id="view-setup" class="view hidden">

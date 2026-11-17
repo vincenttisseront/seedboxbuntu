@@ -501,6 +501,8 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(400)
     if "Liens durs" not in page.inner_text("#drawer-log") or "1 en cours" not in page.inner_text("#drawer-state"):
         fail("parcours : le bouton « Tâches en cours » n'affiche pas les tâches de la console")
+    if page.locator("#drawer-log .job-item").count() != 2:
+        fail("parcours : chaque tâche doit former un bloc lisible dans le panneau")
     if page.locator("#jobs-badge").count() and page.locator("#jobs-badge").is_visible() and page.inner_text("#jobs-badge").strip() != "1":
         fail("parcours : le badge du bouton « Tâches en cours » doit compter les tâches en cours")
     page.click("#drawer-close")
@@ -696,6 +698,11 @@ def journeys_ops2(page, base):
     page.wait_for_timeout(500)
     if not [1 for path, _ in ui_mock.CALLS if path.endswith("/api/llm/test")]:
         fail("parcours : « Tester » ne contacte pas le serveur Ollama")
+    if page.locator("#llm-model option").all_inner_texts() != ["llama3.1:8b (3,7 Go)", "mistral:latest (2,8 Go)"] and \
+            not {"llama3.1:8b", "mistral:latest"} <= {o.split(" (")[0] for o in page.locator("#llm-model option").all_inner_texts()}:
+        fail("parcours : la liste des modèles Ollama doit se remplir après la validation de la connexion")
+    if "Connexion validée" not in page.inner_text("#llm-test-state"):
+        fail("parcours : « Tester la connexion » doit afficher le résultat à côté du formulaire")
 
 
 def observer_run(browser):

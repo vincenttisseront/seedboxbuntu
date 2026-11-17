@@ -911,7 +911,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path == "/api/llm/settings":
                 return self.send_json({"settings": ctl.llm().save(data)})
             if path == "/api/llm/test":
-                return self.send_json(ctl.llm().test())
+                return self.send_json(ctl.llm().test(probe=data))
             if path == "/api/llm/explain":
                 topic = str(data.get("topic", ""))
                 if topic not in ("seeds", "library"):

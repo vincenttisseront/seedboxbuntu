@@ -564,6 +564,14 @@ def connect(method, path, body):
 
 info = llm.test(connect)
 check("Ollama : test de connexion — version, modèles, modèle choisi présent", info["ok"] and info["version"] == "0.5.1" and info["model_ok"] and len(info["models"]) == 2, info)
+seen = []
+def connect_probe(method, path, body):
+    seen.append(path)
+    return connect(method, path, body)
+essai = llm.test(connect_probe, {"url": "http://10.0.0.9:11434", "model": "mistral:latest", "token": "essai", "verify_tls": False})
+check("Ollama : le test utilise les valeurs du formulaire sans rien enregistrer", essai["url"] == "http://10.0.0.9:11434" and essai["model_ok"] and llm.settings()["url"] == "http://192.168.1.50:11434"
+      and llm.settings()["model"] == "llama3.1:8b" and "essai" not in llm.TOKEN_FILE.read_text(), essai)
+check("Ollama : un test refuse une adresse invalide", raises(llm.test, connect, {"url": "ftp://x"}) is not None)
 check("Ollama : serveur qui répond 401 -> message utile", "HTTP 401" in (raises(llm.test, lambda m, p, b: (401, {})) or ""))
 seeds_view = so.overview(None, torrents_now, NOW)
 reply = llm.explain("seeds", connect, now=1000, seeds=seeds_view)

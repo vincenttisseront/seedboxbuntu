@@ -169,6 +169,14 @@ details>.form,details>.fields{margin-top:10px}
 /* ---------- journaux, code, listes de contrôles ---------- */
 code,kbd{font:var(--fs-sm) var(--mono);background:var(--code);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
 pre.log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:var(--sp-3);max-height:340px;overflow:auto;font:var(--fs-sm)/1.6 var(--mono);margin:0;white-space:pre-wrap;color:var(--text)}
+pre.log .job-item{white-space:normal;padding:var(--sp-3) 0;border-bottom:1px solid var(--line)}
+pre.log .job-item:last-child{border-bottom:0}
+pre.log .job-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--sp-3)}
+pre.log .job-title{font:600 var(--fs-md)/1.4 var(--font);min-width:0;overflow-wrap:anywhere}
+pre.log .job-meta{color:var(--muted);font:var(--fs-sm)/1.5 var(--font);margin-top:2px}
+pre.log .job-tail{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-3);background:var(--chip);border-radius:8px;font:var(--fs-xs)/1.5 var(--mono);color:var(--muted)}
+pre.log .job-running .job-tail{color:var(--text)}
+pre.log .notice{white-space:normal;margin:0 0 var(--sp-3)}
 pre.log.tall{max-height:560px}
 .checks{list-style:none;margin:var(--sp-2) 0 0;padding:0}
 .checks li{padding:5px 0;font-size:var(--fs-base);display:flex;align-items:baseline;gap:var(--sp-2);flex-wrap:wrap}

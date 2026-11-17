@@ -146,10 +146,13 @@ def call(method, path, body=None, cfg=None, connect=None):
     headers = {"Accept": "application/json"}
     if body is not None:
         headers["Content-Type"] = "application/json"
-    try:
-        headers["Authorization"] = "Bearer " + TOKEN_FILE.read_text().strip()
-    except OSError:
-        pass
+    if cfg.get("_token"):                                         # jeton saisi dans le formulaire pour un test, pas encore enregistré
+        headers["Authorization"] = "Bearer " + cfg["_token"]
+    else:
+        try:
+            headers["Authorization"] = "Bearer " + TOKEN_FILE.read_text().strip()
+        except OSError:
+            pass
     if parts.scheme == "https":
         context = ssl.create_default_context() if cfg["verify_tls"] else ssl._create_unverified_context()
         connection = http.client.HTTPSConnection(parts.hostname, parts.port or 443, timeout=cfg["timeout"], context=context)
@@ -171,9 +174,25 @@ def call(method, path, body=None, cfg=None, connect=None):
         connection.close()
 
 
-def test(connect=None):
-    """Joint le serveur, liste ses modèles et vérifie que celui choisi existe."""
+def test(connect=None, probe=None):
+    """Joint le serveur, liste ses modèles et vérifie que celui choisi existe. `probe` : valeurs du formulaire (adresse, jeton,
+    certificat, modèle) essayées SANS être enregistrées ; le délai d'un test est plafonné à 20 secondes."""
     cfg = settings()
+    probe = probe or {}
+    if probe.get("url"):
+        cfg["url"] = validate_url(probe["url"])
+    if "verify_tls" in probe:
+        if not isinstance(probe["verify_tls"], bool):
+            raise ctl.SeedboxError("verify_tls : vrai ou faux")
+        cfg["verify_tls"] = probe["verify_tls"]
+    if "model" in probe:
+        cfg["model"] = str(probe["model"] or "").strip()
+    if probe.get("token"):
+        token = str(probe["token"]).strip()
+        if len(token) > 500 or re.search(r"[\x00-\x20\x7f]", token):
+            raise ctl.SeedboxError("jeton : 500 caractères au plus, sans espace")
+        cfg["_token"] = token
+    cfg["timeout"] = min(int(cfg["timeout"]), 20)
     started = time.time()
     status, data = call("GET", "/api/tags", None, cfg, connect)
     if status != 200:
@@ -186,7 +205,7 @@ def test(connect=None):
     except ctl.SeedboxError:
         pass
     names = {m["name"] for m in models} | {m["name"].split(":")[0] for m in models}
-    return {"ok": True, "version": version, "models": models, "model_ok": bool(cfg["model"]) and (cfg["model"] in names or cfg["model"] + ":latest" in names),
+    return {"ok": True, "version": version, "url": cfg["url"], "models": models, "model_ok": bool(cfg["model"]) and (cfg["model"] in names or cfg["model"] + ":latest" in names),
             "ms": int((time.time() - started) * 1000)}
 
 

@@ -25,13 +25,22 @@ async function loadAiBox(topic) {
 function askAi(topic) {
   runJob('/api/llm/explain', { topic }, () => loadAiBox(topic).catch(showError));
 }
+function llmModelOptions(models, current) {
+  const select = $('llm-model');
+  const known = models.map((m) => m.name);
+  const options = [];
+  if (!current || !known.includes(current)) options.push(el('option', { value: current || '' }, current ? `${current} (absent du serveur)` : 'Choisissez un modèle…'));
+  for (const m of models) options.push(el('option', { value: m.name }, m.size ? `${m.name} (${fmtSize(m.size)})` : m.name));
+  select.replaceChildren(...options);
+  select.value = current || '';
+}
 async function loadLlm() {
   const data = await api('/api/llm');
   const form = $('llm-card');
   const s = data.settings;
   form.elements.enabled.checked = s.enabled;
   form.elements.url.value = s.url;
-  form.elements.model.value = s.model;
+  llmModelOptions(s.model ? [{ name: s.model, size: 0 }] : [], s.model);
   form.elements.token.value = '';
   form.elements.timeout.value = String(s.timeout);
   form.elements.verify_tls.checked = s.verify_tls;
@@ -41,6 +50,8 @@ async function loadLlm() {
   const state = $('llm-state');
   state.className = `notice ${s.enabled ? 'ok' : 'info'}`;
   state.textContent = s.enabled ? `Connecteur actif : ${s.model} sur ${s.url}${s.has_token ? ' (jeton enregistré)' : ''}.` : 'Connecteur désactivé : rien n’est envoyé.';
+  $('llm-test-state').classList.add('hidden');
+  if (s.url) testLlm(true);                                        // liste les modèles du serveur dès l'ouverture de la page
 }
 async function saveLlm(event) {
   event.preventDefault();
@@ -55,15 +66,38 @@ async function saveLlm(event) {
     loadLlm().catch(showError);
   } catch (error) { showError(error); }
 }
-async function testLlm() {
+// Teste les valeurs SAISIES (sans les enregistrer), puis remplit la liste des modèles du serveur
+async function testLlm(quiet) {
+  const form = $('llm-card');
   const button = $('llm-test');
+  const state = $('llm-test-state');
+  const url = form.elements.url.value.trim();
+  if (!url) { state.className = 'notice warn'; state.textContent = 'Saisissez d’abord l’adresse du serveur Ollama.'; return; }
   button.disabled = true;
+  state.className = 'notice info';
+  state.textContent = 'Connexion au serveur…';
+  const body = { url, model: form.elements.model.value, verify_tls: form.elements.verify_tls.checked };
+  if (form.elements.token.value) body.token = form.elements.token.value;
   try {
-    const result = await api('/api/llm/test', {});
-    $('llm-models').replaceChildren(...result.models.map((m) => el('option', { value: m.name })));
-    toast(result.model_ok ? 'ok' : 'warn', result.model_ok ? `Serveur joint (version ${result.version || 'inconnue'}), modèle présent : ${result.ms} ms.`
-      : `Serveur joint, mais le modèle choisi n’y est pas : ${result.models.length} modèle(s) disponible(s) dans la liste de saisie.`);
-  } catch (error) { showError(error); } finally { button.disabled = false; }
+    const result = await api('/api/llm/test', body);
+    const current = form.elements.model.value;
+    llmModelOptions(result.models, current);
+    const plural = result.models.length > 1 ? 's' : '';
+    if (!result.models.length) {
+      state.className = 'notice warn';
+      state.textContent = `Connexion validée (Ollama ${result.version || 'version inconnue'}, ${result.ms} ms), mais aucun modèle n’est installé sur ce serveur.`;
+    } else if (current && !result.model_ok) {
+      state.className = 'notice warn';
+      state.textContent = `Connexion validée (${result.ms} ms), mais le modèle « ${current} » n’existe pas sur ce serveur : choisissez-en un dans la liste (${result.models.length} disponible${plural}).`;
+    } else {
+      state.className = 'notice ok';
+      state.textContent = `Connexion validée : Ollama ${result.version || 'version inconnue'}, ${result.models.length} modèle${plural}, ${result.ms} ms.${current ? '' : ' Choisissez le modèle à utiliser.'}`;
+    }
+  } catch (error) {
+    state.className = 'notice err';
+    state.textContent = `Connexion impossible : ${error.message}`;
+    if (!quiet) showError(error);
+  } finally { button.disabled = false; }
 }
 async function clearLlmToken() {
   try {
@@ -484,14 +518,20 @@ async function refreshJobs() {
   badge.textContent = String(data.running);
   badge.classList.toggle('hidden', !data.running);
   if (!jobsView) return;
-  const lines = data.jobs.map((j) => {
-    const word = (JOB_STATE[j.state] || ['', j.state])[1];
-    const tail = j.state === 'running' ? j.log.trim().split('\n').slice(-3).map((l) => `    ${l}`).join('\n') : '';
-    return `[${word}] ${j.title} (${jobAge(j.started)})${tail ? `\n${tail}` : ''}`;
+  const rank = { running: 0, error: 1, ok: 2 };
+  const ordered = [...data.jobs].sort((x, y) => (rank[x.state] ?? 3) - (rank[y.state] ?? 3) || y.started - x.started);
+  const items = ordered.map((j) => {
+    const [kind, word] = JOB_STATE[j.state] || ['info', j.state];
+    const tail = j.log.trim().split('\n').slice(j.state === 'running' ? -3 : -2).map((l) => l.replace('[seedboxctl] ', '')).filter(Boolean);
+    return el('div', { class: `job-item job-${j.state}` },
+      el('div', { class: 'job-head' }, el('strong', { class: 'job-title' }, j.title), pill(word, kind)),
+      el('div', { class: 'job-meta' }, j.state === 'running' ? `lancée il y a ${jobAge(j.started)}` : `il y a ${jobAge(j.started)}`),
+      tail.length ? el('div', { class: 'job-tail' }, tail.join('\n')) : null);
   });
-  const other = data.busy && !data.running ? 'Une autre opération tient le verrou (mise à jour, sauvegarde ou tâche planifiée). Elle se termine seule ; réessayez ensuite.\n\n' : '';
-  drawer.show('Tâches', data.running || data.busy ? 'info' : 'ok', data.running ? `${data.running} en cours` : data.busy ? 'verrou pris' : 'aucune en cours',
-    other + (lines.length ? lines.join('\n\n') : 'Aucune tâche lancée depuis la console depuis son démarrage.'));
+  const lead = [];
+  if (data.busy && !data.running) lead.push(el('p', { class: 'notice warn' }, 'Une autre opération tient le verrou (mise à jour, sauvegarde ou tâche planifiée). Elle se termine seule ; réessayez ensuite.'));
+  drawer.show('Tâches', data.running || data.busy ? 'info' : 'ok', data.running ? `${data.running} en cours` : data.busy ? 'verrou pris' : 'aucune en cours', '');
+  $('drawer-log').replaceChildren(...lead, ...(items.length ? items : [el('p', { class: 'muted' }, 'Aucune tâche lancée depuis la console depuis son démarrage.')]));
 }
 function openJobs() {
   jobsView = true;
@@ -500,7 +540,7 @@ function openJobs() {
 }
 
 async function copyDrawerLog() {
-  const text = $('drawer-log').textContent;
+  const text = $('drawer-log').innerText;
   try {
     await navigator.clipboard.writeText(text);
   } catch (error) {                                           // page sans contexte sécurisé : repli par sélection
@@ -554,6 +594,6 @@ function initOps4() {
   $('seeds-retire').addEventListener('click', (event) => confirmAction(event.currentTarget,
     'Les torrents cochés sont retirés de qBittorrent : ils cessent d’être partagés. Les fichiers restent, sauf si vous avez coché leur suppression (permise seulement quand chacun a un autre lien).', retireSeeds));
   $('llm-card').addEventListener('submit', saveLlm);
-  $('llm-test').addEventListener('click', testLlm);
+  $('llm-test').addEventListener('click', () => testLlm(false));
   $('llm-token-clear').addEventListener('click', clearLlmToken);
 }
