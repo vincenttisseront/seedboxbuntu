@@ -34,6 +34,41 @@ function llmModelOptions(models, current) {
   select.replaceChildren(...options);
   select.value = current || '';
 }
+// Certificat HTTPS : état affiché sous l'adresse, et approbation d'un certificat auto-signé après comparaison de l'empreinte
+let llmPin = { host: '', sha: '' };
+function llmCertState() {
+  const form = $('llm-card');
+  const url = form.elements.url.value.trim();
+  const row = $('llm-cert-row');
+  row.classList.toggle('hidden', !/^https:\/\//i.test(url));
+  let host = '';
+  try { const u = new URL(url); host = `${u.hostname.toLowerCase()}:${u.port || 443}`; } catch (error) { host = ''; }
+  const pinned = Boolean(llmPin.sha) && llmPin.host === host;
+  $('llm-cert-forget').classList.toggle('hidden', !pinned);
+  $('llm-cert-state').textContent = pinned ? `Certificat approuvé (empreinte SHA-256 ${llmPin.sha.slice(0, 16)}…)`
+    : form.elements.verify_tls.checked ? 'Certificat vérifié par les autorités reconnues' : 'Vérification du certificat désactivée';
+}
+async function showLlmCertificate() {
+  const url = $('llm-card').elements.url.value.trim();
+  try {
+    const cert = await api('/api/llm/certificate', { url });
+    const grouped = cert.sha256.toUpperCase().match(/.{2}/g).join(':');
+    const lines = [`Serveur : ${cert.host}`, cert.subject ? `Sujet : ${cert.subject}` : '', cert.issuer ? `Émetteur : ${cert.issuer}` : '',
+      cert.not_after ? `Valide du ${cert.not_before} au ${cert.not_after}` : '', cert.names && cert.names.length ? `Noms : ${cert.names.join(', ')}` : '',
+      cert.self_signed ? 'Certificat auto-signé (aucune autorité ne l’a émis).' : '', `Empreinte SHA-256 :\n${grouped}`].filter(Boolean);
+    if (cert.pinned) { toast('ok', 'Ce certificat est déjà approuvé.'); return; }
+    lines.push('', 'Comparez cette empreinte avec celle de votre serveur (openssl x509 -noout -fingerprint -sha256) avant d’approuver. Un certificat différent sera ensuite refusé.');
+    if (!(await ask({ title: 'Certificat du serveur Ollama', message: lines.join('\n'), confirm: 'Faire confiance à ce certificat' }))) return;
+    await api('/api/llm/certificate/trust', { url, sha256: cert.sha256 });
+    toast('ok', 'Certificat approuvé.');
+    await loadLlm();
+  } catch (error) { showError(error); }
+}
+async function forgetLlmCertificate(event) {
+  confirmAction(event.currentTarget, 'Le certificat approuvé est oublié : la connexion en https redevient soumise à la vérification habituelle (ou refusée si le certificat est auto-signé).', async () => {
+    try { await api('/api/llm/certificate/forget', {}); toast('ok', 'Certificat oublié.'); await loadLlm(); } catch (error) { showError(error); }
+  });
+}
 async function loadLlm() {
   const data = await api('/api/llm');
   const form = $('llm-card');
@@ -47,6 +82,8 @@ async function loadLlm() {
   form.elements.send_trackers.checked = s.send_trackers;
   form.elements.send_titles.checked = s.send_titles;
   $('llm-token-clear').disabled = !s.has_token;
+  llmPin = { host: s.pin_host || '', sha: s.pin_sha256 || '' };
+  llmCertState();
   const state = $('llm-state');
   state.className = `notice ${s.enabled ? 'ok' : 'info'}`;
   state.textContent = s.enabled ? `Connecteur actif : ${s.model} sur ${s.url}${s.has_token ? ' (jeton enregistré)' : ''}.` : 'Connecteur désactivé : rien n’est envoyé.';
@@ -595,5 +632,9 @@ function initOps4() {
     'Les torrents cochés sont retirés de qBittorrent : ils cessent d’être partagés. Les fichiers restent, sauf si vous avez coché leur suppression (permise seulement quand chacun a un autre lien).', retireSeeds));
   $('llm-card').addEventListener('submit', saveLlm);
   $('llm-test').addEventListener('click', () => testLlm(false));
+  $('llm-cert-show').addEventListener('click', showLlmCertificate);
+  $('llm-cert-forget').addEventListener('click', forgetLlmCertificate);
+  $('llm-card').elements.url.addEventListener('input', llmCertState);
+  $('llm-card').elements.verify_tls.addEventListener('change', llmCertState);
   $('llm-token-clear').addEventListener('click', clearLlmToken);
 }

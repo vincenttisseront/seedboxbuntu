@@ -169,6 +169,7 @@ details>.form,details>.fields{margin-top:10px}
 /* ---------- journaux, code, listes de contrôles ---------- */
 code,kbd{font:var(--fs-sm) var(--mono);background:var(--code);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
 pre.log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:var(--sp-3);max-height:340px;overflow:auto;font:var(--fs-sm)/1.6 var(--mono);margin:0;white-space:pre-wrap;color:var(--text)}
+#dialog-text{white-space:pre-line;overflow-wrap:anywhere}
 pre.log .job-item{white-space:normal;padding:var(--sp-3) 0;border-bottom:1px solid var(--line)}
 pre.log .job-item:last-child{border-bottom:0}
 pre.log .job-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--sp-3)}

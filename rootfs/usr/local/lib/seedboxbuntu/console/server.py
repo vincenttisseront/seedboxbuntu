@@ -910,6 +910,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json({"results": ctl.seedopt().check_trackers([str(x) for x in data.get("hashes", [])])})
             if path == "/api/llm/settings":
                 return self.send_json({"settings": ctl.llm().save(data)})
+            if path == "/api/llm/certificate":
+                return self.send_json(ctl.llm().fetch_certificate(str(data.get("url", "")) or None))
+            if path == "/api/llm/certificate/trust":
+                return self.send_json({"settings": ctl.llm().trust_certificate(str(data.get("url", "")), data.get("sha256"))})
+            if path == "/api/llm/certificate/forget":
+                return self.send_json({"settings": ctl.llm().forget_certificate()})
             if path == "/api/llm/test":
                 return self.send_json(ctl.llm().test(probe=data))
             if path == "/api/llm/explain":

@@ -9,6 +9,8 @@ Ce qui est envoyé : uniquement des agrégats (nombres de torrents, espace, rati
   - jamais une clé, un mot de passe, une adresse du serveur.
 Deux réglages permettent d'envoyer davantage : « titres » (quelques titres de films dans l'analyse de bibliothèque) et « trackers » (vrais
 noms). Chaque demande est inscrite au journal d'audit (sujet et taille, pas le contenu). Une demande toutes les 15 secondes au plus.
+Certificat auto-signé : « Voir le certificat » récupère celui du serveur, affiche son empreinte SHA-256 et, si l'administrateur la confirme,
+l'épingle (adresse + empreinte, comme une clé SSH connue) ; un certificat différent par la suite est refusé.
 Connexion : l'adresse du serveur Ollama (http://machine:11434), un jeton facultatif si un proxy inverse en demande un (envoyé en
 « Authorization: Bearer », stocké à part en 0600, jamais renvoyé par la console), et la vérification du certificat HTTPS (activée par défaut).
 Limites assumées : un modèle peut se tromper et le dit avec aplomb : ses phrases ne remplacent pas les chiffres affichés à côté ; le texte
@@ -16,12 +18,15 @@ des réponses vient d'un tiers que la console ne maîtrise pas ; un serveur non 
 le temps de réponse dépend de la machine distante (de quelques secondes à plusieurs minutes).
     seedboxctl llm show | set CLE VALEUR | token | test | explain seeds|library
 """
+import hashlib
 import http.client
 import ipaddress
 import json
 import os
 import re
+import socket
 import ssl
+import tempfile
 import time
 import urllib.parse
 
@@ -31,7 +36,8 @@ SETTINGS_FILE = ctl.ETC / "llm.json"
 TOKEN_FILE = ctl.ETC / "llm.token"
 LAST_FILE = ctl.STATE / "llm-last.json"
 RATE_FILE = ctl.STATE / "llm-rate.json"
-DEFAULTS = {"enabled": False, "url": "", "model": "", "timeout": 180, "send_titles": False, "send_trackers": False, "verify_tls": True, "temperature": 0.2}
+DEFAULTS = {"enabled": False, "url": "", "model": "", "timeout": 180, "send_titles": False, "send_trackers": False, "verify_tls": True, "temperature": 0.2,
+            "pin_host": "", "pin_sha256": ""}        # certificat auto-signé approuvé par l'administrateur (voir trust_certificate)
 MIN_INTERVAL = 15
 MAX_PROMPT = 8000
 MAX_ANSWER = 4000
@@ -81,7 +87,7 @@ def save(values):
         if key == "token":
             set_token(value)
             continue
-        if key not in DEFAULTS:
+        if key not in DEFAULTS or key.startswith("pin_"):          # l'empreinte ne se règle que par trust_certificate()
             raise ctl.SeedboxError(f"réglage inconnu : {key}")
         if key in ("enabled", "send_titles", "send_trackers", "verify_tls"):
             if not isinstance(value, bool):
@@ -101,9 +107,7 @@ def save(values):
         cfg[key] = value
     if cfg["enabled"] and not (cfg["url"] and cfg["model"]):
         raise ctl.SeedboxError("adresse et modèle sont nécessaires pour activer le connecteur")
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(cfg))
-    os.chmod(SETTINGS_FILE, 0o644)
+    _write(cfg)
     say(f"connecteur Ollama : {'activé' if cfg['enabled'] else 'désactivé'}")
     return public(cfg)
 
@@ -153,12 +157,19 @@ def call(method, path, body=None, cfg=None, connect=None):
             headers["Authorization"] = "Bearer " + TOKEN_FILE.read_text().strip()
         except OSError:
             pass
+    pinned = parts.scheme == "https" and bool(cfg.get("pin_sha256")) and cfg.get("pin_host") == _hostport(parts)
     if parts.scheme == "https":
-        context = ssl.create_default_context() if cfg["verify_tls"] else ssl._create_unverified_context()
+        context = ssl.create_default_context() if cfg["verify_tls"] and not pinned else ssl._create_unverified_context()
         connection = http.client.HTTPSConnection(parts.hostname, parts.port or 443, timeout=cfg["timeout"], context=context)
     else:
         connection = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=cfg["timeout"])
     try:
+        if pinned:                                                      # certificat approuvé : on compare l'empreinte, pas la chaîne
+            connection.connect()
+            seen = hashlib.sha256(connection.sock.getpeercert(binary_form=True)).hexdigest()
+            if seen != cfg["pin_sha256"]:
+                raise ctl.SeedboxError(f"le certificat du serveur a changé (empreinte {seen[:16]}… au lieu de {cfg['pin_sha256'][:16]}…) : "
+                                       "vérifiez la machine, puis faites de nouveau confiance au certificat")
         connection.request(method, path, json.dumps(body).encode() if body is not None else None, headers)
         response = connection.getresponse()
         raw = response.read(2_000_000).decode("utf-8", "replace")
@@ -167,11 +178,86 @@ def call(method, path, body=None, cfg=None, connect=None):
         except ValueError:
             return response.status, {"raw": raw[:300]}
     except ssl.SSLError as error:
-        raise ctl.SeedboxError(f"certificat refusé ({str(error)[:80]}) : corrigez-le ou désactivez la vérification si vous maîtrisez le réseau")
+        raise ctl.SeedboxError(f"certificat refusé ({str(error)[:80]}) : s'il est auto-signé, utilisez « Voir le certificat » puis « Faire confiance »")
     except (OSError, http.client.HTTPException) as error:
         raise ctl.SeedboxError(f"serveur Ollama injoignable ({str(error)[:80]})")
     finally:
         connection.close()
+
+
+# --- certificat auto-signé --------------------------------------------------------------------------
+def _hostport(parts):
+    return f"{parts.hostname.lower()}:{parts.port or 443}"
+
+
+def _decode(der):
+    """Sujet, émetteur et validité d'un certificat, lus par la bibliothèque standard (sans dépendance)."""
+    info = {}
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".pem") as handle:
+            handle.write(ssl.DER_cert_to_PEM_cert(der))
+            handle.flush()
+            data = ssl._ssl._test_decode_cert(handle.name)
+        flat = lambda rdn: ", ".join(f"{k}={v}" for part in rdn for k, v in part)
+        info = {"subject": flat(data.get("subject", ())), "issuer": flat(data.get("issuer", ())),
+                "not_before": data.get("notBefore", ""), "not_after": data.get("notAfter", ""),
+                "names": [v for k, v in data.get("subjectAltName", ()) if k in ("DNS", "IP Address")][:8]}
+    except Exception:                                                  # lecture facultative : l'empreinte suffit à décider
+        pass
+    return info
+
+
+def fetch_certificate(url=None, fetch=None):
+    """Récupère le certificat présenté par le serveur (sans le valider) pour que l'administrateur compare son empreinte."""
+    cfg = settings()
+    text = validate_url(url or cfg["url"])
+    parts = urllib.parse.urlsplit(text)
+    if parts.scheme != "https":
+        raise ctl.SeedboxError("l'adresse n'est pas en https : il n'y a pas de certificat à approuver")
+    if fetch:
+        der = fetch(parts)
+    else:
+        try:
+            with socket.create_connection((parts.hostname, parts.port or 443), timeout=min(int(cfg["timeout"]), 20)) as raw:
+                context = ssl._create_unverified_context()
+                with context.wrap_socket(raw, server_hostname=parts.hostname) as tls:
+                    der = tls.getpeercert(binary_form=True)
+        except (OSError, ssl.SSLError) as error:
+            raise ctl.SeedboxError(f"serveur injoignable en https ({str(error)[:80]})")
+    sha = hashlib.sha256(der).hexdigest()
+    info = _decode(der)
+    trusted = bool(cfg["pin_sha256"]) and cfg["pin_host"] == _hostport(parts) and cfg["pin_sha256"] == sha
+    return {"url": text, "host": _hostport(parts), "sha256": sha, "self_signed": bool(info) and info["subject"] == info["issuer"],
+            "pinned": trusted, **info}
+
+
+def trust_certificate(url, sha256, fetch=None):
+    """Épingle le certificat actuel du serveur, à condition que son empreinte soit celle que l'administrateur a vue."""
+    sha256 = str(sha256 or "").lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", sha256):
+        raise ctl.SeedboxError("empreinte invalide")
+    current = fetch_certificate(url, fetch)
+    if current["sha256"] != sha256:
+        raise ctl.SeedboxError("le certificat a changé depuis l'affichage : recommencez et comparez l'empreinte")
+    cfg = settings()
+    cfg.update(pin_host=current["host"], pin_sha256=sha256)
+    _write(cfg)
+    say(f"connecteur Ollama : certificat de {current['host']} approuvé ({sha256[:16]}…)")
+    return public(cfg)
+
+
+def forget_certificate():
+    cfg = settings()
+    cfg.update(pin_host="", pin_sha256="")
+    _write(cfg)
+    say("connecteur Ollama : certificat approuvé oublié")
+    return public(cfg)
+
+
+def _write(cfg):
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(cfg))
+    os.chmod(SETTINGS_FILE, 0o644)
 
 
 def test(connect=None, probe=None):

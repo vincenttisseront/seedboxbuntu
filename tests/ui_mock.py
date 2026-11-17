@@ -430,6 +430,9 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith("/api/relocate/move"): return self.send(200, {"moved": 1, "bytes": 5e9, "root": "/shares/nas/Films"})
         if self.path.endswith("/api/seedopt/reannounce"): return self.send(200, {"done": 1})
         if self.path.endswith("/api/seedopt/retire"): return self.send(200, {"done": 1, "bytes": 1e10})
+        if self.path.endswith("/api/llm/certificate"): return self.send(200, {"url": "https://ia.exemple:11434", "host": "ia.exemple:11434", "sha256": "ab" * 32, "self_signed": True, "pinned": False,
+            "subject": "CN=ia.exemple", "issuer": "CN=ia.exemple", "not_before": "Nov  1 00:00:00 2026 GMT", "not_after": "Nov  1 00:00:00 2027 GMT", "names": ["ia.exemple"]})
+        if self.path.endswith("/api/llm/certificate/trust"): return self.send(200, {"settings": {}})
         if self.path.endswith("/api/llm/test"): return self.send(200, {"ok": True, "version": "0.5.1", "models": [{"name": "llama3.1:8b", "size": 4e9}, {"name": "mistral:latest", "size": 3e9}], "model_ok": True, "ms": 120})
         if self.path.endswith(("/api/replacer/settings", "/api/mediaslim/settings", "/api/shareprofile/set", "/api/shareprofile/unset", "/api/shareprofile/auto", "/api/relocate/settings",
                                "/api/seedopt/rule", "/api/seedopt/unrule", "/api/seedopt/thresholds", "/api/llm/settings")): return self.send(200, {"settings": body})

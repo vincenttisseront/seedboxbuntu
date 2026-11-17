@@ -1,6 +1,7 @@
 """Gestion des bibliothèques par partage, optimisation des seeds, connecteur Ollama (sans Docker, sans réseau) :
 relevé, carte, copies cachées, remplacements sous budget, allègement, profils par volume, déplacement, seeds, IA externe."""
 import json
+import ssl
 import os
 import subprocess
 import sys
@@ -573,6 +574,60 @@ check("Ollama : le test utilise les valeurs du formulaire sans rien enregistrer"
       and llm.settings()["model"] == "llama3.1:8b" and "essai" not in llm.TOKEN_FILE.read_text(), essai)
 check("Ollama : un test refuse une adresse invalide", raises(llm.test, connect, {"url": "ftp://x"}) is not None)
 check("Ollama : serveur qui répond 401 -> message utile", "HTTP 401" in (raises(llm.test, lambda m, p, b: (401, {})) or ""))
+# --- certificat auto-signé : serveur HTTPS local réel -------------------------------------------------------------------
+import http.server
+import subprocess
+import tempfile
+import threading
+tls_dir = tempfile.mkdtemp()
+subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", tls_dir + "/k.pem", "-out", tls_dir + "/c.pem", "-days", "2",
+                "-subj", "/CN=ollama.test", "-addext", "subjectAltName=DNS:ollama.test"], check=True, capture_output=True)
+
+
+class TlsHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = json.dumps({"models": [{"name": "llama3.1:8b", "size": 4 << 30}]} if self.path == "/api/tags" else {"version": "0.5.1"}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+class QuietServer(http.server.HTTPServer):
+    def handle_error(self, request, client_address):          # poignées de main interrompues par les refus attendus : sans bruit
+        pass
+
+
+tls_server = QuietServer(("127.0.0.1", 0), TlsHandler)
+tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+tls_context.load_cert_chain(tls_dir + "/c.pem", tls_dir + "/k.pem")
+tls_server.socket = tls_context.wrap_socket(tls_server.socket, server_side=True)
+threading.Thread(target=tls_server.serve_forever, daemon=True).start()
+tls_url = f"https://127.0.0.1:{tls_server.server_address[1]}"
+llm.save({"url": tls_url, "verify_tls": True})
+refused = raises(llm.test)
+check("Ollama : un certificat auto-signé est refusé et le message indique la marche à suivre", refused is not None and "Faire confiance" in refused, refused)
+shown = llm.fetch_certificate(tls_url)
+check("Ollama : le certificat du serveur est affiché avec son empreinte SHA-256, sans être approuvé",
+      len(shown["sha256"]) == 64 and shown["self_signed"] and not shown["pinned"] and "ollama.test" in shown["subject"], shown)
+check("Ollama : une empreinte différente de celle affichée est refusée", raises(llm.trust_certificate, tls_url, "0" * 64) is not None)
+trusted = llm.trust_certificate(tls_url, shown["sha256"])
+check("Ollama : après approbation, la connexion fonctionne (empreinte vérifiée) sans désactiver la vérification",
+      trusted["pin_sha256"] == shown["sha256"] and llm.settings()["verify_tls"] is True and llm.test()["ok"] and llm.fetch_certificate(tls_url)["pinned"])
+check("Ollama : l'empreinte ne se règle pas par les réglages ordinaires", raises(llm.save, {"pin_sha256": "a" * 64}) is not None)
+cfg_pin = llm.settings()
+cfg_pin["pin_sha256"] = "f" * 64
+llm._write(cfg_pin)
+changed = raises(llm.test)
+check("Ollama : un certificat qui change après l'approbation est refusé", changed is not None and "a changé" in changed, changed)
+llm.forget_certificate()
+check("Ollama : oublier le certificat redonne le refus", llm.settings()["pin_sha256"] == "" and raises(llm.test) is not None)
+tls_server.shutdown()
+llm.save({"url": "http://192.168.1.50:11434"})
 seeds_view = so.overview(None, torrents_now, NOW)
 reply = llm.explain("seeds", connect, now=1000, seeds=seeds_view)
 prompt = calls[-1][2]["prompt"]

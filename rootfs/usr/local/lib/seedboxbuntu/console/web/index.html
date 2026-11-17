@@ -1286,6 +1286,7 @@
       <p id="llm-test-state" class="notice info hidden" role="status"></p>
       <label class="check"><input name="enabled" type="checkbox">Activer le connecteur</label>
       <label>Adresse du serveur<input name="url" maxlength="200" placeholder="http://192.168.1.50:11434" autocomplete="off"></label>
+      <div id="llm-cert-row" class="row hidden"><span id="llm-cert-state" class="muted small"></span><button id="llm-cert-show" class="btn sm" type="button">Voir le certificat</button><button id="llm-cert-forget" class="btn sm danger hidden" type="button">Oublier le certificat</button></div>
       <div class="split">
         <label>Modèle<select name="model" id="llm-model"><option value="">Testez la connexion pour lister les modèles</option></select></label>
         <label>Jeton d’un proxy (facultatif)<input name="token" type="password" maxlength="500" autocomplete="new-password" placeholder="inchangé si vide"></label>

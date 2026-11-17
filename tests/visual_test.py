@@ -701,6 +701,19 @@ def journeys_ops2(page, base):
     if page.locator("#llm-model option").all_inner_texts() != ["llama3.1:8b (3,7 Go)", "mistral:latest (2,8 Go)"] and \
             not {"llama3.1:8b", "mistral:latest"} <= {o.split(" (")[0] for o in page.locator("#llm-model option").all_inner_texts()}:
         fail("parcours : la liste des modèles Ollama doit se remplir après la validation de la connexion")
+    page.fill('#llm-card [name=url]', "https://ia.exemple:11434")
+    if page.locator("#llm-cert-row").is_hidden():
+        fail("parcours : la ligne du certificat doit apparaître pour une adresse https")
+    ui_mock.CALLS.clear()
+    page.click("#llm-cert-show")
+    page.wait_for_selector("#dialog[open]")
+    if "ab:ab:ab" not in page.inner_text("#dialog-text").lower() or "auto-signé" not in page.inner_text("#dialog-text"):
+        fail("parcours : la boîte du certificat doit afficher l'empreinte et signaler un certificat auto-signé")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/llm/certificate/trust") and body.get("sha256") == "ab" * 32]:
+        fail("parcours : « Faire confiance à ce certificat » n'envoie pas l'empreinte affichée")
+    page.fill('#llm-card [name=url]', "http://192.168.1.50:11434")
     if "Connexion validée" not in page.inner_text("#llm-test-state"):
         fail("parcours : « Tester la connexion » doit afficher le résultat à côté du formulaire")
 
