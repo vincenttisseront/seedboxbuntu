@@ -35,7 +35,7 @@ function followJob(id, done, onPoll) {
       clearInterval(timer);
       note.update(kind, `${job.title} : ${word}`);
       if (job.state === 'error' && latestJob === id) drawer.open();
-      if (done) done();
+      if (done) done(job);
     } catch (error) {
       // Traefik ou Authelia peuvent redémarrer pendant un changement d'adresse
       if (latestJob === id) $('drawer-log').textContent += '\nConsole momentanément injoignable...';

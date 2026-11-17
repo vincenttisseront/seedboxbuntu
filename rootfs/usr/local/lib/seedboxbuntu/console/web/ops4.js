@@ -132,8 +132,13 @@ function relinkProgress(job) {
   state.textContent = `Liage en cours : fichier ${index} sur ${total} (${name}) · ${count} copie(s) reliée(s), ${fmtSize(Number(bytes))} récupérés.`;
 }
 function relinkAll() {
-  runJob('/api/copyaudit/relink', { all: true }, () => {
+  runJob('/api/copyaudit/relink', { all: true }, (job) => {
     $('copyaudit-progress').classList.add('hidden');
+    const log = (job && job.log) || '';
+    const result = log.match(/copies reliées : (\d+) fichier\(s\), (\d+) octets récupérés/);
+    const refused = [...log.matchAll(/ignorée : .*? : (.+)/g)].map((m) => m[1]);
+    if (job && job.state === 'error') toast('err', `Liage interrompu : ${(log.trim().split('\n').pop() || '').replace('[seedboxctl] ', '')}`);
+    else if (result) toast(Number(result[1]) ? 'ok' : 'warn', `${result[1]} copie(s) reliée(s), ${fmtSize(Number(result[2]))} récupérés${refused.length ? ` ; ${refused.length} ignorée(s) : ${refused[0]}` : ''}.`);
     loadCopyaudit().catch(showError);
   }, relinkProgress);
 }

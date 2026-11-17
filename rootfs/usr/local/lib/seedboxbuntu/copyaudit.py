@@ -164,12 +164,15 @@ def relink(paths, records=None, root=None, by="console"):
         entry = found.get(path)
         if not entry:
             skipped.append((path, "n'est plus une copie reconnue"))
+            say(f"ignorée : {os.path.basename(path)} : n'est plus une copie reconnue")
             continue
         if not entry["same_disk"]:
             skipped.append((path, "deux disques différents : lien impossible"))
+            say(f"ignorée : {os.path.basename(path)} : deux disques différents")
             continue
         if not identical(entry["download"], entry["media"]):
             skipped.append((path, "contenus différents : rien n'est touché"))
+            say(f"ignorée : {os.path.basename(path)} : contenus différents")
             continue
         temp = entry["download"] + ".sb-lien"
         try:
@@ -183,6 +186,7 @@ def relink(paths, records=None, root=None, by="console"):
             except OSError:
                 pass
             skipped.append((path, f"lien refusé ({error.strerror})"))
+            say(f"ignorée : {os.path.basename(path)} : lien refusé ({error.strerror})")
             continue
         done += 1
         saved += entry["size"]
