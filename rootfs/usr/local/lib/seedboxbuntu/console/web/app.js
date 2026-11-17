@@ -21,7 +21,7 @@ function showError(error) {
 const JOB_STATE = { running: ['info', 'en cours'], ok: ['ok', 'terminé'], error: ['err', 'échec'] };
 let latestJob = null;
 // Une tâche longue : notification qui suit son avancement, détails dans le tiroir (ouvert d'office en cas d'échec)
-function followJob(id, done) {
+function followJob(id, done, onPoll) {
   latestJob = id;
   const note = toast('info', 'Tâche en cours…', { sticky: true, busy: true, action: { label: 'Détails', run: () => drawer.open() } });
   drawer.show('Tâche en cours', 'info', 'en cours', '');
@@ -30,6 +30,7 @@ function followJob(id, done) {
       const job = await api(`/api/jobs/${id}`);
       const [kind, word] = JOB_STATE[job.state] || ['unknown', job.state];
       if (latestJob === id) drawer.show(job.title, kind, word, job.log);
+      if (onPoll) onPoll(job);
       if (job.state === 'running') { note.update('info', `${job.title} : en cours…`, { sticky: true, busy: true }); return; }
       clearInterval(timer);
       note.update(kind, `${job.title} : ${word}`);
@@ -44,10 +45,10 @@ function followJob(id, done) {
   poll();
 }
 
-async function runJob(path, body, done) {
+async function runJob(path, body, done, onPoll) {
   try {
     const { job } = await api(path, body);
-    followJob(job, done);
+    followJob(job, done, onPoll);
   } catch (error) {
     showError(error);
   }

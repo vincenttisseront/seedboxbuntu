@@ -126,6 +126,7 @@ def candidates(records=None, root=None, limit=MAX_CANDIDATES):
 def relink(paths, records=None, root=None, by="console"):
     """Remplace chaque copie des téléchargements par un lien dur vers le fichier de médiathèque. Renvoie {done, saved, skipped}.
     paths=None : toutes les copies qui peuvent être reliées (action en masse)."""
+    say("recherche des copies à relier…")
     found = {e["download"]: e for e in candidates(records, root, limit=10 ** 6)["items"]}
     if paths is None:
         wanted = {path for path, entry in found.items() if entry["same_disk"]}
@@ -136,7 +137,10 @@ def relink(paths, records=None, root=None, by="console"):
         if not wanted:
             raise ctl.SeedboxError("aucun fichier choisi")
     done, saved, skipped = 0, 0, []
-    for path in sorted(wanted):
+    total = len(wanted)
+    say(f"{total} copie(s) à traiter")
+    for position, path in enumerate(sorted(wanted), 1):
+        say(f"{position}/{total} : {os.path.basename(path)} ({done} reliée(s), {saved} octets récupérés)")
         entry = found.get(path)
         if not entry:
             skipped.append((path, "n'est plus une copie reconnue"))

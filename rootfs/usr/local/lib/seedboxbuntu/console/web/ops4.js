@@ -117,6 +117,26 @@ async function loadCopyaudit() {
     checkCell(i.download, `Relier ${i.title}`, i.same_disk ? {} : { disabled: '' }), el('td', { class: 'small' }, i.download), el('td', {}, i.title),
     el('td', {}, fmtSize(i.size)), el('td', {}, pill(i.same_disk ? 'possible' : 'deux disques', i.same_disk ? 'ok' : 'warn')))) : [emptyRow(5, 'Aucune copie cachée.')]));
 }
+// Liage en masse : la progression (fichier i sur n) est lue dans le journal de la tâche
+function relinkProgress(job) {
+  const bar = $('copyaudit-progress');
+  const lines = (job.log || '').trim().split('\n');
+  const last = [...lines].reverse().map((line) => line.match(/(\d+)\/(\d+) : (.*?) \((\d+) reliée\(s\), (\d+) octets récupérés\)/)).find(Boolean);
+  const state = $('copyaudit-state');
+  state.className = 'notice info';
+  if (!last) { bar.classList.remove('hidden'); bar.removeAttribute('value'); state.textContent = 'Recherche des copies à relier…'; return; }
+  const [, index, total, name, count, bytes] = last;
+  bar.classList.remove('hidden');
+  bar.max = Number(total);
+  bar.value = Number(index) - 1;
+  state.textContent = `Liage en cours : fichier ${index} sur ${total} (${name}) · ${count} copie(s) reliée(s), ${fmtSize(Number(bytes))} récupérés.`;
+}
+function relinkAll() {
+  runJob('/api/copyaudit/relink', { all: true }, () => {
+    $('copyaudit-progress').classList.add('hidden');
+    loadCopyaudit().catch(showError);
+  }, relinkProgress);
+}
 async function relinkCopies() {
   const paths = picked($('copyaudit-list'));
   if (!paths.length) { toast('warn', 'Cochez au moins une copie.'); return; }
@@ -450,7 +470,7 @@ function initOps4() {
   $('copyaudit-all').addEventListener('change', (event) => $('copyaudit-list').querySelectorAll('input[type=checkbox]:not(:disabled)').forEach((box) => { box.checked = event.target.checked; }));
   $('copyaudit-relink-all').addEventListener('click', (event) => confirmAction(event.currentTarget,
     'Toutes les copies reliables sont comparées octet par octet au fichier de la médiathèque, puis remplacées par un lien vers lui. Le torrent continue de partager le même contenu ; les fichiers de la médiathèque ne sont jamais modifiés. Les copies sur deux disques sont laissées telles quelles.',
-    () => runJob('/api/copyaudit/relink', { all: true }, () => loadCopyaudit().catch(showError))));
+    relinkAll));
   $('copyaudit-relink').addEventListener('click', (event) => confirmAction(event.currentTarget,
     'Chaque copie cochée est comparée octet par octet au fichier de la médiathèque, puis remplacée par un lien vers lui. Le torrent continue de partager le même contenu ; le fichier de la médiathèque n’est jamais modifié.', relinkCopies));
   $('shareprofile-apply').addEventListener('click', (event) => confirmAction(event.currentTarget,

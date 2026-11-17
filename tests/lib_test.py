@@ -159,7 +159,13 @@ try:
 finally:
     builtins.open = real_open
 check("copies : un fichier que le partage refuse de lire est ignoré et compté, sans planter", str(dl2) not in [e["download"] for e in unreadable["items"]] and unreadable["unreadable"] == 1, unreadable)
-bulk = copies.relink(None, small)
+import contextlib
+import io
+journal = io.StringIO()
+with contextlib.redirect_stdout(journal):
+    bulk = copies.relink(None, small)
+check("copies : « tout relier » écrit sa progression (fichier i sur n) dans le journal de la tâche",
+      "1/1 : dune2.mkv (0 reliée(s), 0 octets récupérés)" in journal.getvalue() and "1 copie(s) à traiter" in journal.getvalue(), journal.getvalue())
 check("copies : « tout relier » relie toutes les copies possibles sans liste", bulk["done"] == 1 and os.stat(dl2).st_ino == os.stat(media_file).st_ino, bulk)
 check("copies : « tout relier » sans rien à relier -> erreur", raises(copies.relink, None, small) is not None)
 
