@@ -168,6 +168,25 @@ check("copies : « tout relier » écrit sa progression (fichier i sur n) dans l
       "1/1 : dune2.mkv (0 reliée(s), 0 octets récupérés)" in journal.getvalue() and "1 copie(s) à traiter" in journal.getvalue(), journal.getvalue())
 check("copies : « tout relier » relie toutes les copies possibles sans liste", bulk["done"] == 1 and os.stat(dl2).st_ino == os.stat(media_file).st_ino, bulk)
 check("copies : « tout relier » sans rien à relier -> erreur", raises(copies.relink, None, small) is not None)
+# usage réel : sans relevé ni dossier imposés, « tout relier » reprend la dernière analyse (aucune relecture de tout le partage)
+dl3 = ctl.STORAGE / "downloads/dune3.mkv"
+dl3.write_bytes(payload)
+gone_entry = {"download": str(ctl.STORAGE / "downloads/disparu.mkv"), "media": str(media_file), "size": 300_000, "title": "Dune", "same_disk": True}
+saved_entry = {"download": str(dl3), "media": str(media_file), "size": 300_000, "title": "Dune", "same_disk": True}
+copies.FILE.parent.mkdir(parents=True, exist_ok=True)
+copies.FILE.write_text(json.dumps({"at": 1, "items": [saved_entry, gone_entry], "total": 2, "saving": 600_000, "blocked": 0}))
+real_candidates = copies.candidates
+copies.candidates = lambda *a, **k: (_ for _ in ()).throw(AssertionError("relecture complète du partage"))
+cached = copies.relink(None)
+copies.candidates = real_candidates
+check("copies : « tout relier » reprend la dernière analyse sans parcourir le partage et ignore une copie disparue",
+      cached["done"] == 1 and os.stat(dl3).st_ino == os.stat(media_file).st_ino, cached)
+after = copies.overview()
+check("copies : la liste mémorisée ne contient plus les copies reliées", [e["download"] for e in after["items"]] == [str(gone_entry["download"])], after)
+check("copies : sans analyse mémorisée, « tout relier » demande de lancer l'analyse",
+      "analyse" in (raises(copies.relink, None) or ""), raises(copies.relink, None))
+os.unlink(dl3)
+copies.FILE.unlink(missing_ok=True)
 
 # --- 4. remplacements sous budget ----------------------------------------------------------------------------------------------------
 rep = ctl.replacer()

@@ -123,20 +123,40 @@ def candidates(records=None, root=None, limit=MAX_CANDIDATES):
             "blocked": sum(e["size"] for e in found if not e["same_disk"])}
 
 
+def _entries(records=None, root=None):
+    """{copie : entrée} à traiter. Sans relevé ni dossier imposés (usage réel), on reprend le résultat de la dernière analyse :
+    relire des téraoctets sur un partage réseau pour retrouver la même liste serait interminable. Chaque entrée est revérifiée
+    individuellement avant d'agir (fichiers présents, même taille, pas déjà liés) puis comparée octet par octet."""
+    if records is not None or root is not None:
+        return {e["download"]: e for e in candidates(records, root, limit=10 ** 6)["items"]}
+    saved = overview().get("items") or []
+    say(f"{len(saved)} copie(s) dans la dernière analyse")
+    entries = {}
+    for entry in saved:
+        try:
+            mine, theirs = os.lstat(entry["download"]), os.stat(entry["media"])
+        except OSError:
+            continue                                              # disparue depuis l'analyse : « plus une copie reconnue »
+        if mine.st_size != entry["size"] or theirs.st_size != entry["size"] or not os.path.isfile(entry["download"]) \
+                or os.path.islink(entry["download"]) or mine.st_nlink > 1 or (mine.st_ino == theirs.st_ino and mine.st_dev == theirs.st_dev):
+            continue
+        entries[entry["download"]] = {**entry, "same_disk": mine.st_dev == theirs.st_dev}
+    return entries
+
+
 def relink(paths, records=None, root=None, by="console"):
     """Remplace chaque copie des téléchargements par un lien dur vers le fichier de médiathèque. Renvoie {done, saved, skipped}.
     paths=None : toutes les copies qui peuvent être reliées (action en masse)."""
-    say("recherche des copies à relier…")
-    found = {e["download"]: e for e in candidates(records, root, limit=10 ** 6)["items"]}
+    found = _entries(records, root)
     if paths is None:
         wanted = {path for path, entry in found.items() if entry["same_disk"]}
         if not wanted:
-            raise ctl.SeedboxError("aucune copie à relier")
+            raise ctl.SeedboxError("aucune copie à relier" + ("" if found else " : lancez d'abord l'analyse"))
     else:
         wanted = {str(p) for p in paths}
         if not wanted:
             raise ctl.SeedboxError("aucun fichier choisi")
-    done, saved, skipped = 0, 0, []
+    done, saved, skipped, linked = 0, 0, [], []
     total = len(wanted)
     say(f"{total} copie(s) à traiter")
     for position, path in enumerate(sorted(wanted), 1):
@@ -166,6 +186,8 @@ def relink(paths, records=None, root=None, by="console"):
             continue
         done += 1
         saved += entry["size"]
+        linked.append(path)
+    _forget(linked)
     try:
         ctl.audit().record(by, "", "Copies reliées par un lien dur", f"{done} fichier(s)", "console", "ok")
     except Exception:  # noqa: BLE001
@@ -173,6 +195,25 @@ def relink(paths, records=None, root=None, by="console"):
     _journal("relink", done, saved)
     say(f"copies reliées : {done} fichier(s), {saved} octets récupérés")
     return {"done": done, "saved": saved, "skipped": [{"path": p, "reason": r} for p, r in skipped]}
+
+
+def _forget(paths):
+    """Retire de la dernière analyse les copies qui viennent d'être reliées : la liste affichée reste exacte sans nouvelle analyse."""
+    if not paths:
+        return
+    data = overview()
+    if not data.get("items"):
+        return
+    gone = set(paths)
+    items = [e for e in data["items"] if e["download"] not in gone]
+    data.update(items=items, total=max(0, data.get("total", 0) - (len(data["items"]) - len(items))),
+                saving=sum(e["size"] for e in items if e["same_disk"]), blocked=sum(e["size"] for e in items if not e["same_disk"]))
+    try:
+        temp = FILE.with_name(FILE.name + ".tmp")
+        temp.write_text(json.dumps(data, ensure_ascii=False))
+        os.replace(temp, FILE)
+    except OSError:
+        pass
 
 
 def _journal(kind, count, size=0):
