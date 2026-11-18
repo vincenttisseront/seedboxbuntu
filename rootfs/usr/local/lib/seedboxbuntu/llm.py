@@ -357,6 +357,23 @@ def seeds_prompt(overview, cfg=None):
     return "\n".join(lines)
 
 
+def diag_prompt(result):
+    """Diagnostic mécanique du partage (réglages et état de qBittorrent) : aucun nom de torrent, de tracker ni d'adresse."""
+    s = result.get("summary", {})
+    states = ", ".join(f"{name} {count}" for name, count in sorted(s.get("states", {}).items(), key=lambda kv: -kv[1])[:8])
+    lines = [f"Diagnostic d'une seedbox qBittorrent {s.get('qbittorrent', '')} en mode {s.get('mode') or 'inconnu'}"
+             f"{' avec VPN ' + s['vpn'] if s.get('vpn') else ''}.",
+             f"Connexion : {s.get('connection')}, nœuds DHT : {s.get('dht_nodes')}, port d'écoute : {s.get('port')}, port ouvert par le VPN : {s.get('forwarded_port')}, "
+             f"envoi actuel : {_gb(s.get('up_speed', 0))}/s, limite globale d'envoi : {s.get('up_limit') or 'aucune'}.",
+             f"{s.get('torrents', 0)} torrents ; états : {states}.", "Constats déjà établis par des règles, du plus grave au plus léger :"]
+    names = {"critical": "critique", "warning": "important", "info": "information"}
+    for f in result.get("findings", [])[:12]:
+        lines.append(f"- [{names[f['severity']]}] {f['title']} : {f['cause']} Remède : {f['fix']}")
+    lines.append("Question : pourquoi l'envoi est-il faible ou nul ? Classe les causes par priorité, dis dans quel ordre agir sur CE serveur, et ce qui est normal et "
+                 "ne se corrige pas. N'invente aucun réglage absent des constats ci-dessus.")
+    return "\n".join(lines)
+
+
 def library_prompt(volumes, plan, cfg=None):
     cfg = cfg or settings()
     lines = ["Bibliothèques par volume de stockage :"]
@@ -374,16 +391,18 @@ def library_prompt(volumes, plan, cfg=None):
     return "\n".join(lines)
 
 
-def explain(topic, connect=None, now=None, seeds=None, library=None):
+def explain(topic, connect=None, now=None, seeds=None, library=None, diag=None):
     """Demande un avis au modèle sur « seeds » ou « library » ; mémorise la réponse. `seeds`/`library` : données (tests)."""
     cfg = settings()
     if topic == "seeds":
         prompt = seeds_prompt(seeds if seeds is not None else ctl.seedopt().overview(), cfg)
+    elif topic == "diag":
+        prompt = diag_prompt(diag if diag is not None else ctl.seeddiag().overview())
     elif topic == "library":
         data = library if library is not None else {"volumes": ctl.libmap().overview()["volumes"], "plan": ctl.replacer().overview()["plan"]}
         prompt = library_prompt(data["volumes"], data["plan"], cfg)
     else:
-        raise ctl.SeedboxError("sujet inconnu : seeds ou library")
+        raise ctl.SeedboxError("sujet inconnu : seeds, diag ou library")
     text = ask(prompt, connect, now)
     result = {"topic": topic, "at": int(time.time() if now is None else now), "model": cfg["model"], "text": text, "prompt_chars": len(prompt)}
     LAST_FILE.parent.mkdir(parents=True, exist_ok=True)

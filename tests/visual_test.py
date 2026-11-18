@@ -562,6 +562,15 @@ def journeys_ops2(page, base):
     trackers_text = page.inner_text("#seeds-trackers").lower()      # les titres de carte sont mis en capitales par la feuille de style
     if "prive.exemple" not in trackers_text or "public.exemple" not in trackers_text:
         fail("parcours : l'analyse des seeds n'affiche pas une carte par tracker")
+    if page.locator("#seeddiag-list .diag-item").count() != 2 or "Critique" not in page.inner_text("#seeddiag-list"):
+        fail("parcours : le diagnostic du partage doit lister les constats, le plus grave en premier")
+    ui_mock.CALLS.clear()
+    page.click("#seeddiag-list .diag-item >> text=Utiliser le port 51413")
+    page.wait_for_selector("#dialog[open]")
+    page.click("#dialog-yes")
+    page.wait_for_timeout(400)
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/seeddiag/apply") and body.get("id") == "port-forward"]:
+        fail("parcours : le remède en un clic n'envoie pas l'identifiant du constat")
     ui_mock.CALLS.clear()
     page.check('input[aria-label^="Réannoncer"]')
     page.click("#seeds-reannounce")
@@ -577,9 +586,9 @@ def journeys_ops2(page, base):
     if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/seedopt/retire") and len(body.get("hashes", [])) == 1 and body.get("delete_files") is False]:
         fail("parcours : le retrait n'envoie pas le torrent coché sans suppression de fichiers par défaut")
     ui_mock.CALLS.clear()
-    page.click("#seeds-ai")
+    page.click("#seeddiag-ai")
     page.wait_for_timeout(500)
-    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/llm/explain") and body.get("topic") == "seeds"]:
+    if not [1 for path, body in ui_mock.CALLS if path.endswith("/api/llm/explain") and body.get("topic") == "diag"]:
         fail("parcours : le bouton d'avis de l'IA n'envoie pas le sujet « seeds »")
     # --- entretien des médias, quotas des invités, ratios réels des trackers ---
     page.goto(base + "#care")

@@ -1113,11 +1113,17 @@
     </div>
   </section>
   <section id="view-seeds" class="view hidden">
-    <header class="page-head"><div><h1>Optimisation des seeds</h1><p class="sub">Ce que chaque torrent apporte vraiment à chaque tracker : envoyé sur 7 et 30 jours, envoyé par Go stocké, torrents rares, attendus mais muets, sans valeur. Les règles de vos trackers (ratio, durée de partage) protègent ce qui ne doit pas être retiré.</p></div><div class="actions"><button id="seeds-ai" class="btn" type="button">Demander un avis à l’IA</button><button id="seeds-refresh" class="btn" type="button">Actualiser</button></div></header>
+    <header class="page-head"><div><h1>Optimisation des seeds</h1><p class="sub">Ce que chaque torrent apporte vraiment à chaque tracker : envoyé sur 7 et 30 jours, envoyé par Go stocké, torrents rares, attendus mais muets, sans valeur. Les règles de vos trackers (ratio, durée de partage) protègent ce qui ne doit pas être retiré.</p></div><div class="actions"><button id="seeds-refresh" class="btn" type="button">Actualiser</button></div></header>
     <div id="seeds-state" class="notice info"></div>
-    <div id="seeds-avis" class="notice info hidden">
-      <p class="small muted">Avis indicatif d’un modèle externe, d’après des chiffres anonymisés : il ne remplace pas les tableaux ci-dessous.</p>
-      <p id="seeds-avis-texte" class="pre-wrap no-i18n"></p>
+    <div class="card" id="seeddiag-card">
+      <div class="card-head"><h2>Pourquoi ça n’envoie pas ?</h2><div class="actions"><button id="seeddiag-run" class="btn primary" type="button">Lancer le diagnostic</button><button id="seeddiag-ai" class="btn" type="button">Expliquer avec l’IA</button></div></div>
+      <p class="muted small">Lit les réglages et l’état de qBittorrent (connexion, port entrant, limites de débit, file d’attente, limites de partage, VPN) et nomme les causes d’un envoi faible ou nul. Les réglages simples se corrigent en un clic ; l’IA, si elle est activée, explique ces constats dans l’ordre utile.</p>
+      <p id="seeddiag-summary" class="small muted"></p>
+      <div id="seeddiag-list" class="diag-list"></div>
+      <div id="seeddiag-avis" class="notice info hidden">
+        <p class="small muted">Explication indicative d’un modèle externe, à partir des constats ci-dessus (aucun nom de torrent ni de tracker).</p>
+        <p id="seeddiag-avis-texte" class="pre-wrap no-i18n"></p>
+      </div>
     </div>
     <div class="card" id="seedrules-card">
       <h2>Règles de vos trackers</h2>

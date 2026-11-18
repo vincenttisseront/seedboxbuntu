@@ -62,6 +62,7 @@ opérations sont idempotentes : « provision » rapproche l'état réel des appl
   seedboxctl shareprofile show|set|apply      un profil de qualité par partage
   seedboxctl relocate show|move               déplacer les titres inactifs entre partages
   seedboxctl seedopt show|rule|retire|...     optimisation des seeds, analyse par tracker
+  seedboxctl seeddiag show|apply ID           pourquoi ça n'envoie pas : diagnostic et réglages de qBittorrent
   seedboxctl llm show|set|test|explain        connecteur vers un serveur Ollama externe
   seedboxctl network show|set|confirm|revert  réseau de l'appliance (IP fixe ou DHCP, passerelle, DNS)
   seedboxctl spacefore show|sample|set        prévision de saturation des volumes
@@ -467,6 +468,10 @@ def relocate():
 
 def seedopt():
     return _lazy("seedopt")
+
+
+def seeddiag():
+    return _lazy("seeddiag")
 
 
 def llm():
@@ -2975,6 +2980,9 @@ def main():
     rl_move.add_argument("volume_from")
     rl_move.add_argument("volume_to")
     rl_move.add_argument("ids", nargs="+", type=int)
+    sd = commands.add_parser("seeddiag", help="diagnostic du partage").add_subparsers(dest="action", required=True)
+    sd.add_parser("show")
+    sd.add_parser("apply").add_argument("ident")
     so = commands.add_parser("seedopt", help="optimisation des seeds").add_subparsers(dest="action", required=True)
     so.add_parser("show").add_argument("--tracker", default=None)
     for name in ("rules", "sample"):
@@ -3722,6 +3730,12 @@ def main():
             print(json.dumps(module.overview(args.volume), indent=2, ensure_ascii=False))
         else:
             print(json.dumps(locked(module.move)(args.app, args.volume_to, args.ids, volume_from=args.volume_from), ensure_ascii=False))
+    elif args.command == "seeddiag":
+        module = seeddiag()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(locked(module.apply)(args.ident), ensure_ascii=False))
     elif args.command == "seedopt":
         module = seedopt()
         if args.action == "show":

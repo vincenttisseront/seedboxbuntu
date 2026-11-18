@@ -142,6 +142,11 @@ def route(p, q, role="admin", PREFS=None):
         "versions": [{"kind": "film", "title": "Dune", "year": 2021, "saving": 4e9, "files": [
             {"path": "/data/media/films/Dune/dune.mkv", "size": 9e9, "quality": "Bluray-1080p", "volume": "local", "app": "radarr"},
             {"path": "/data/media/films/Dune (2)/dune.mkv", "size": 5e9, "quality": "WEBDL-1080p", "volume": "local", "app": "radarr"}]}], "versions_total": 1, "versions_saving": 4e9}
+    if p == "/api/seeddiag": return {"running": True, "at": now, "summary": {"connection": "firewalled", "port": 6881, "forwarded_port": 51413, "up_speed": 0, "torrents": 40, "states": {"stalledUP": 30}},
+        "findings": [
+            {"id": "port-forward", "severity": "critical", "title": "Le port d'écoute n'est pas le port ouvert par le VPN", "cause": "qBittorrent écoute sur le port 6881, mais le VPN a ouvert le 51413.",
+             "fix": "Mettre le port d'écoute sur 51413.", "apply": {"label": "Utiliser le port 51413", "prefs": {"listen_port": 51413}}},
+            {"id": "no-demand", "severity": "info", "title": "30 torrent(s) sur 40 n'ont personne à qui envoyer", "cause": "Aucun téléchargeur sur ces torrents.", "fix": "Ajoutez des torrents récents."}]}
     if p == "/api/jobs": return {"running": 1, "busy": True, "jobs": [
         {"id": "a1b2c3d4e5f6", "title": "Liens durs : toutes les copies cachées", "state": "running", "started": now - 95, "log": "[seedboxctl] 2/5 : Dune.mkv (1 reliée(s), 9000000000 octets récupérés)\n"},
         {"id": "a1b2c3d4e5f7", "title": "Relevé des bibliothèques", "state": "ok", "started": now - 4000, "log": ""}]}
@@ -432,6 +437,7 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path.endswith("/api/seedopt/retire"): return self.send(200, {"done": 1, "bytes": 1e10})
         if self.path.endswith("/api/llm/certificate"): return self.send(200, {"url": "https://ia.exemple:11434", "host": "ia.exemple:11434", "sha256": "ab" * 32, "self_signed": True, "pinned": False,
             "subject": "CN=ia.exemple", "issuer": "CN=ia.exemple", "not_before": "Nov  1 00:00:00 2026 GMT", "not_after": "Nov  1 00:00:00 2027 GMT", "names": ["ia.exemple"]})
+        if self.path.endswith("/api/seeddiag/apply"): return self.send(200, {"applied": "Utiliser le port 51413"})
         if self.path.endswith("/api/llm/certificate/trust"): return self.send(200, {"settings": {}})
         if self.path.endswith("/api/llm/test"): return self.send(200, {"ok": True, "version": "0.5.1", "models": [{"name": "llama3.1:8b", "size": 4e9}, {"name": "mistral:latest", "size": 3e9}], "model_ok": True, "ms": 120})
         if self.path.endswith(("/api/replacer/settings", "/api/mediaslim/settings", "/api/shareprofile/set", "/api/shareprofile/unset", "/api/shareprofile/auto", "/api/relocate/settings",

@@ -11,16 +11,17 @@ const chipsOf = (items) => el('div', { class: 'row' }, ...items.map((i) => pill(
 // ---------------------------------------------------------------------------------------------------------------
 //  Assistant IA externe : bouton d'avis (pages Bibliothèques et Seeds) et réglages
 // ---------------------------------------------------------------------------------------------------------------
+const AI_PREFIX = { seeds: 'seeds', diag: 'seeddiag', library: 'library' };
 async function loadAiBox(topic) {
-  const button = $(`${topic === 'seeds' ? 'seeds' : 'library'}-ai`);
-  const box = $(`${topic === 'seeds' ? 'seeds' : 'library'}-avis`);
+  const button = $(`${AI_PREFIX[topic]}-ai`);
+  const box = $(`${AI_PREFIX[topic]}-avis`);
   const data = await api('/api/llm');
   button.disabled = !data.settings.enabled;
   button.title = data.settings.enabled ? '' : 'Activez le connecteur dans Paramètres.';
   const last = data.last;
   const show = !!(last && last.topic === topic);
   box.classList.toggle('hidden', !show);
-  if (show) $(`${topic === 'seeds' ? 'seeds' : 'library'}-avis-texte`).textContent = `${last.text}\n\n(${last.model}, ${fmtDateTime(last.at)})`;
+  if (show) $(`${AI_PREFIX[topic]}-avis-texte`).textContent = `${last.text}\n\n(${last.model}, ${fmtDateTime(last.at)})`;
 }
 function askAi(topic) {
   runJob('/api/llm/explain', { topic }, () => loadAiBox(topic).catch(showError));
@@ -463,7 +464,36 @@ function trackerCard(t) {
       el('tbody', {}, ...t.top.map((r) => el('tr', {}, el('td', { class: 'small' }, r.name), el('td', {}, fmtSize(r.size)), el('td', {}, fmtSize(r.up30)),
         el('td', {}, `${r.seeds} / ${r.leechers}`), el('td', {}, pill(r.class, CLASS_KIND[r.class] || 'info'))))))));
 }
+// Diagnostic du partage : constats mécaniques, remèdes en un clic
+const DIAG_LEVEL = { critical: ['err', 'Critique'], warning: ['warn', 'Important'], info: ['info', 'Information'] };
+async function loadSeeddiag() {
+  const button = $('seeddiag-run');
+  button.disabled = true;
+  try {
+    const data = await api('/api/seeddiag');
+    const list = $('seeddiag-list');
+    if (!data.running) {
+      $('seeddiag-summary').textContent = 'qBittorrent est arrêté : aucun diagnostic possible.';
+      list.replaceChildren();
+    } else {
+      const s = data.summary;
+      $('seeddiag-summary').textContent = `Connexion : ${s.connection || 'inconnue'} · port ${s.port ?? '?'}${s.forwarded_port ? ` (VPN : ${s.forwarded_port})` : ''} · envoi actuel ${fmtSize(s.up_speed || 0)}/s · ${fmtNumber(s.torrents, 0)} torrent(s).`;
+      list.replaceChildren(...data.findings.map((f) => {
+        const [kind, word] = DIAG_LEVEL[f.severity];
+        const apply = f.apply ? el('button', { class: 'btn sm', type: 'button', onclick: (event) => confirmAction(event.currentTarget,
+          `${f.fix} Le réglage est appliqué à qBittorrent immédiatement ; vous pourrez le rétablir dans ses options.`,
+          async () => { try { await api('/api/seeddiag/apply', { id: f.id }); toast('ok', `${f.apply.label} : fait.`); await loadSeeddiag(); } catch (error) { showError(error); } }) }, f.apply.label) : null;
+        return el('div', { class: `diag-item diag-${f.severity}` },
+          el('div', { class: 'diag-head' }, pill(word, kind), el('strong', {}, f.title)),
+          el('p', { class: 'diag-cause' }, f.cause),
+          el('p', { class: 'diag-fix muted' }, `À faire : ${f.fix}`), apply);
+      }));
+    }
+  } finally { button.disabled = false; }
+}
+
 async function loadSeeds() {
+  loadSeeddiag().catch(showError);
   const data = await api('/api/seedopt');
   const state = $('seeds-state');
   state.className = `notice ${data.available ? 'info' : 'warn'}`;
@@ -487,7 +517,7 @@ async function loadSeeds() {
   $('seeds-retire-list').replaceChildren(...(data.retirable.length ? data.retirable.map((r) => el('tr', {}, checkCell(r.hash, `Retirer ${r.name}`), el('td', { class: 'small' }, r.name),
     el('td', {}, r.tracker), el('td', {}, fmtSize(r.size)), el('td', {}, r.all_linked ? pill('liés ailleurs', 'ok') : pill('sans autre lien', 'warn')),
     el('td', {}, `${fmtNumber(r.age, 0)} j`))) : [emptyRow(6, 'Rien à retirer.')]));
-  loadAiBox('seeds').catch(showError);
+  loadAiBox('diag').catch(showError);
 }
 async function saveSeedRule(event) {
   event.preventDefault();
@@ -599,7 +629,8 @@ function initOps4() {
   refreshJobs();
   $('library-scan').addEventListener('click', () => runJob('/api/library/scan', {}, () => loadLibrary().catch(showError)));
   $('library-ai').addEventListener('click', () => askAi('library'));
-  $('seeds-ai').addEventListener('click', () => askAi('seeds'));
+  $('seeddiag-ai').addEventListener('click', () => askAi('diag'));
+  $('seeddiag-run').addEventListener('click', () => loadSeeddiag().catch(showError));
   $('copyaudit-scan').addEventListener('click', () => runJob('/api/copyaudit/scan', {}, () => loadCopyaudit().catch(showError)));
   $('copyaudit-all').addEventListener('change', (event) => $('copyaudit-list').querySelectorAll('input[type=checkbox]:not(:disabled)').forEach((box) => { box.checked = event.target.checked; }));
   $('copyaudit-relink-all').addEventListener('click', (event) => confirmAction(event.currentTarget,

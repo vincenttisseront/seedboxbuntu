@@ -534,7 +534,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json({"results": ctl.titleshare().search(query.get("kind", [""])[0], query.get("q", [""])[0])})
         if path == "/api/vpnwatch":
             return self.send_json(ctl.vpnwatch().overview())
-        if path in ("/api/library", "/api/copyaudit", "/api/replacer", "/api/mediaslim", "/api/shareprofile", "/api/relocate", "/api/seedopt", "/api/llm"):
+        if path in ("/api/library", "/api/copyaudit", "/api/replacer", "/api/mediaslim", "/api/shareprofile", "/api/relocate", "/api/seedopt", "/api/seeddiag", "/api/llm"):
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             if path == "/api/library":
                 return self.send_json(dict(ctl.libmap().overview(), scanning=ctl.libscan().running()))
@@ -542,6 +542,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.relocate().overview(query.get("volume", [""])[0] or None))
             if path == "/api/seedopt":
                 return self.send_json(ctl.seedopt().overview(query.get("tracker", [""])[0] or None))
+            if path == "/api/seeddiag":
+                return self.send_json(ctl.seeddiag().overview())
             return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
         if path in CARE_GET:
             return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
@@ -856,7 +858,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.energy().set_standby(str(data.get("disk", "")), data.get("minutes")))
             if path == "/api/energy/settings":
                 return self.send_json({"settings": ctl.energy().save(data)})
-        if path.startswith(("/api/library/", "/api/copyaudit/", "/api/replacer/", "/api/mediaslim/", "/api/shareprofile/", "/api/relocate/", "/api/seedopt/", "/api/llm/")):
+        if path.startswith(("/api/library/", "/api/copyaudit/", "/api/replacer/", "/api/mediaslim/", "/api/shareprofile/", "/api/relocate/", "/api/seedopt/", "/api/seeddiag/", "/api/llm/")):
             who = self.headers.get("Remote-User", "")[:30] or "console"
             ids = [str(x) for x in data.get("ids", [])] if isinstance(data.get("ids"), list) else []
             if path == "/api/library/scan":
@@ -908,6 +910,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.seedopt().retire([str(x) for x in data.get("hashes", [])], bool(data.get("delete_files")), by=who))
             if path == "/api/seedopt/check":
                 return self.send_json({"results": ctl.seedopt().check_trackers([str(x) for x in data.get("hashes", [])])})
+            if path == "/api/seeddiag/apply":
+                return self.send_json(ctl.seeddiag().apply(str(data.get("id", "")), by=who))
             if path == "/api/llm/settings":
                 return self.send_json({"settings": ctl.llm().save(data)})
             if path == "/api/llm/certificate":
@@ -920,7 +924,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.llm().test(probe=data))
             if path == "/api/llm/explain":
                 topic = str(data.get("topic", ""))
-                if topic not in ("seeds", "library"):
+                if topic not in ("seeds", "diag", "library"):
                     raise ctl.SeedboxError("sujet inconnu")
                 return self.send_json({"job": start_job("Avis de l'IA : " + ("seeds" if topic == "seeds" else "bibliothèque"), ["llm", "explain", topic])})
         if path == "/api/remote-control/pause":

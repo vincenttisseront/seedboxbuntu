@@ -169,6 +169,12 @@ details>.form,details>.fields{margin-top:10px}
 /* ---------- journaux, code, listes de contrôles ---------- */
 code,kbd{font:var(--fs-sm) var(--mono);background:var(--code);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
 pre.log{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:var(--sp-3);max-height:340px;overflow:auto;font:var(--fs-sm)/1.6 var(--mono);margin:0;white-space:pre-wrap;color:var(--text)}
+#seeddiag-list{display:grid;gap:var(--sp-3);margin:var(--sp-3) 0}
+.diag-item{padding:var(--sp-3);border:1px solid var(--line);border-radius:10px;border-left-width:4px}
+.diag-critical{border-left-color:var(--err)}.diag-warning{border-left-color:var(--warn)}.diag-info{border-left-color:var(--line2)}
+.diag-head{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap}
+.diag-cause,.diag-fix{margin:var(--sp-2) 0 0}
+.diag-item .btn{margin-top:var(--sp-2)}
 #dialog-text{white-space:pre-line;overflow-wrap:anywhere}
 pre.log .job-item{white-space:normal;padding:var(--sp-3) 0;border-bottom:1px solid var(--line)}
 pre.log .job-item:last-child{border-bottom:0}
