@@ -430,3 +430,13 @@ table.compact th,table.compact td{padding:3px 8px}
 .space-remedies{list-style:none;margin:var(--sp-2) 0;padding:0;display:flex;flex-direction:column;gap:var(--sp-2)}
 .space-remedy{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel2)}
 td.num{text-align:right;white-space:nowrap}
+
+/* ---------- bandeau des applications ---------- */
+.appbar{position:sticky;top:0;z-index:var(--z-bar);display:flex;align-items:center;gap:var(--sp-2);margin:calc(-1*var(--sp-5)) calc(-1*var(--sp-5)) var(--sp-4);padding:6px var(--sp-5);background:var(--bar);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.appbar::-webkit-scrollbar{display:none}
+.appbar a{--c:var(--line2);flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--c);color:var(--appbar-ink);font:700 12px/1 var(--mono);letter-spacing:-.02em;text-decoration:none;box-shadow:inset 0 0 0 1px var(--appbar-ring);transition:transform .12s}
+.appbar a:hover,.appbar a:focus-visible{transform:translateY(-1px) scale(1.08)}
+.appbar a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.appbar a[aria-current]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--c)}
+body.kiosk .appbar{display:none!important}
+@media (max-width:900px){.appbar{position:static;margin:0 calc(-1*var(--sp-4)) var(--sp-3);padding:6px var(--sp-4)}}

@@ -78,3 +78,7 @@ html[data-density=compact]{
 /* taille du texte */
 html[data-text=large]{--ts:1.12}
 html[data-text=xlarge]{--ts:1.26}
+
+/* Bandeau des applications : couleur de marque de chaque tuile (identique dans tous les thèmes) */
+:root{--appbar-ink:#ffffff;--appbar-ring:rgba(255,255,255,.18)}
+.appbar a[data-app="homepage"]{--c:#0ea5e9}.appbar a[data-app="jellyfin"]{--c:#7c5cff}.appbar a[data-app="seerr"]{--c:#6366f1}.appbar a[data-app="qbittorrent"]{--c:#2563eb}.appbar a[data-app="prowlarr"]{--c:#e66000}.appbar a[data-app="jackett"]{--c:#b45309}.appbar a[data-app="radarr"]{--c:#d4a000}.appbar a[data-app="sonarr"]{--c:#0b95a8}.appbar a[data-app="autobrr"]{--c:#0f766e}.appbar a[data-app="qbm"]{--c:#475569}.appbar a[data-app="dockge"]{--c:#1d9bf0}.appbar a[data-app="traefik"]{--c:#0e7490}.appbar a.h0{--c:#be185d}.appbar a.h1{--c:#9333ea}.appbar a.h2{--c:#0d9488}.appbar a.h3{--c:#ca8a04}.appbar a.h4{--c:#dc2626}.appbar a.h5{--c:#4f46e5}.appbar a.h6{--c:#16a34a}.appbar a.h7{--c:#ea580c}.appbar a.h8{--c:#0284c7}.appbar a.h9{--c:#65a30d}.appbar a.h10{--c:#c026d3}.appbar a.h11{--c:#64748b}

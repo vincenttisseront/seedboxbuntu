@@ -93,10 +93,29 @@ async function loadSteps() {
   $('steps-list').replaceChildren(...(rows.length ? rows : [emptyRow(4, 'Aucune étape exécutée pour le moment.')]));
 }
 
+// Bandeau fixe : une icône par application installée, pour y aller sans passer par la page Applications
+const APP_LETTERS = { homepage: 'TB', jellyfin: 'Jf', seerr: 'Se', qbittorrent: 'qB', prowlarr: 'Pr', jackett: 'Jk', radarr: 'Ra', sonarr: 'So', autobrr: 'ab', qbm: 'qm', dockge: 'Dk', traefik: 'Tf' };
+function renderAppbar(apps) {
+  const bar = $('appbar');
+  const shown = apps.filter((app) => app.service !== 'console' && app.login !== 'public');
+  bar.classList.toggle('hidden', !shown.length);
+  bar.replaceChildren(...shown.map((app) => {
+    const letters = APP_LETTERS[app.id] || app.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2);
+    let hash = 0;
+    for (const ch of app.id) hash = (hash * 31 + ch.charCodeAt(0)) % 12;
+    return el('a', { href: appUrl(app), target: '_blank', rel: 'noopener', title: app.name, 'aria-label': app.name, 'data-app': app.id, class: APP_LETTERS[app.id] ? '' : `h${hash}` },
+      el('span', { 'aria-hidden': 'true' }, letters));
+  }));
+}
+async function loadAppbar() {
+  try { renderAppbar((await api('/api/status')).apps || []); } catch (error) { /* le bandeau reste masqué */ }
+}
+
 async function loadApps() {
   if (!readonlyMode()) loadSteps().catch(showError);
   api('/api/appliance').then((data) => renderAppliance(data)).catch(() => {});
   const status = await api('/api/status');
+  renderAppbar(status.apps || []);
   const notice = $('apps-state');
   notice.classList.toggle('hidden', status.deployed);
   notice.textContent = 'Le déploiement n’est pas terminé : relancez la configuration si cet état persiste.';
@@ -730,7 +749,9 @@ const VIEWS = { overview: loadOverview, styleguide: loadStyleguide, system: asyn
   activity: loadActivity, vulns: loadVulns, netcheck: loadNetcheck, vacation: loadVacation,
   disks: async () => { await loadDisks(); loadDiskusage().catch(showError); }, changes: loadChanges, quality: loadQuality, library: loadLibrary, care: loadCare, upgrades: loadUpgrades, seeds: loadSeeds, maison: loadMaison, bandwidth: loadBandwidth, diagnose: loadDiagnose, medialist: loadMedialist, telecommande: loadTelecommande };
 
+let appbarLoaded = false;
 function route() {
+  if (!appbarLoaded) { appbarLoaded = true; loadAppbar(); }
   const requested = location.hash.slice(1);
   // #kiosk : la vue d'ensemble en grand, sans menu ; tout autre chemin quitte le mode kiosque
   if (requested === 'kiosk' || requested === 'maison') enterKiosk(); else exitKiosk();
