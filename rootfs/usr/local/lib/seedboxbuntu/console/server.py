@@ -932,7 +932,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 topic = str(data.get("topic", ""))
                 if topic not in ("seeds", "diag", "library"):
                     raise ctl.SeedboxError("sujet inconnu")
-                return self.send_json({"job": start_job("Avis de l'IA : " + ("seeds" if topic == "seeds" else "bibliothèque"), ["llm", "explain", topic])})
+                return self.send_json({"job": start_job("Avis de l'IA : " + {"seeds": "seeds", "diag": "diagnostic du partage"}.get(topic, "bibliothèque"), ["llm", "explain", topic])})
         if path == "/api/remote-control/pause":
             return self.send_json({"paused": ctl.telecommande().pause()})
         if path == "/api/remote-control/resume":
