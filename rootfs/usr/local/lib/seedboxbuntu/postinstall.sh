@@ -25,7 +25,7 @@ say "activation des services"
 # SYSTEMD_OFFLINE=1 : activation hors ligne garantie, même si systemd ne détecte pas le chroot
 export SYSTEMD_OFFLINE=1
 systemctl enable seedbox-console.service seedbox-deploy.service seedbox-refresh.timer seedbox-shares.timer docker.service \
-  seedbox-firewall.service seedbox-autoupdate.timer seedbox-upgrade.service seedbox-backup.timer seedbox-alerts.timer seedbox-appliance.timer seedbox-restoretest.timer seedbox-metrics.timer seedbox-report.timer seedbox-vulnscan.timer
+  seedbox-firewall.service seedbox-autoupdate.timer seedbox-upgrade.service seedbox-backup.timer seedbox-alerts.timer seedbox-appliance.timer seedbox-restoretest.timer seedbox-metrics.timer seedbox-repoint.timer seedbox-report.timer seedbox-vulnscan.timer
 systemctl start seedbox-report.timer seedbox-vulnscan.timer >/dev/null 2>&1 || true   # serveur déjà en marche (mise à jour sans ISO) : actif tout de suite
 # Assistant de premier démarrage : réseau, nom de machine, mot de passe
 systemctl enable seedbox-firstboot@tty1.service

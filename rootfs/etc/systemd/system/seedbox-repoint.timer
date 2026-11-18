@@ -1,0 +1,9 @@
+[Unit]
+Description=SeedBoxBuntu - seed depuis le NAS (toutes les 30 minutes)
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+
+[Install]
+WantedBy=timers.target

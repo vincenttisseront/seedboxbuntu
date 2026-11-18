@@ -474,6 +474,10 @@ def seeddiag():
     return _lazy("seeddiag")
 
 
+def repoint():
+    return _lazy("repoint")
+
+
 def llm():
     return _lazy("llm")
 
@@ -2983,6 +2987,9 @@ def main():
     sd = commands.add_parser("seeddiag", help="diagnostic du partage").add_subparsers(dest="action", required=True)
     sd.add_parser("show")
     sd.add_parser("apply").add_argument("ident")
+    rp = commands.add_parser("repoint", help="seed depuis le NAS, sans copie locale").add_subparsers(dest="action", required=True)
+    for name in ("show", "run", "enable", "disable"):
+        rp.add_parser(name)
     so = commands.add_parser("seedopt", help="optimisation des seeds").add_subparsers(dest="action", required=True)
     so.add_parser("show").add_argument("--tracker", default=None)
     for name in ("rules", "sample"):
@@ -3736,6 +3743,14 @@ def main():
             print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
         else:
             print(json.dumps(locked(module.apply)(args.ident), ensure_ascii=False))
+    elif args.command == "repoint":
+        module = repoint()
+        if args.action == "show":
+            print(json.dumps(module.overview(), indent=2, ensure_ascii=False))
+        elif args.action == "run":
+            print(json.dumps(locked(module.run)(), ensure_ascii=False))
+        else:
+            print(json.dumps(module.set_enabled(args.action == "enable")))
     elif args.command == "seedopt":
         module = seedopt()
         if args.action == "show":

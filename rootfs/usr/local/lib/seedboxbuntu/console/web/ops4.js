@@ -169,6 +169,7 @@ async function loadLibrary() {
     el('td', {}, el('ul', {}, ...e.files.map((f) => el('li', { class: 'state-item small' }, `${f.quality || '?'} · ${fmtSize(f.size)} · ${volumeLabel(f.volume)}`)))),
     el('td', {}, fmtSize(e.saving)))) : [emptyRow(3, 'Rien à signaler.')]));
   loadCopyaudit().catch(showError);
+  loadRepoint().catch(showError);
   loadShareprofile().catch(showError);
   loadRelocate().catch(showError);
   loadAiBox('library').catch(showError);
@@ -188,6 +189,15 @@ async function loadCopyaudit() {
   $('copyaudit-list').replaceChildren(...(data.items.length ? data.items.map((i) => el('tr', {},
     checkCell(i.download, `Relier ${i.title}`, i.same_disk ? {} : { disabled: '' }), el('td', { class: 'small' }, i.download), el('td', {}, i.title),
     el('td', {}, fmtSize(i.size)), el('td', {}, pill(i.same_disk ? 'possible' : 'deux disques', i.same_disk ? 'ok' : 'warn')))) : [emptyRow(5, 'Aucune copie cachée.')]));
+}
+async function loadRepoint() {
+  const data = await api('/api/repoint');
+  $('repoint-auto').checked = data.enabled;
+  const state = $('repoint-state');
+  state.className = 'notice info';
+  const last = data.last ? ` Dernier passage : ${data.last.done} torrent(s) repointé(s), ${fmtSize(data.last.freed)} libérés${data.last.failed.length ? `, ${data.last.failed.length} laissé(s) en place` : ''}.` : '';
+  state.textContent = data.note || (data.plans.length ? `${data.plans.length} torrent(s) à repointer, ${fmtSize(data.saving)} à libérer.${last}` : `Aucune copie locale à libérer.${last}`);
+  $('repoint-run').disabled = !data.plans.length;
 }
 // Liage en masse : la progression (fichier i sur n) est lue dans le journal de la tâche
 function relinkProgress(job) {
@@ -631,6 +641,12 @@ function initOps4() {
   $('library-ai').addEventListener('click', () => askAi('library'));
   $('seeddiag-ai').addEventListener('click', () => askAi('diag'));
   $('seeddiag-run').addEventListener('click', () => loadSeeddiag().catch(showError));
+  $('repoint-run').addEventListener('click', (event) => confirmAction(event.currentTarget,
+    'Chaque torrent terminé dont le fichier est identique sur le NAS est repointé vers ce fichier, revérifié à 100 %, puis sa copie locale est supprimée. En cas d’échec, il est remis comme avant.',
+    () => runJob('/api/repoint/run', {}, () => loadRepoint().catch(showError))));
+  $('repoint-auto').addEventListener('change', async (event) => {
+    try { await api('/api/repoint/auto', { on: event.target.checked }); toast('ok', event.target.checked ? 'Automatique : contrôle toutes les 30 minutes.' : 'Automatique désactivé.'); } catch (error) { showError(error); }
+  });
   $('copyaudit-scan').addEventListener('click', () => runJob('/api/copyaudit/scan', {}, () => loadCopyaudit().catch(showError)));
   $('copyaudit-all').addEventListener('change', (event) => $('copyaudit-list').querySelectorAll('input[type=checkbox]:not(:disabled)').forEach((box) => { box.checked = event.target.checked; }));
   $('copyaudit-relink-all').addEventListener('click', (event) => confirmAction(event.currentTarget,

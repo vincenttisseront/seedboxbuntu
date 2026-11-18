@@ -735,14 +735,15 @@ def apply_qbittorrent():
     incomplete, watch, torrents = location("incomplete"), location("watch"), location("torrents")
     preferences = {
         "save_path": location("complete"),
-        "temp_path_enabled": bool(incomplete),
+        # Téléchargements terminés sur un stockage externe : jamais de copie locale, qBittorrent écrit directement au bon endroit
+        "temp_path_enabled": bool(incomplete) and (volume("complete") == "local" or volume("incomplete") == volume("complete")),
         "scan_dirs": {watch: 1} if watch else {},
         "export_dir": torrents,                          # qBittorrent jusqu'à 5.2
         "torrent_files_backup_enabled": bool(torrents),  # même réglage, renommé en 5.3
         # Changer l'emplacement par défaut ne déplace pas des téraoctets de données déjà partagées
         "save_path_changed_tmm_enabled": False,
     }
-    if incomplete:
+    if preferences["temp_path_enabled"]:
         preferences["temp_path"] = incomplete
     if torrents:
         preferences["torrent_files_backup_dir"] = torrents
@@ -799,8 +800,16 @@ def warnings(data):
         notes.append(f"Les torrents terminés sont partagés depuis {roles['complete']['share']} : le débit d'envoi dépend "
                      "de ce support (et du réseau local pour un NAS). Les torrents existants restent à leur emplacement actuel.")
     if vol("incomplete") and vol("incomplete") != vol("complete"):
-        notes.append("Téléchargements en cours et terminés sur des volumes différents : qBittorrent copie "
-                     "chaque fichier à la fin du téléchargement.")
+        if vol("complete") != "local":
+            notes.append("Téléchargements terminés sur un stockage externe : le dossier « en cours » local est ignoré, qBittorrent "
+                         "télécharge directement sur le stockage externe (jamais de copie locale).")
+        else:
+            notes.append("Téléchargements en cours et terminés sur des volumes différents : qBittorrent copie "
+                         "chaque fichier à la fin du téléchargement.")
+    if vol("complete") == "local" and any(vol(r) not in ("local", None) for r in ("movies", "tv", "music")):
+        notes.append("Les téléchargements terminés restent sur le disque du serveur alors que les bibliothèques sont sur un stockage externe : "
+                     "choisissez un partage pour « Téléchargements terminés » pour ne plus rien télécharger en local. En attendant, « Seed depuis le NAS » "
+                     "repointe automatiquement les torrents terminés vers le NAS et libère la copie locale.")
     for name, entry in data["shares"].items():
         if entry.get("kind") == "smb" and entry.get("version") == "1.0":
             notes.append(f"{name} : SMB 1.0 est ancien et peu sûr ; à réserver aux NAS qui n'acceptent rien d'autre.")

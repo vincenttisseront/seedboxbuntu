@@ -534,7 +534,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json({"results": ctl.titleshare().search(query.get("kind", [""])[0], query.get("q", [""])[0])})
         if path == "/api/vpnwatch":
             return self.send_json(ctl.vpnwatch().overview())
-        if path in ("/api/library", "/api/copyaudit", "/api/replacer", "/api/mediaslim", "/api/shareprofile", "/api/relocate", "/api/seedopt", "/api/seeddiag", "/api/llm"):
+        if path in ("/api/library", "/api/copyaudit", "/api/replacer", "/api/mediaslim", "/api/shareprofile", "/api/relocate", "/api/seedopt", "/api/seeddiag", "/api/repoint", "/api/llm"):
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             if path == "/api/library":
                 return self.send_json(dict(ctl.libmap().overview(), scanning=ctl.libscan().running()))
@@ -544,6 +544,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.seedopt().overview(query.get("tracker", [""])[0] or None))
             if path == "/api/seeddiag":
                 return self.send_json(ctl.seeddiag().overview())
+            if path == "/api/repoint":
+                return self.send_json(ctl.repoint().overview())
             return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
         if path in CARE_GET:
             return self.send_json(getattr(ctl, path.rsplit("/", 1)[1])().overview())
@@ -858,7 +860,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.energy().set_standby(str(data.get("disk", "")), data.get("minutes")))
             if path == "/api/energy/settings":
                 return self.send_json({"settings": ctl.energy().save(data)})
-        if path.startswith(("/api/library/", "/api/copyaudit/", "/api/replacer/", "/api/mediaslim/", "/api/shareprofile/", "/api/relocate/", "/api/seedopt/", "/api/seeddiag/", "/api/llm/")):
+        if path.startswith(("/api/library/", "/api/copyaudit/", "/api/replacer/", "/api/mediaslim/", "/api/shareprofile/", "/api/relocate/", "/api/seedopt/", "/api/seeddiag/", "/api/repoint/", "/api/llm/")):
             who = self.headers.get("Remote-User", "")[:30] or "console"
             ids = [str(x) for x in data.get("ids", [])] if isinstance(data.get("ids"), list) else []
             if path == "/api/library/scan":
@@ -910,6 +912,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json(ctl.seedopt().retire([str(x) for x in data.get("hashes", [])], bool(data.get("delete_files")), by=who))
             if path == "/api/seedopt/check":
                 return self.send_json({"results": ctl.seedopt().check_trackers([str(x) for x in data.get("hashes", [])])})
+            if path == "/api/repoint/run":
+                return self.send_json({"job": start_job("Seed depuis le NAS : libération des copies locales", ["repoint", "run"])})
+            if path == "/api/repoint/auto":
+                return self.send_json(ctl.repoint().set_enabled(data.get("on") is True))
             if path == "/api/seeddiag/apply":
                 return self.send_json(ctl.seeddiag().apply(str(data.get("id", "")), by=who))
             if path == "/api/llm/settings":

@@ -1,0 +1,12 @@
+[Unit]
+Description=SeedBoxBuntu - seed depuis le NAS : repointe les torrents terminés dont le média est rangé sur un partage, puis libère la copie locale
+After=docker.service
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl repoint run
+# Une autre opération en cours, ou qBittorrent arrêté : on réessaiera à la prochaine échéance
+SuccessExitStatus=1
+Nice=15
+IOSchedulingClass=idle

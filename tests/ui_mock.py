@@ -142,6 +142,7 @@ def route(p, q, role="admin", PREFS=None):
         "versions": [{"kind": "film", "title": "Dune", "year": 2021, "saving": 4e9, "files": [
             {"path": "/data/media/films/Dune/dune.mkv", "size": 9e9, "quality": "Bluray-1080p", "volume": "local", "app": "radarr"},
             {"path": "/data/media/films/Dune (2)/dune.mkv", "size": 5e9, "quality": "WEBDL-1080p", "volume": "local", "app": "radarr"}]}], "versions_total": 1, "versions_saving": 4e9}
+    if p == "/api/repoint": return {"enabled": True, "plans": [{"hash": "h1", "name": "Film.2020", "size": 4 << 30, "save_new": "/shares/nas/movies"}], "skipped": [], "saving": 4 << 30, "note": "", "last": None}
     if p == "/api/seeddiag": return {"running": True, "at": now, "summary": {"connection": "firewalled", "port": 6881, "forwarded_port": 51413, "up_speed": 0, "torrents": 40, "states": {"stalledUP": 30}},
         "findings": [
             {"id": "port-forward", "severity": "critical", "title": "Le port d'écoute n'est pas le port ouvert par le VPN", "cause": "qBittorrent écoute sur le port 6881, mais le VPN a ouvert le 51413.",
