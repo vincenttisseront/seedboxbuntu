@@ -30,7 +30,7 @@ class Reply:
         return self.data
 
 
-def scenario(filters, indexers):
+def scenario(filters, indexers, detail=None):
     calls = []
 
     def api(method, path, body=None, cookie=None):
@@ -43,6 +43,8 @@ def scenario(filters, indexers):
             return Reply(filters)
         if path == "/filters" and method == "POST":
             return Reply({"id": 42})
+        if path.startswith("/filters/") and method == "GET":
+            return Reply(detail or {})
         return Reply({})
     real = ctl.autobrr_api
     ctl.autobrr_api = api
@@ -62,6 +64,22 @@ calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": False}], [{"id":
 put = next(b for m, p, b in calls if m == "PUT")
 check("filtre existant coupé par l'utilisateur : mis à jour mais jamais réactivé, pas de doublon",
       put["enabled"] is False and put["id"] == 9 and not [1 for m, p, b in calls if m == "POST"])
+
+# autobrr écrit NULL pour une liste absente du JSON et SQLite la refuse (HTTP 500, NOT NULL constraint failed: filter.resolutions) :
+# chaque liste doit être envoyée, vide au besoin, à la création comme à la mise à jour
+calls = scenario([], [{"id": 1, "enabled": True}])
+bodies = [b for m, p, b in calls if m in ("POST", "PUT") and p.startswith("/filters")]
+check("création : toutes les listes d'autobrr sont envoyées, vides (sinon NOT NULL constraint failed: filter.resolutions)",
+      len(bodies) == 2 and all(isinstance(b.get(name), list) and not b[name] for b in bodies for name in ctl.AUTOBRR_FILTER_LISTS),
+      str([name for name in ctl.AUTOBRR_FILTER_LISTS if not all(isinstance(b.get(name), list) for b in bodies)]))
+check("liste des champs : celle que l'interface web d'autobrr envoie toujours",
+      {"resolutions", "codecs", "sources", "containers", "match_hdr", "except_hdr", "match_other", "except_other",
+       "match_release_types", "formats", "quality", "media", "origins", "except_origins", "bonus", "announce_types",
+       "match_language", "except_language"} == set(ctl.AUTOBRR_FILTER_LISTS))
+calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}], detail={"id": 9, "resolutions": ["1080p"], "codecs": None})
+put = next(b for m, p, b in calls if m == "PUT")
+check("mise à jour : les listes réglées par l'utilisateur sont gardées, les autres envoyées vides (jamais null)",
+      put["resolutions"] == ["1080p"] and put["codecs"] == [] and all(isinstance(put[name], list) for name in ctl.AUTOBRR_FILTER_LISTS))
 
 # reprise du mot de passe : la 2e variante de saisie est tentée si la 1re échoue
 tried = []

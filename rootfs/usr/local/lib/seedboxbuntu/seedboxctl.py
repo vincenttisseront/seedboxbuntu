@@ -1800,12 +1800,20 @@ def provision_autobrr():
 
 
 FILTER_NAME = "Nouveautés freeleech (SeedBoxBuntu)"
+# Listes que autobrr range dans des colonnes NOT NULL : absentes du JSON, il les écrit NULL et SQLite refuse la requête
+# (HTTP 500 « NOT NULL constraint failed: filter.resolutions »). L'interface web les envoie toujours, vides ou remplies.
+AUTOBRR_FILTER_LISTS = ("announce_types", "origins", "except_origins", "bonus", "resolutions", "codecs", "sources",
+                        "containers", "match_hdr", "except_hdr", "match_other", "except_other", "match_release_types",
+                        "formats", "quality", "media", "match_language", "except_language")
 
 
-def autobrr_filter_payload(indexers, client_id):
+def autobrr_filter_payload(indexers, client_id, current=None):
     """Nouveautés freeleech, tous trackers : un téléchargement freeleech ne coûte aucun ratio, et un torrent tout juste publié est celui
-    qui trouve des téléchargeurs. Plafonds : 25 Go par torrent, 3 par heure (le disque et le VPN ne se remplissent pas d'un coup)."""
+    qui trouve des téléchargeurs. Plafonds : 25 Go par torrent, 3 par heure (le disque et le VPN ne se remplissent pas d'un coup).
+    `current` : le filtre déjà présent dans autobrr, dont on garde les listes (résolutions, sources...) que l'utilisateur a pu remplir."""
+    lists = {name: list((current or {}).get(name) or []) for name in AUTOBRR_FILTER_LISTS}
     return {
+        **lists,
         "name": FILTER_NAME, "enabled": True, "priority": 10, "freeleech": True, "max_size": "25GB",
         "max_downloads": 3, "max_downloads_unit": "HOUR", "indexers": [{"id": i["id"]} for i in indexers],
         "actions": [{"name": "qBittorrent : agrégateur", "type": "QBITTORRENT", "enabled": True, "client_id": client_id,
@@ -1822,6 +1830,9 @@ def provision_autobrr_filter(cookie):
     payload = autobrr_filter_payload(indexers, clients[0]["id"])
     existing = [f for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == FILTER_NAME]
     if existing:
+        # La liste des filtres est abrégée : le détail seul porte les listes que l'utilisateur a pu régler
+        detail = autobrr_api("GET", f"/filters/{existing[0]['id']}", cookie=cookie)
+        payload = autobrr_filter_payload(indexers, clients[0]["id"], detail.json() if detail.ok else None)
         payload["enabled"] = existing[0].get("enabled", True)
         result = autobrr_api("PUT", f"/filters/{existing[0]['id']}", {**payload, "id": existing[0]["id"]}, cookie)
     else:
