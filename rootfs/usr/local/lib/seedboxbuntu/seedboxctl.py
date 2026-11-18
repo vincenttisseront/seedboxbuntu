@@ -1794,6 +1794,10 @@ def provision_autobrr():
     if not result.ok:
         raise SeedboxError(f"autobrr : client refusé (HTTP {result.status}) {result.text[:200]}")
     try:
+        autobrr_sync_indexers(cookie)
+    except (SeedboxError, OSError, ValueError, KeyError) as error:
+        say(f"autobrr : indexeurs de Prowlarr non repris ({error})")
+    try:
         provision_autobrr_filter(cookie)
     except (SeedboxError, OSError, ValueError, KeyError) as error:
         say(f"autobrr : filtre de nouveautés non posé ({error})")
@@ -1821,6 +1825,26 @@ def autobrr_filter_payload(indexers, client_id, current=None):
     }
 
 
+def autobrr_filter_detail(ident, cookie):
+    """Le filtre complet (la liste des filtres est abrégée : ni listes ni actions)."""
+    result = autobrr_api("GET", f"/filters/{ident}", cookie=cookie)
+    return (result.json() or {}) if result.ok else {}
+
+
+def autobrr_reuse_actions(payload, detail, cookie):
+    """Les actions déjà dans le filtre gardent leur identifiant : sans lui, autobrr en ajoute une de plus à chaque mise à jour et chaque
+    nouveauté part plusieurs fois vers qBittorrent. Les doublons déjà créés (même nom) sont supprimés."""
+    present = {}
+    for action in (detail or {}).get("actions") or []:
+        if action.get("name") in present:
+            autobrr_api("DELETE", f"/actions/{action['id']}", cookie=cookie)
+        else:
+            present[action.get("name")] = action["id"]
+    for action in payload.get("actions", []):
+        if action["name"] in present:
+            action["id"] = present[action["name"]]
+
+
 def provision_autobrr_filter(cookie):
     """Crée (ou met à jour, sans jamais le réactiver s'il a été coupé) le filtre de nouveautés freeleech sur tous les indexeurs d'autobrr."""
     clients = [c for c in (autobrr_api("GET", "/downloaders", cookie=cookie).json() or []) if c["name"] == "qBittorrent"]
@@ -1830,9 +1854,10 @@ def provision_autobrr_filter(cookie):
     payload = autobrr_filter_payload(indexers, clients[0]["id"])
     existing = [f for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == FILTER_NAME]
     if existing:
-        # La liste des filtres est abrégée : le détail seul porte les listes que l'utilisateur a pu régler
-        detail = autobrr_api("GET", f"/filters/{existing[0]['id']}", cookie=cookie)
-        payload = autobrr_filter_payload(indexers, clients[0]["id"], detail.json() if detail.ok else None)
+        # Le détail porte les listes que l'utilisateur a pu régler et les actions déjà posées
+        detail = autobrr_filter_detail(existing[0]["id"], cookie)
+        payload = autobrr_filter_payload(indexers, clients[0]["id"], detail)
+        autobrr_reuse_actions(payload, detail, cookie)
         payload["enabled"] = existing[0].get("enabled", True)
         result = autobrr_api("PUT", f"/filters/{existing[0]['id']}", {**payload, "id": existing[0]["id"]}, cookie)
     else:
@@ -1851,11 +1876,94 @@ def provision_autobrr_filter(cookie):
             ident = next((f["id"] for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == FILTER_NAME), None)
         if ident is None:
             raise SeedboxError("filtre créé mais introuvable")
+        # L'action envoyée à la création existe déjà : la mise à jour qui suit la reprend au lieu d'en ajouter une seconde
+        autobrr_reuse_actions(payload, autobrr_filter_detail(ident, cookie), cookie)
         result = autobrr_api("PUT", f"/filters/{ident}", {**payload, "id": ident}, cookie)
     if not result.ok:
         raise SeedboxError(f"filtre refusé (HTTP {result.status}) {result.text[:150]}")
     if not indexers:
         say("autobrr : aucun indexeur actif, le filtre ne s'appliquera qu'après l'ajout d'un indexeur dans autobrr")
+
+
+AUTOBRR_FEEDS_STATE = STATE / "autobrr-flux.json"
+
+
+def autobrr_feed_url(prowlarr_id):
+    """Adresse Torznab d'un indexeur de Prowlarr, telle que la voit autobrr (même réseau Docker que cross-seed)."""
+    return f"http://prowlarr:9696{BASE_PATHS['prowlarr']}/{prowlarr_id}/api"
+
+
+def autobrr_sync_indexers(cookie):
+    """Chaque indexeur torrent actif de Prowlarr devient un indexeur « Prowlarr : nom » d'autobrr, lu en Torznab : autobrr voit alors
+    les nouveautés de tous les trackers de la console, freeleech compris (Prowlarr transmet le facteur de téléchargement). Un indexeur
+    est reconnu à son adresse Torznab, jamais à son nom : celui qu'un utilisateur a ajouté à la main n'est ni doublé ni renommé.
+    Un flux existant n'est modifié que si l'adresse ou la clé de Prowlarr a changé ; son état (actif ou coupé), son intervalle et ses
+    catégories restent ceux de l'utilisateur. Renvoie le nombre d'indexeurs ajoutés ou corrigés."""
+    wanted = [i for i in prowlarr_indexers() if i.get("enable") and i.get("protocol") == "torrent" and i.get("id") is not None]
+    if not wanted:
+        return 0
+    api_key = env_read()["PROWLARR_API_KEY"]
+    digest = hashlib.sha256(api_key.encode()).hexdigest()
+    try:
+        known_digest = json.loads(AUTOBRR_FEEDS_STATE.read_text()).get("key")
+    except (OSError, ValueError, AttributeError):
+        known_digest = None
+    feeds = autobrr_api("GET", "/feeds", cookie=cookie)
+    if not feeds.ok:
+        raise SeedboxError(f"autobrr : liste des flux refusée (HTTP {feeds.status}) {feeds.text[:200]}")
+    by_url = {f.get("url"): f for f in (feeds.json() or [])}
+    indexers = autobrr_api("GET", "/indexer", cookie=cookie)
+    by_name = {i["name"]: i for i in ((indexers.json() or []) if indexers.ok else [])}
+    changed, failed = 0, []
+    for indexer in wanted:
+        url, name = autobrr_feed_url(indexer["id"]), "Prowlarr : " + str(indexer["name"]).strip()
+        feed = by_url.get(url)
+        if feed:
+            if known_digest == digest:
+                continue
+            result = autobrr_api("PUT", f"/feeds/{feed['id']}", {**feed, "url": url, "api_key": api_key}, cookie)
+            if not result.ok:
+                failed.append(f"{name} : flux refusé (HTTP {result.status}) {result.text[:120]}")
+            else:
+                changed += 1
+            continue
+        # Indexeur déjà là sans son flux (création interrompue) : on le réutilise au lieu de le doubler
+        existing = by_name.get(name)
+        created_here = existing is None
+        if created_here:
+            result = autobrr_api("POST", "/indexer", {"name": name, "identifier": "torznab", "implementation": "torznab",
+                                                       "enabled": True, "settings": {}}, cookie)
+            if not result.ok:
+                failed.append(f"{name} : indexeur refusé (HTTP {result.status}) {result.text[:120]}")
+                continue
+            existing = result.json() or {}
+        # Les listes (categories) restent présentes et vides : autobrr les range dans des colonnes NOT NULL
+        result = autobrr_api("POST", "/feeds", {
+            "name": name, "enabled": True, "type": "TORZNAB", "url": url, "api_key": api_key, "interval": 30, "timeout": 60,
+            "indexer_id": existing.get("id"), "categories": [], "capabilities": None,
+            "settings": {"download_type": "TORRENT"}}, cookie)
+        if not result.ok:
+            failed.append(f"{name} : flux refusé (HTTP {result.status}) {result.text[:120]}")
+            if created_here and existing.get("id") is not None:
+                autobrr_api("DELETE", f"/indexer/{existing['id']}", cookie=cookie)     # pas d'indexeur orphelin
+            continue
+        changed += 1
+        say(f"autobrr : indexeur {name}")
+    if not failed:
+        STATE.mkdir(parents=True, exist_ok=True)
+        AUTOBRR_FEEDS_STATE.write_text(json.dumps({"key": digest}) + "\n")
+    else:
+        raise SeedboxError(" ; ".join(failed[:3]))
+    return changed
+
+
+def autobrr_follow_prowlarr():
+    """Contrôle horaire : les indexeurs ajoutés dans Prowlarr (ou Jackett, qui passe par Prowlarr) rejoignent autobrr et son filtre."""
+    if not container_running("autobrr"):
+        return
+    cookie = autobrr_session()
+    if autobrr_sync_indexers(cookie):
+        provision_autobrr_filter(cookie)
 
 
 PROVISION_STATUS = STATE / "provision-status.json"
@@ -2071,6 +2179,10 @@ def trackers_sync():
         if container_running(service):
             run("docker", "restart", service, capture=True)
     say(f"trackers : {len(indexers)} indexeur(s), {count} dans cross-seed")
+    try:
+        autobrr_follow_prowlarr()
+    except (SeedboxError, OSError, ValueError, KeyError, http.client.HTTPException) as error:
+        say(f"autobrr : indexeurs de Prowlarr non repris ({error})")
 
 
 def render_qbm(env):
