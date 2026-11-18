@@ -1362,9 +1362,24 @@ def autobrr_session():
         if not result.ok:
             raise SeedboxError(f"autobrr : création du compte refusée (HTTP {result.status})")
     result = request("POST", f"{base}/login", body=credentials_body, timeout=15)
+    if not result.ok and result.status == 403 and autobrr_recover_password(env["AUTOBRR_ADMIN_PASSWORD"]):
+        result = request("POST", f"{base}/login", body=credentials_body, timeout=15)
     if not result.ok:
-        raise SeedboxError(f"autobrr : connexion refusée (HTTP {result.status})")
+        raise SeedboxError(f"autobrr : connexion refusée (HTTP {result.status}) : le mot de passe d'autobrr ne correspond plus à celui de la console ; "
+                           "sudo docker exec -it autobrr autobrrctl --config /config change-password admin, puis saisissez le mot de passe affiché dans Secrets")
     return result.cookies()
+
+
+def autobrr_recover_password(password):
+    """Mot de passe d'autobrr différent de celui de la console (renouvellement interrompu, base restaurée...) : on remet celui de la
+    console avec l'outil d'autobrr. Le résultat est vérifié par l'appelant, qui retente la connexion ; sans effet si l'outil refuse."""
+    for stdin in (f"{password}\n", f"{password}\n{password}\n"):
+        result = run("docker", "exec", "-i", "autobrr", "autobrrctl", "--config", "/config", "change-password", "admin",
+                     check=False, capture=True, stdin=stdin)
+        if result.returncode == 0:
+            say("autobrr : mot de passe remis à celui de la console")
+            return True
+    return False
 
 
 def autobrr_api(method, path, body=None, cookie=None):
@@ -1778,6 +1793,48 @@ def provision_autobrr():
         result = autobrr_api("POST", "/downloaders", payload, cookie)
     if not result.ok:
         raise SeedboxError(f"autobrr : client refusé (HTTP {result.status}) {result.text[:200]}")
+    try:
+        provision_autobrr_filter(cookie)
+    except (SeedboxError, OSError, ValueError, KeyError) as error:
+        say(f"autobrr : filtre de nouveautés non posé ({error})")
+
+
+FILTER_NAME = "Nouveautés freeleech (SeedBoxBuntu)"
+
+
+def autobrr_filter_payload(indexers, client_id):
+    """Nouveautés freeleech, tous trackers : un téléchargement freeleech ne coûte aucun ratio, et un torrent tout juste publié est celui
+    qui trouve des téléchargeurs. Plafonds : 25 Go par torrent, 3 par heure (le disque et le VPN ne se remplissent pas d'un coup)."""
+    return {
+        "name": FILTER_NAME, "enabled": True, "priority": 10, "freeleech": True, "max_size": "25GB",
+        "max_downloads": 3, "max_downloads_unit": "HOUR", "indexers": [{"id": i["id"]} for i in indexers],
+        "actions": [{"name": "qBittorrent : agrégateur", "type": "QBITTORRENT", "enabled": True, "client_id": client_id,
+                     "category": "agregateur", "tags": "autobrr,nouveautes", "paused": False, "ignore_rules": False}],
+    }
+
+
+def provision_autobrr_filter(cookie):
+    """Crée (ou met à jour, sans jamais le réactiver s'il a été coupé) le filtre de nouveautés freeleech sur tous les indexeurs d'autobrr."""
+    clients = [c for c in (autobrr_api("GET", "/downloaders", cookie=cookie).json() or []) if c["name"] == "qBittorrent"]
+    if not clients:
+        return
+    indexers = [i for i in (autobrr_api("GET", "/indexer", cookie=cookie).json() or []) if i.get("enabled", True)]
+    payload = autobrr_filter_payload(indexers, clients[0]["id"])
+    existing = [f for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == FILTER_NAME]
+    if existing:
+        payload["enabled"] = existing[0].get("enabled", True)
+        result = autobrr_api("PUT", f"/filters/{existing[0]['id']}", {**payload, "id": existing[0]["id"]}, cookie)
+    else:
+        say("autobrr : filtre « nouveautés freeleech »")
+        created = autobrr_api("POST", "/filters", {"name": FILTER_NAME, "enabled": False}, cookie)
+        if not created.ok:
+            raise SeedboxError(f"filtre refusé (HTTP {created.status})")
+        ident = created.json()["id"]
+        result = autobrr_api("PUT", f"/filters/{ident}", {**payload, "id": ident}, cookie)
+    if not result.ok:
+        raise SeedboxError(f"filtre refusé (HTTP {result.status}) {result.text[:150]}")
+    if not indexers:
+        say("autobrr : aucun indexeur actif, le filtre ne s'appliquera qu'après l'ajout d'un indexeur dans autobrr")
 
 
 PROVISION_STATUS = STATE / "provision-status.json"
