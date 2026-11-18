@@ -878,9 +878,11 @@ def qbit_session():
         return base, {"Cookie": reply.cookie}
     if reply.status == 204 or (reply.status == 200 and not reply.body.strip()):
         # Réponse vide : qBittorrent n'exige pas de session pour cette adresse (réseau de confiance) ; on le vérifie avant de continuer
-        probe = call("GET", base + "/app/version", {}, None, 20)
-        if probe.status == 200:
-            return base, {}
+        # Une réponse vide peut aussi porter le cookie de session (versions récentes) : on le présente d'abord
+        for headers in ([{"Cookie": reply.cookie}] if reply.cookie else []) + [{}]:
+            probe = call("GET", base + "/app/version", headers, None, 20)
+            if probe.status == 200:
+                return base, headers
         raise ctl.SeedboxError(f"qBittorrent : connexion sans session refusée (login HTTP {reply.status}, puis HTTP {probe.status})")
     if reply.status == 200:
         raise ctl.SeedboxError("qBittorrent : identifiant ou mot de passe refusé (comparez QBIT_USERNAME et QBIT_PASSWORD avec l'interface de qBittorrent)")

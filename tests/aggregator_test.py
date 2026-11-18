@@ -399,6 +399,20 @@ def qbit_reply(login, probe=None):
     finally:
         agg.call = real_call
 check("qBittorrent : réponse 204 sans session acceptée quand l'adresse est de confiance", qbit_reply(Reply(204, {}, b"", ""), Reply(200, {}, b"v5", ""))[1] == {})
+_Cookie = type("R", (), {"__init__": lambda self, status, body=b"", cookie="": setattr(self, "status", status) or setattr(self, "body", body) or setattr(self, "cookie", cookie)})
+seen = []
+def cookie_fake(method, url, headers=None, data=None, timeout=60):
+    seen.append(dict(headers or {}))
+    if url.endswith("/auth/login"):
+        return _Cookie(204, b"", "SID=abc")
+    return _Cookie(200 if (headers or {}).get("Cookie") == "SID=abc" else 403)
+real_call2 = agg.call
+agg.call = cookie_fake
+try:
+    got = agg.qbit_session()
+finally:
+    agg.call = real_call2
+check("qBittorrent : réponse 204 portant le cookie de session -> le cookie est utilisé", got[1] == {"Cookie": "SID=abc"}, str(got))
 check("qBittorrent : réponse 204 puis accès refusé -> message précis", "login HTTP 204, puis HTTP 403" in qbit_reply(Reply(204, {}, b"", ""), Reply(403, {}, b"", "")))
 check("qBittorrent : « Fails. » -> identifiants refusés", "mot de passe refusé" in qbit_reply(Reply(200, {}, b"Fails.", "")))
 check("qBittorrent : 403 -> adresse bannie", "bannie" in qbit_reply(Reply(403, {}, b"", "")))
