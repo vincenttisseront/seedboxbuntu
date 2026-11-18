@@ -443,6 +443,14 @@
   <section id="view-aggregator" class="view hidden">
     <header class="page-head"><div><h1>Agrégateur</h1><p class="sub">Les nouveautés de vos indexeurs (Prowlarr, Jackett, sources Torznab) regroupées par œuvre : un film ou une série n’apparaît qu’une fois, avec toutes ses versions. Un clic envoie le torrent choisi à qBittorrent.</p></div><div class="actions"><button id="agg-sync" class="btn primary" type="button">Collecter maintenant</button></div></header>
     <p id="agg-state" class="notice info"></p>
+    <div class="card" id="agg-picks-card">
+      <div class="card-head"><h2>Pour faire monter le ratio</h2><button id="agg-picks-refresh" class="btn" type="button">Actualiser</button></div>
+      <p class="muted small">Les 10 torrents récents avec le plus de téléchargeurs par rapport aux seeders : arriver tôt sur un torrent très demandé est ce qui fait envoyer le plus. Aucune garantie, mais c’est la meilleure chance. Les torrents déjà envoyés sont exclus.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Suggestions pour le ratio"><table>
+        <thead><tr><th>Titre</th><th>Tracker</th><th>Taille</th><th>Pourquoi</th><th></th></tr></thead>
+        <tbody id="agg-picks"></tbody>
+      </table></div>
+    </div>
     <div class="card" id="agg-catalogue">
       <div class="card-head"><h2>Catalogue</h2><div id="agg-periods" class="segmented" role="group" aria-label="Période"></div></div>
       <div id="agg-categories" class="segmented" role="group" aria-label="Catégorie"></div>

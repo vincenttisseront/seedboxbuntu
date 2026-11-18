@@ -517,6 +517,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.send_json(ctl.space().overview())
         if path == "/api/aggregator":
             return self.send_json(ctl.aggregator().dashboard())
+        if path == "/api/aggregator/picks":
+            return self.send_json({"picks": ctl.aggregator().picks(10)})
         if path == "/api/aggregator/catalogue":
             query = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
             return self.send_json(ctl.aggregator().catalogue(

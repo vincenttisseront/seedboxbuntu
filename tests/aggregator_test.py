@@ -403,5 +403,21 @@ check("qBittorrent : réponse 204 puis accès refusé -> message précis", "logi
 check("qBittorrent : « Fails. » -> identifiants refusés", "mot de passe refusé" in qbit_reply(Reply(200, {}, b"Fails.", "")))
 check("qBittorrent : 403 -> adresse bannie", "bannie" in qbit_reply(Reply(403, {}, b"", "")))
 
+# --- suggestions pour le ratio ------------------------------------------------------------------------
+pick_now = 2_000_000_000
+con = agg.connect()
+for i, (title, seeders, leechers, age_h, size) in enumerate([("Très demandé", 2, 30, 2, 4 << 30), ("Demandé mais vieux", 2, 30, 60, 4 << 30), ("Saturé de seeders", 80, 30, 2, 4 << 30),
+                                                           ("Sans téléchargeur", 5, 0, 1, 4 << 30), ("Trop gros", 1, 40, 1, 60 << 30), ("Déjà envoyé", 1, 40, 1, 4 << 30)], 9001):
+    con.execute("INSERT INTO works(id, key, category, title, norm, created, latest) VALUES(?,?,?,?,?,?,?)", (i, f"k{i}", "movies", title, title.lower(), pick_now, pick_now))
+    con.execute("INSERT INTO torrents(id, work_id, source, guid, ref, title, norm_title, tracker, category, bucket, qrank, size, seeders, leechers, published, first_seen, last_seen) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (i, i, "s", f"pg{i}", f"pr{i}", title, title.lower(), "tk", "movies", "1080p", 1, size, seeders, leechers,
+                                                              pick_now - age_h * 3600, pick_now, pick_now))
+con.execute("INSERT INTO sent(ref, infohash, title, at, state) VALUES('pr9006', '', 'x', ?, 'envoye')", (pick_now,))
+con.commit()
+con.close()
+got = [p["title"] for p in agg.picks(10, now=pick_now)]
+check("suggestions : récent, très demandé, peu de seeders en tête ; vieux, saturé, sans demande, trop gros ou déjà envoyé exclus ou après",
+      got[0] == "Très demandé" and "Sans téléchargeur" not in got and "Trop gros" not in got and "Déjà envoyé" not in got and "Demandé mais vieux" not in got, str(got))
+
 print(f"échecs : {bad}")
 sys.exit(1 if bad else 0)

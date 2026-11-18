@@ -142,6 +142,7 @@ def route(p, q, role="admin", PREFS=None):
         "versions": [{"kind": "film", "title": "Dune", "year": 2021, "saving": 4e9, "files": [
             {"path": "/data/media/films/Dune/dune.mkv", "size": 9e9, "quality": "Bluray-1080p", "volume": "local", "app": "radarr"},
             {"path": "/data/media/films/Dune (2)/dune.mkv", "size": 5e9, "quality": "WEBDL-1080p", "volume": "local", "app": "radarr"}]}], "versions_total": 1, "versions_saving": 4e9}
+    if p == "/api/aggregator/picks": return {"picks": [{"id": 1, "title": "Film Démo", "torrent_title": "Film.Demo.2026.1080p", "tracker": "tk.tr4ker.net", "size": 4 << 30, "seeders": 2, "leechers": 14, "age_hours": 3, "score": 9.0, "why": ""}]}
     if p == "/api/repoint": return {"enabled": True, "plans": [{"hash": "h1", "name": "Film.2020", "size": 4 << 30, "save_new": "/shares/nas/movies"}], "skipped": [], "saving": 4 << 30, "note": "", "last": None}
     if p == "/api/seeddiag": return {"running": True, "at": now, "summary": {"connection": "firewalled", "port": 6881, "forwarded_port": 51413, "up_speed": 0, "torrents": 40, "states": {"stalledUP": 30}},
         "findings": [

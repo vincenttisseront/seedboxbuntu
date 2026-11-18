@@ -785,6 +785,41 @@ def catalogue(period="24h", category="", q="", tracker="", quality="", sort="pub
 
 
 # ---------------------------------------------------------------------------------------------------------------
+#  Suggestions pour le ratio
+# ---------------------------------------------------------------------------------------------------------------
+PICK_HOURS = 48
+PICK_MAX_SIZE = 25 << 30
+
+
+def picks(count=10, now=None, hours=PICK_HOURS, max_size=PICK_MAX_SIZE):
+    """Les torrents qui ont le plus de chances de faire monter le ratio : récents, beaucoup de téléchargeurs par rapport aux
+    seeders, de taille raisonnable, pas déjà envoyés. Aucune garantie (personne ne peut prédire une demande), mais c'est
+    exactement ce qui fait envoyer le plus : arriver tôt sur un torrent que beaucoup de gens veulent."""
+    now = int(time.time() if now is None else now)
+    con = connect()
+    try:
+        done = {r["ref"] for r in con.execute("SELECT ref FROM sent")}
+        rows = con.execute("SELECT t.*, w.title AS work_title FROM torrents t JOIN works w ON w.id = t.work_id "
+                           "WHERE t.leechers >= 2 AND t.size > 0 AND t.size <= ? AND COALESCE(t.published, t.first_seen) >= ?",
+                           (max_size, now - hours * 3600)).fetchall()
+    finally:
+        con.close()
+    best = {}
+    for r in rows:
+        if r["ref"] in done:
+            continue
+        age = max((now - (r["published"] or r["first_seen"])) / 3600, 0.5)
+        demand = r["leechers"] / (r["seeders"] + 1)
+        score = demand * min(r["leechers"], 30) / (1 + age / 12)           # demande relative, volume de téléchargeurs, fraîcheur
+        if r["work_id"] not in best or score > best[r["work_id"]][0]:
+            best[r["work_id"]] = (score, r, age, demand)
+    ranked = sorted(best.values(), key=lambda x: -x[0])[:max(1, min(int(count), 30))]
+    return [{"id": r["id"], "title": r["work_title"], "torrent_title": r["title"], "tracker": r["tracker"], "size": r["size"], "seeders": r["seeders"],
+             "leechers": r["leechers"], "age_hours": round(age, 1), "score": round(score, 1),
+             "why": f"{r['leechers']} téléchargeur(s) pour {r['seeders']} seeder(s), publié il y a {age:.0f} h"} for score, r, age, demand in ranked]
+
+
+# ---------------------------------------------------------------------------------------------------------------
 #  Envoi vers qBittorrent
 # ---------------------------------------------------------------------------------------------------------------
 def _bskip(data, i):

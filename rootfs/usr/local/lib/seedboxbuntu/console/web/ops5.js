@@ -505,7 +505,25 @@ async function aggRemove(source) {
   try { await api('/api/aggregator/source/remove', { id: source.id }); toast('ok', 'Source retirée.'); await loadAggregator(); } catch (error) { showError(error); }
 }
 
+async function loadAggPicks() {
+  const data = await api('/api/aggregator/picks');
+  $('agg-picks').replaceChildren(...(data.picks.length ? data.picks.map((p) => {
+    const button = el('button', { class: 'btn sm', type: 'button' }, 'Envoyer');
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const result = await api('/api/aggregator/send', { id: p.id });
+        toast(result.state === 'envoye' ? 'ok' : 'info', `${result.title} : ${result.message}.`);
+        await loadAggPicks();
+      } catch (error) { button.disabled = false; showError(error); }
+    });
+    return el('tr', {}, el('td', { class: 'no-i18n' }, p.title), el('td', { class: 'no-i18n' }, p.tracker), el('td', {}, fmtSize(p.size)),
+      el('td', { class: 'small' }, `${p.leechers} téléchargeur(s) pour ${p.seeders} seeder(s), il y a ${fmtNumber(p.age_hours, 0)} h`), el('td', {}, button));
+  }) : [emptyRow(5, 'Aucun torrent récent très demandé pour le moment : lancez une collecte.')]));
+}
+
 async function loadAggregator() {
+  loadAggPicks().catch(showError);
   const data = await api('/api/aggregator');
   const state = $('agg-state');
   const sources = data.sources.filter((s) => s.enabled);
@@ -558,6 +576,7 @@ async function addAggSource(event) {
 }
 
 function initAggregator() {
+  $('agg-picks-refresh').addEventListener('click', () => loadAggPicks().catch(showError));
   $('agg-sync').addEventListener('click', () => runJob('/api/aggregator/sync', {}, () => loadAggregator().catch(showError)));
   $('agg-form').addEventListener('submit', (event) => { event.preventDefault(); aggState.page = 1; loadAggCatalogue().catch(showError); });
   $('agg-prev').addEventListener('click', () => { aggState.page = Math.max(1, aggState.page - 1); loadAggCatalogue().catch(showError); });
