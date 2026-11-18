@@ -1816,6 +1816,9 @@ def autobrr_filter_payload(indexers, client_id, current=None):
     qui trouve des téléchargeurs. Plafonds : 25 Go par torrent, 3 par heure (le disque et le VPN ne se remplissent pas d'un coup).
     `current` : le filtre déjà présent dans autobrr, dont on garde les listes (résolutions, sources...) que l'utilisateur a pu remplir."""
     lists = {name: list((current or {}).get(name) or []) for name in AUTOBRR_FILTER_LISTS}
+    # Comme autobrr à la création d'un filtre : sans type d'annonce, « nouveautés » (NEW). Vide, le filtre prendrait aussi les
+    # re-publications et les promotions de torrents anciens.
+    lists["announce_types"] = lists["announce_types"] or ["NEW"]
     return {
         **lists,
         "name": FILTER_NAME, "enabled": True, "priority": 10, "freeleech": True, "max_size": "25GB",

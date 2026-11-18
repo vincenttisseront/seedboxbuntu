@@ -70,16 +70,23 @@ check("filtre existant coupé par l'utilisateur : mis à jour mais jamais réact
 calls = scenario([], [{"id": 1, "enabled": True}])
 bodies = [b for m, p, b in calls if m in ("POST", "PUT") and p.startswith("/filters")]
 check("création : toutes les listes d'autobrr sont envoyées, vides (sinon NOT NULL constraint failed: filter.resolutions)",
-      len(bodies) == 2 and all(isinstance(b.get(name), list) and not b[name] for b in bodies for name in ctl.AUTOBRR_FILTER_LISTS),
+      len(bodies) == 2 and all(isinstance(b.get(name), list) and (not b[name] or name == "announce_types")
+                               for b in bodies for name in ctl.AUTOBRR_FILTER_LISTS),
       str([name for name in ctl.AUTOBRR_FILTER_LISTS if not all(isinstance(b.get(name), list) for b in bodies)]))
 check("liste des champs : celle que l'interface web d'autobrr envoie toujours",
       {"resolutions", "codecs", "sources", "containers", "match_hdr", "except_hdr", "match_other", "except_other",
        "match_release_types", "formats", "quality", "media", "origins", "except_origins", "bonus", "announce_types",
        "match_language", "except_language"} == set(ctl.AUTOBRR_FILTER_LISTS))
-calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}], detail={"id": 9, "resolutions": ["1080p"], "codecs": None})
+check("types d'annonce : « nouveautés » (NEW) à la création, comme le fait autobrr, jamais vide qui prendrait promotions et re-publications",
+      all(b["announce_types"] == ["NEW"] for b in bodies))
+calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}], detail={"id": 9, "announce_types": [], "resolutions": ["1080p"], "codecs": None})
 put = next(b for m, p, b in calls if m == "PUT")
 check("mise à jour : les listes réglées par l'utilisateur sont gardées, les autres envoyées vides (jamais null)",
       put["resolutions"] == ["1080p"] and put["codecs"] == [] and all(isinstance(put[name], list) for name in ctl.AUTOBRR_FILTER_LISTS))
+check("mise à jour : un filtre resté sans type d'annonce (version précédente) retrouve NEW ; un type réglé par l'utilisateur est gardé",
+      put["announce_types"] == ["NEW"]
+      and next(b for m, p, b in scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}],
+                                         detail={"id": 9, "announce_types": ["NEW", "PROMO"]}) if m == "PUT")["announce_types"] == ["NEW", "PROMO"])
 
 # actions : sans identifiant autobrr en ajoute une de plus à chaque mise à jour (chaque nouveauté partirait plusieurs fois vers qBittorrent)
 action = "qBittorrent : agrégateur"
