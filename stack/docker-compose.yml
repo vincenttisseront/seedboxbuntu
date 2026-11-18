@@ -221,7 +221,13 @@ services:
       # Portail de connexion sous /auth/ (server.address dans configuration.yml)
       traefik.http.routers.authelia.rule: PathPrefix(`/auth`)
       traefik.http.routers.authelia.entrypoints: websecure
-      traefik.http.routers.authelia.middlewares: rate-limit@file,secure-headers@file
+      traefik.http.routers.authelia.middlewares: secure-headers@file
+      # Le frein ne vise que les essais de mot de passe : sur les fichiers de la page (une trentaine par chargement), il renvoyait des erreurs 429
+      traefik.http.routers.authelia-login.rule: PathPrefix(`/auth/api/firstfactor`) || PathPrefix(`/auth/api/secondfactor`) || PathPrefix(`/auth/api/reset-password`)
+      traefik.http.routers.authelia-login.entrypoints: websecure
+      traefik.http.routers.authelia-login.priority: "100"
+      traefik.http.routers.authelia-login.service: authelia
+      traefik.http.routers.authelia-login.middlewares: rate-limit@file,secure-headers@file
       traefik.http.services.authelia.loadbalancer.server.port: "9091"
 
   # ---------------------------------------------------------------------------

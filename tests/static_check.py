@@ -62,6 +62,10 @@ for path in shells:
 
 import yaml  # noqa: E402
 compose = yaml.safe_load((SRC / "stack/docker-compose.yml").read_text())
+auth_labels = compose["services"]["authelia"]["labels"]
+check("Authelia : le frein de débit ne vise que les essais de mot de passe, pas les fichiers de la page (erreurs 429)",
+      "rate-limit" not in auth_labels["traefik.http.routers.authelia.middlewares"] and "firstfactor" in auth_labels["traefik.http.routers.authelia-login.rule"]
+      and "rate-limit@file" in auth_labels["traefik.http.routers.authelia-login.middlewares"] and auth_labels["traefik.http.routers.authelia-login.service"] == "authelia")
 check("docker-compose.yml : services et image épinglée à un registre", len(compose["services"]) > 15)
 check("authelia-redis présent et Authelia en dépend", "authelia-redis" in compose["services"] and "authelia-redis" in str(compose["services"]["authelia"].get("depends_on")))
 for name in ("stack/catalog.json", "catalog-exemple.json"):
