@@ -29,6 +29,7 @@ SUBDIR = "seedbox-sauvegardes"
 DEFAULTS = {"enabled": True, "days": "daily", "time": "02:30", "keep": 7, "destination": ""}
 NAME = re.compile(r"^seedbox-[0-9]{8}-[0-9]{6}(-[a-z]+)?\.tar\.gz\.enc$")
 EXCLUDE = ("config/jellyfin/cache", "config/jellyfin/transcodes", "config/jellyfin/log", "config/jellyfin/metadata",
+           "config/jellyfin/data/trickplay", "config/jellyfin/data/attachments",       # régénérés par Jellyfin : plusieurs Go inutiles dans chaque archive
            "config/*/logs", "config/*/Logs", "config/*/log", "config/*/cache", "config/*/Cache",
            "config/*/MediaCover", "config/*/Backups", "config/*/backups")
 
@@ -141,10 +142,30 @@ def _destination_ok(cfg):
         return False
 
 
+def room_needed(folder):
+    """Place à prévoir pour une nouvelle archive : une fois et demie la plus grosse existante, 1 Go au moins."""
+    sizes = [p.stat().st_size for p in Path(folder).glob("seedbox-*.tar.gz.enc") if NAME.match(p.name)]
+    return max(1 << 30, int(1.5 * max(sizes, default=0)))
+
+
+def make_room(folder, keep):
+    """Évite de remplir le disque : si la place manque, supprime d'abord les plus anciennes sauvegardes (jusqu'à une seule), sinon refuse."""
+    need = room_needed(folder)
+    keep = max(int(keep), 1)
+    while shutil.disk_usage(folder).free < need and keep > 1:
+        keep -= 1
+        prune(folder, keep)
+    free = shutil.disk_usage(folder).free
+    if free < need:
+        raise ctl.SeedboxError(f"sauvegarde annulée : {free >> 20} Mo libres, {need >> 20} Mo nécessaires. Libérez de la place "
+                               "ou choisissez un autre dossier de destination (disque ou partage différent).")
+
+
 def create(label=""):
     """Archive chiffrée dans le dossier de destination ; supprime les plus anciennes au-delà de « keep »."""
     cfg = settings()
     folder = destination_dir(cfg)
+    make_room(folder, cfg["keep"])
     stamp = time.strftime("%Y%m%d-%H%M%S")
     suffix = f"-{label}" if label else ""
     target = Path(folder) / f"seedbox-{stamp}{suffix}.tar.gz.enc"
