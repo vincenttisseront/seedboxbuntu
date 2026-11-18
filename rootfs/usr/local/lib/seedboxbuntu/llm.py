@@ -315,13 +315,17 @@ def ask(prompt, connect=None, now=None):
         raise ctl.SeedboxError("aucun modèle choisi")
     prompt = str(prompt)[:MAX_PROMPT]
     _rate_check(now)
-    status, data = call("POST", "/api/generate", {"model": cfg["model"], "system": SYSTEM, "prompt": prompt, "stream": False,
+    status, data = call("POST", "/api/generate", {"model": cfg["model"], "system": SYSTEM, "prompt": prompt, "stream": False, "think": False,
                                                    "options": {"temperature": cfg["temperature"], "num_ctx": 4096}}, cfg, connect)
     if status == 404:
         raise ctl.SeedboxError(f"modèle « {cfg['model']} » absent du serveur : « ollama pull {cfg['model']} » sur la machine distante")
     if status != 200:
         raise ctl.SeedboxError(f"le serveur répond HTTP {status}")
-    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(data.get("response", ""))).strip()[:MAX_ANSWER]
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(data.get("response", "")))
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S | re.I)          # raisonnement interne des modèles « réfléchis » (Qwen3, DeepSeek-R1…)
+    if re.search(r"<think>", text, re.I):
+        raise ctl.SeedboxError("le modèle s'est arrêté pendant sa réflexion : choisissez un modèle sans mode réflexion ou augmentez le délai")
+    text = text.replace("</think>", "").strip()[:MAX_ANSWER]
     if not text:
         raise ctl.SeedboxError("réponse vide du modèle")
     return text

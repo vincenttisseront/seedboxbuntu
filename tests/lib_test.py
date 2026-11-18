@@ -628,6 +628,13 @@ llm.forget_certificate()
 check("Ollama : oublier le certificat redonne le refus", llm.settings()["pin_sha256"] == "" and raises(llm.test) is not None)
 tls_server.shutdown()
 llm.save({"url": "http://192.168.1.50:11434"})
+def connect_think(method, path, body):
+    calls.append((method, path, body))
+    return 200, {"response": "<think>\nLe ratio est nul, donc...\n</think>\n\nAucun envoi sur 30 jours."}
+llm.save({"enabled": True, "model": "llama3.1:8b"})
+check("Ollama : le raisonnement interne du modèle (<think>) n'est jamais affiché et la réflexion est désactivée à la demande",
+      llm.ask("Bilan ?", connect_think, now=500) == "Aucun envoi sur 30 jours." and calls[-1][2].get("think") is False)
+check("Ollama : une réponse coupée pendant la réflexion est signalée", "réflexion" in (raises(llm.ask, "Bilan ?", lambda m, p, b: (200, {"response": "<think>blabla"}), 600) or ""))
 seeds_view = so.overview(None, torrents_now, NOW)
 reply = llm.explain("seeds", connect, now=1000, seeds=seeds_view)
 prompt = calls[-1][2]["prompt"]
