@@ -195,9 +195,10 @@ async function loadRepoint() {
   $('repoint-auto').checked = data.enabled;
   const state = $('repoint-state');
   state.className = 'notice info';
-  const last = data.last ? ` Dernier passage : ${data.last.done} torrent(s) repointé(s), ${fmtSize(data.last.freed)} libérés${data.last.failed.length ? `, ${data.last.failed.length} laissé(s) en place` : ''}.` : '';
+  const last = data.last ? ` Dernier passage : ${data.last.done} torrent(s) repointé(s), ${fmtSize(data.last.freed)} libérés${data.last.failed.length ? `, ${data.last.failed.length} laissé(s) en place` : ''}${data.last.cleaned ? `, ${data.last.cleaned} torrent(s) cross-seed en erreur supprimé(s)` : ''}.` : '';
   state.textContent = data.note || (data.plans.length ? `${data.plans.length} torrent(s) à repointer, ${fmtSize(data.saving)} à libérer.${last}` : `Aucune copie locale à libérer.${last}`);
-  $('repoint-run').disabled = !data.plans.length;
+  if (data.errors) state.textContent += ` ${data.errors} torrent(s) cross-seed en erreur depuis plus de 24 h seront supprimés au prochain passage.`;
+  $('repoint-run').disabled = !(data.plans.length || data.errors);
 }
 // Liage en masse : la progression (fichier i sur n) est lue dans le journal de la tâche
 function relinkProgress(job) {

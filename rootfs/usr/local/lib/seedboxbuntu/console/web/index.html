@@ -929,7 +929,7 @@
     </div>
     <div class="card" id="repoint-card">
       <div class="card-head"><h2>Seed depuis le NAS</h2><button id="repoint-run" class="btn primary" type="button">Libérer les copies locales</button></div>
-      <p class="muted small">Quand un film terminé est rangé sur le NAS, la copie restée sur le disque du serveur ne sert plus : qBittorrent est repointé vers le fichier du NAS (après comparaison octet par octet et revérification complète du torrent), puis la copie locale est supprimée. Au moindre doute, tout est remis comme avant.</p>
+      <p class="muted small">Quand un film terminé est rangé sur le NAS, la copie restée sur le disque du serveur ne sert plus : qBittorrent est repointé vers le fichier du NAS (après comparaison octet par octet et revérification complète du torrent), puis la copie locale est supprimée. Au moindre doute, tout est remis comme avant. Les torrents cross-seed restés en erreur plus de 24 h à moins de 5 % (sans rien à partager) sont aussi supprimés.</p>
       <label class="check"><input id="repoint-auto" type="checkbox">Automatique : contrôle toutes les 30 minutes</label>
       <p id="repoint-state" class="notice info"></p>
     </div>

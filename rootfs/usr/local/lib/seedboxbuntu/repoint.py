@@ -226,10 +226,44 @@ def apply(plan, qbit=None, timeout=RECHECK_TIMEOUT, by="console"):
     return plan["size"]
 
 
+# --- torrents cross-seed restés en erreur -----------------------------------------------------------
+ERROR_STATES = ("error", "missingFiles")
+ERROR_AGE = 24 * 3600
+ERROR_MAX_PROGRESS = 0.05
+
+
+def errored(torrents, now=None):
+    """Torrents cross-seed en erreur depuis plus de 24 h et à moins de 5 % : sans rien à partager, sans ratio à perdre.
+    Les autres torrents en erreur (avancés, ou hors cross-seed) ne sont jamais touchés."""
+    now = int(time.time() if now is None else now)
+    found = []
+    for t in torrents:
+        tags = {x.strip() for x in str(t.get("tags", "")).split(",")}
+        if t.get("state") not in ERROR_STATES or not (t.get("category") == "cross-seed-link" or "cross-seed" in tags):
+            continue
+        if t.get("progress", 0) >= ERROR_MAX_PROGRESS or now - int(t.get("added_on", now)) < ERROR_AGE:
+            continue
+        found.append(t)
+    return found
+
+
+def clean_errors(qbit=None, now=None, by="timer"):
+    """Supprime ces torrents et leurs quelques fichiers partiels ; cross-seed les rajoutera si un correspondant existe encore."""
+    qbit = qbit or connect()
+    if qbit is None:
+        return []
+    found = errored(qbit.get("/torrents/info") or [], now)
+    if found:
+        qbit.post("/torrents/delete", {"hashes": "|".join(t["hash"] for t in found), "deleteFiles": "true"})
+        for t in found:
+            say(f"torrent cross-seed en erreur supprimé : {t.get('name', '')} ({by})")
+    return [t.get("name", "") for t in found]
+
+
 def run(by="timer", limit=None):
     """Repointe tous les torrents éligibles. Une erreur sur un torrent ne bloque pas les suivants."""
     if by == "timer" and not settings()["enabled"]:
-        return {"freed": 0, "done": 0, "failed": [], "disabled": True}
+        return {"freed": 0, "done": 0, "failed": [], "cleaned": 0, "disabled": True}
     found = candidates()
     freed, done, failed = 0, 0, []
     plans = found["plans"][:limit] if limit else found["plans"]
@@ -242,7 +276,12 @@ def run(by="timer", limit=None):
         except ctl.SeedboxError as error:
             failed.append(str(error))
             say(f"ignoré : {error}")
-    result = {"freed": freed, "done": done, "failed": failed, "at": int(time.time())}
+    cleaned = []
+    try:
+        cleaned = clean_errors(by=by)
+    except (ctl.SeedboxError, OSError) as error:
+        say(f"nettoyage des erreurs cross-seed ignoré : {error}")
+    result = {"freed": freed, "done": done, "failed": failed, "cleaned": len(cleaned), "at": int(time.time())}
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         STATE_FILE.write_text(json.dumps(result))
@@ -258,4 +297,4 @@ def overview():
     except (OSError, ValueError):
         last = None
     return {"enabled": settings()["enabled"], "plans": [{k: p[k] for k in ("hash", "name", "size", "save_new")} for p in found["plans"]],
-            "skipped": found["skipped"], "saving": sum(p["size"] for p in found["plans"]), "note": found.get("note", ""), "last": last}
+            "skipped": found["skipped"], "errors": len(errored(connect().get("/torrents/info") or [])) if connect() else 0, "saving": sum(p["size"] for p in found["plans"]), "note": found.get("note", ""), "last": last}

@@ -105,5 +105,23 @@ check("vérification incomplète -> erreur, copie locale restaurée, emplacement
       failed and local.read_bytes() == data and not Path(str(local) + rp.ASIDE).exists() and fake.save == "/data/downloads"
       and fake.files[0]["name"] == "Film.2020/film.mkv" and nas.exists())
 check("réglage automatique par défaut, désactivable", rp.settings()["enabled"] and not rp.set_enabled(False)["enabled"] and rp.run("timer").get("disabled"))
+
+# --- torrents cross-seed en erreur ----------------------------------------------------------------------
+now = 2_000_000_000
+old = now - 3 * 86400
+sample = [{"hash": "a", "state": "error", "category": "cross-seed-link", "progress": 0.011, "added_on": old},
+          {"hash": "b", "state": "missingFiles", "category": "x", "tags": "cross-seed, v3x", "progress": 0, "added_on": old},
+          {"hash": "c", "state": "error", "category": "cross-seed-link", "progress": 0.011, "added_on": now - 3600},
+          {"hash": "d", "state": "error", "category": "cross-seed-link", "progress": 0.6, "added_on": old},
+          {"hash": "e", "state": "error", "category": "radarr", "progress": 0, "added_on": old},
+          {"hash": "f", "state": "stalledUP", "category": "cross-seed-link", "progress": 1, "added_on": old}]
+check("erreurs cross-seed : seuls les anciens à moins de 5 % sont retenus (pas les récents, avancés, hors cross-seed ou sains)",
+      [t["hash"] for t in rp.errored(sample, now)] == ["a", "b"])
+class Del(Fake):
+    def get(self, path):
+        return sample
+fake = Del()
+names = rp.clean_errors(qbit=fake, now=now)
+check("nettoyage : une seule suppression groupée, fichiers partiels compris", len(names) == 2 and fake.calls == [("/torrents/delete", {"hashes": "a|b", "deleteFiles": "true"})], str(fake.calls))
 print(f"ECHECS: {bad}")
 sys.exit(1 if bad else 0)
