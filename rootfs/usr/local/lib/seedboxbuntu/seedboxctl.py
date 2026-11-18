@@ -1826,10 +1826,20 @@ def provision_autobrr_filter(cookie):
         result = autobrr_api("PUT", f"/filters/{existing[0]['id']}", {**payload, "id": existing[0]["id"]}, cookie)
     else:
         say("autobrr : filtre « nouveautés freeleech »")
-        created = autobrr_api("POST", "/filters", {"name": FILTER_NAME, "enabled": False}, cookie)
+        # autobrr refuse (HTTP 500) un filtre réduit à son nom : on envoie le filtre complet, puis en secours sans les actions
+        # (complétées ensuite par une mise à jour), en gardant la réponse de la dernière tentative pour le message d'erreur
+        created = None
+        for attempt in ({**payload, "enabled": False}, {**{k: v for k, v in payload.items() if k != "actions"}, "enabled": False, "actions": []}):
+            created = autobrr_api("POST", "/filters", attempt, cookie)
+            if created.ok:
+                break
         if not created.ok:
-            raise SeedboxError(f"filtre refusé (HTTP {created.status})")
-        ident = created.json()["id"]
+            raise SeedboxError(f"filtre refusé (HTTP {created.status}) {created.text[:200]}")
+        ident = (created.json() or {}).get("id")
+        if ident is None:
+            ident = next((f["id"] for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == FILTER_NAME), None)
+        if ident is None:
+            raise SeedboxError("filtre créé mais introuvable")
         result = autobrr_api("PUT", f"/filters/{ident}", {**payload, "id": ident}, cookie)
     if not result.ok:
         raise SeedboxError(f"filtre refusé (HTTP {result.status}) {result.text[:150]}")
