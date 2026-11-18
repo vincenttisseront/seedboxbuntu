@@ -1956,6 +1956,20 @@ def autobrr_feed_url(prowlarr_id):
     return f"http://prowlarr:9696{BASE_PATHS['prowlarr']}/{prowlarr_id}/api"
 
 
+def autobrr_start_feed(feed_id, cookie):
+    """autobrr n'ordonnance un flux créé par l'API qu'au prochain démarrage d'autobrr (dernière et prochaine exécution restent à
+    0001-01-01 et il ne tourne jamais) : le basculer sur « actif » le planifie tout de suite."""
+    return autobrr_api("PATCH", f"/feeds/{feed_id}/enabled", {"enabled": True}, cookie).ok
+
+
+def autobrr_feed_unscheduled(feed, indexer_enabled):
+    """Flux actif, d'un indexeur actif, sans prochaine exécution : jamais ordonnancé. Un flux ou un indexeur coupé par l'utilisateur
+    n'en fait pas partie."""
+    next_run = str(feed.get("next_run") or "")
+    return bool(feed.get("enabled") and (not next_run or next_run.startswith("0001-"))
+                and indexer_enabled.get((feed.get("indexer") or {}).get("id"), True))
+
+
 def autobrr_sync_indexers(cookie):
     """Chaque indexeur torrent actif de Prowlarr devient un indexeur « Prowlarr : nom » d'autobrr, lu en Torznab : autobrr voit alors
     les nouveautés de tous les trackers de la console, freeleech compris (Prowlarr transmet le facteur de téléchargement). Un indexeur
@@ -1973,13 +1987,20 @@ def autobrr_sync_indexers(cookie):
         raise SeedboxError(f"autobrr : liste des flux refusée (HTTP {feeds.status}) {feeds.text[:200]}")
     by_url = {f.get("url"): f for f in (feeds.json() or [])}
     indexers = autobrr_api("GET", "/indexer", cookie=cookie)
-    by_name = {i["name"]: i for i in ((indexers.json() or []) if indexers.ok else [])}
+    known = (indexers.json() or []) if indexers.ok else []
+    by_name = {i["name"]: i for i in known}
+    indexer_enabled = {i.get("id"): i.get("enabled", True) for i in known}
     changed, failed = 0, []
     for indexer in wanted:
         url, name = autobrr_feed_url(indexer["id"]), "Prowlarr : " + str(indexer["name"]).strip()
         feed = by_url.get(url)
         if feed:
             if known_digest == digest:
+                if autobrr_feed_unscheduled(feed, indexer_enabled):
+                    if autobrr_start_feed(feed["id"], cookie):
+                        say(f"autobrr : flux {name} lancé")
+                    else:
+                        failed.append(f"{name} : flux non lancé")
                 continue
             result = autobrr_api("PUT", f"/feeds/{feed['id']}", {**feed, "url": url, "api_key": api_key}, cookie)
             if not result.ok:
@@ -2009,6 +2030,9 @@ def autobrr_sync_indexers(cookie):
             continue
         changed += 1
         say(f"autobrr : indexeur {name}")
+        feed_id = (result.json() or {}).get("id")
+        if feed_id is None or not autobrr_start_feed(feed_id, cookie):
+            failed.append(f"{name} : flux créé mais non lancé")       # repris au prochain contrôle (flux sans prochaine exécution)
     if failed:
         raise SeedboxError(" ; ".join(failed[:3]))
     autobrr_state_write(key=digest)

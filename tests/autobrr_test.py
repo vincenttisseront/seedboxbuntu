@@ -181,8 +181,9 @@ finally:
 # indexeurs de Prowlarr -> autobrr : un flux Torznab par indexeur torrent actif, sans doublon ni écrasement
 class Feeds:
     """Faux autobrr : garde les indexeurs et flux créés, comme le vrai."""
-    def __init__(self, feeds=None, indexers=None, refuse_feed=False):
-        self.feeds, self.indexers, self.calls, self.refuse_feed = feeds or [], indexers or [], [], refuse_feed
+    def __init__(self, feeds=None, indexers=None, refuse_feed=False, refuse_start=False):
+        self.feeds, self.indexers, self.calls = feeds or [], indexers or [], []
+        self.refuse_feed, self.refuse_start = refuse_feed, refuse_start
 
     def api(self, method, path, body=None, cookie=None):
         self.calls.append((method, path, body))
@@ -196,8 +197,16 @@ class Feeds:
         if path == "/feeds" and method == "POST":
             if self.refuse_feed:
                 return Reply({}, 500)
-            self.feeds.append({**body, "id": 200 + len(self.feeds)})
-            return Reply({}, 201)
+            # comme le vrai autobrr : le flux créé par l'API n'a ni dernière ni prochaine exécution tant qu'on ne l'ordonnance pas
+            self.feeds.append({**body, "id": 200 + len(self.feeds), "indexer": {"id": body.get("indexer_id")}})
+            return Reply({"id": self.feeds[-1]["id"]}, 201)
+        if method == "PATCH" and path.startswith("/feeds/") and path.endswith("/enabled"):
+            if self.refuse_start:
+                return Reply({}, 500)
+            for feed in self.feeds:
+                if path == f"/feeds/{feed['id']}/enabled":
+                    feed["next_run"] = "2026-11-18T17:00:00+01:00"
+            return Reply({}, 204)
         return Reply({})
 
 
@@ -226,9 +235,12 @@ check("Prowlarr : un flux Torznab par indexeur torrent actif (ni désactivé, ni
 check("indexeur autobrr : modèle Torznab générique, indexer_id du flux = indexeur créé",
       all(b["identifier"] == "torznab" and b["implementation"] == "torznab" for m, p, b in fake.calls if m == "POST" and p == "/indexer")
       and [f["indexer_id"] for f in created] == [100, 101])
+check("flux créé : lancé aussitôt (autobrr ne l'ordonnance pas de lui-même, le flux ne tournerait jamais)",
+      [(p, b) for m, p, b in fake.calls if m == "PATCH"] == [("/feeds/200/enabled", {"enabled": True}), ("/feeds/201/enabled", {"enabled": True})]
+      and all(f.get("next_run") for f in fake.feeds))
 fake.calls.clear()
-check("2e passage : rien n'est refait (pas de doublon, pas d'écriture)", sync(fake, prowlarr) == 0
-      and not [1 for m, p, b in fake.calls if m in ("POST", "PUT")])
+check("2e passage : rien n'est refait (pas de doublon, pas d'écriture, pas de nouveau lancement)", sync(fake, prowlarr) == 0
+      and not [1 for m, p, b in fake.calls if m in ("POST", "PUT", "PATCH")])
 fake.calls.clear()
 count = sync(fake, prowlarr, key="cle2")
 puts = [(p, b) for m, p, b in fake.calls if m == "PUT"]
@@ -237,19 +249,43 @@ check("clé de Prowlarr renouvelée : les flux sont corrigés, sans toucher à l
 manual = Feeds(feeds=[{"id": 5, "name": "Mon Alpha", "enabled": False, "interval": 60, "url": "http://prowlarr:9696/prowlarr/1/api", "indexer": {"id": 9}}])
 (root / "var/sb/autobrr-flux.json").write_text('{"key": "%s"}' % __import__("hashlib").sha256(b"cle1").hexdigest())
 sync(manual, prowlarr[:1])
-check("flux déjà ajouté à la main (même adresse) : reconnu, ni doublé, ni réactivé, ni renommé",
-      not [1 for m, p, b in manual.calls if m in ("POST", "PUT")])
+check("flux déjà ajouté à la main (même adresse) : reconnu, ni doublé, ni réactivé (ni lancé), ni renommé",
+      not [1 for m, p, b in manual.calls if m in ("POST", "PUT", "PATCH")])
+
+# flux créés par une version qui ne les lançait pas : jamais ordonnancés (dernière et prochaine exécution à 0001-01-01)
+KEY1 = '{"key": "%s"}' % __import__("hashlib").sha256(b"cle1").hexdigest()
+NEVER, PLANNED = "0001-01-01T00:00:00Z", "2026-11-18T17:00:00+01:00"
+stuck = Feeds(feeds=[
+    {"id": 5, "name": "Prowlarr : Alpha", "enabled": True, "url": "http://prowlarr:9696/prowlarr/1/api", "indexer": {"id": 11}, "last_run": NEVER, "next_run": NEVER},
+    {"id": 6, "name": "Prowlarr : Jackett : Gamma", "enabled": True, "url": "http://prowlarr:9696/prowlarr/4/api", "indexer": {"id": 12}, "next_run": PLANNED}],
+    indexers=[{"id": 11, "name": "Prowlarr : Alpha", "enabled": True}, {"id": 12, "name": "Prowlarr : Jackett : Gamma", "enabled": True}])
+(root / "var/sb/autobrr-flux.json").write_text(KEY1)
+count = sync(stuck, [prowlarr[0], prowlarr[3]])
+check("flux existant jamais ordonnancé : lancé ; celui déjà planifié : laissé ; rien à recréer ni à réécrire",
+      [(p, b) for m, p, b in stuck.calls if m == "PATCH"] == [("/feeds/5/enabled", {"enabled": True})] and count == 0
+      and not [1 for m, p, b in stuck.calls if m in ("POST", "PUT")], str(stuck.calls)[:200])
+stuck.calls.clear()
+sync(stuck, [prowlarr[0], prowlarr[3]])
+check("contrôle suivant : plus rien à lancer", not [1 for m, p, b in stuck.calls if m == "PATCH"])
+off = Feeds(feeds=[{"id": 5, "name": "Prowlarr : Alpha", "enabled": True, "url": "http://prowlarr:9696/prowlarr/1/api", "indexer": {"id": 11}, "next_run": NEVER}],
+            indexers=[{"id": 11, "name": "Prowlarr : Alpha", "enabled": False}])
+sync(off, prowlarr[:1])
+check("indexeur coupé par l'utilisateur dans autobrr : son flux n'est pas relancé", not [1 for m, p, b in off.calls if m == "PATCH"])
 (root / "var/sb/autobrr-flux.json").unlink(missing_ok=True)
-refused = Feeds(refuse_feed=True)
+nostart = Feeds(refuse_start=True)
 try:
-    sync(refused, prowlarr[:1])
+    sync(nostart, prowlarr[:1])
     raised = False
 except ctl.SeedboxError as error:
-    raised = "HTTP 500" in str(error)
-check("flux refusé : l'indexeur créé est supprimé (pas d'orphelin) et l'erreur remonte avec la réponse d'autobrr",
-      raised and [1 for m, p, b in refused.calls if m == "DELETE" and p == "/indexer/100"]
-      and not (root / "var/sb/autobrr-flux.json").exists())
-check("sans indexeur actif dans Prowlarr : rien à faire", sync(Feeds(), []) == 0)
+    raised = "non lancé" in str(error)
+check("lancement refusé : l'erreur remonte, le flux créé reste, l'état n'est pas noté (nouvel essai au contrôle suivant)",
+      raised and len(nostart.feeds) == 1 and len(nostart.indexers) == 1 and not (root / "var/sb/autobrr-flux.json").exists())
+nostart.refuse_start = False
+nostart.calls.clear()
+sync(nostart, prowlarr[:1])
+check("contrôle suivant : indexeur et flux reconnus, rien n'est recréé",
+      len(nostart.feeds) == 1 and len(nostart.indexers) == 1 and not [1 for m, p, b in nostart.calls if m == "POST"])
+(root / "var/sb/autobrr-flux.json").unlink(missing_ok=True)
 
 # reprise du mot de passe : la 2e variante de saisie est tentée si la 1re échoue
 tried = []
