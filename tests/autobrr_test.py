@@ -1,4 +1,5 @@
 """autobrr : filtre de nouveautés freeleech posé sur tous les indexeurs, sans écraser un choix de l'utilisateur ; reprise d'un mot de passe désynchronisé."""
+import json
 import os
 import sys
 import tempfile
@@ -30,8 +31,13 @@ class Reply:
         return self.data
 
 
-def scenario(filters, indexers, detail=None):
+def scenario(filters, indexers, detail=None, created=None, preset="1080p", state=None, refuse=None):
+    """detail : le filtre existant (id 9) tel que le rend autobrr ; created : le filtre juste créé (id 42)."""
     calls = []
+    ctl.AUTOBRR_FEEDS_STATE = root / "var/sb/autobrr-flux.json"
+    ctl.AUTOBRR_FEEDS_STATE.unlink(missing_ok=True)
+    if state is not None:
+        ctl.AUTOBRR_FEEDS_STATE.write_text(json.dumps(state))
 
     def api(method, path, body=None, cookie=None):
         calls.append((method, path, body))
@@ -42,36 +48,87 @@ def scenario(filters, indexers, detail=None):
         if path == "/filters" and method == "GET":
             return Reply(filters)
         if path == "/filters" and method == "POST":
-            return Reply({"id": 42})
+            return Reply({}, 500) if refuse and body["name"] == refuse else Reply({"id": 42})
         if path.startswith("/filters/") and method == "GET":
-            return Reply(detail or {})
+            return Reply((created if path == "/filters/42" else detail) or {})
         return Reply({})
-    real = ctl.autobrr_api
-    ctl.autobrr_api = api
+    real = (ctl.autobrr_api, ctl.env_read)
+    ctl.autobrr_api, ctl.env_read = api, lambda: {"RECYCLARR_PRESET": preset}
     try:
         ctl.provision_autobrr_filter("c")
     finally:
-        ctl.autobrr_api = real
+        ctl.autobrr_api, ctl.env_read = real
     return calls
 
 
+def sent(calls, method, name=None):
+    return [b for m, p, b in calls if m == method and p.startswith("/filters") and (name is None or b.get("name") == name)]
+
+
+NAMES = [ctl.FILTER_NAME, ctl.FILTER_MUSIC, ctl.FILTER_BOOKS]
 calls = scenario([], [{"id": 1, "enabled": True}, {"id": 2, "enabled": True}, {"id": 3, "enabled": False}])
-put = next(b for m, p, b in calls if m == "PUT")
+put = sent(calls, "PUT", ctl.FILTER_NAME)[0]
 check("nouveau filtre : créé puis complété, freeleech, 25 Go, 3 par heure, indexeurs actifs seulement, client qBittorrent",
       put["freeleech"] and put["max_size"] == "25GB" and put["max_downloads"] == 3 and [i["id"] for i in put["indexers"]] == [1, 2]
       and put["actions"][0]["client_id"] == 7 and put["id"] == 42, str(put)[:150])
+check("trois filtres : films et séries, musique, livres (la qualité vidéo écarterait la musique et les livres, sans résolution)",
+      [b["name"] for b in sent(calls, "POST")] == NAMES and [b["name"] for b in sent(calls, "PUT")] == NAMES)
+check("musique et livres : 1 téléchargement par heure, étiquette de leur contenu",
+      [sent(calls, "PUT", n)[0]["max_downloads"] for n in NAMES] == [3, 1, 1]
+      and [sent(calls, "PUT", n)[0]["actions"][0]["tags"] for n in NAMES] == [
+          "autobrr,nouveautes,films-series", "autobrr,nouveautes,musique", "autobrr,nouveautes,livres"])
 calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": False}], [{"id": 1}])
-put = next(b for m, p, b in calls if m == "PUT")
+put = sent(calls, "PUT", ctl.FILTER_NAME)[0]
 check("filtre existant coupé par l'utilisateur : mis à jour mais jamais réactivé, pas de doublon",
-      put["enabled"] is False and put["id"] == 9 and not [1 for m, p, b in calls if m == "POST"])
+      put["enabled"] is False and put["id"] == 9 and not sent(calls, "POST", ctl.FILTER_NAME)
+      and [b["name"] for b in sent(calls, "POST")] == NAMES[1:])
+
+# contenus et qualité
+categories = {b["name"]: (b["match_categories"], b["except_categories"]) for b in sent(calls, "PUT")}
+check("catégories : films (Movies, 20xx) et séries (TV, 50xx) ; musique (Audio, 30xx, livres audio compris) ; livres (Books, 70xx)",
+      categories[ctl.FILTER_NAME] == ("Movies*,20??,TV*,50??", "")
+      and categories[ctl.FILTER_MUSIC] == ("Audio*,30??", "") and categories[ctl.FILTER_BOOKS] == ("Books*,70??", ""))
+check("jeux, logiciels et adulte ne sont dans aucun filtre (PC, 4xxx, XXX, 6xxx)",
+      not any(token in "".join(categories[n][0] for n in categories) for token in ("PC", "XXX", "40??", "60??")))
+quality = {n: (sent(calls, "PUT", n)[0]["resolutions"], sent(calls, "PUT", n)[0]["sources"]) for n in NAMES}
+check("qualité vidéo : préréglage 1080p de Recyclarr (1080p, Blu-ray + WEB), rien pour la musique et les livres",
+      quality[ctl.FILTER_NAME] == (["1080p"], ["BluRay", "WEB", "WEB-DL", "WEBRip"])
+      and quality[ctl.FILTER_MUSIC] == ([], []) and quality[ctl.FILTER_BOOKS] == ([], []), str(quality)[:160])
+calls = scenario([], [{"id": 1}], preset="2160p")
+put = sent(calls, "PUT", ctl.FILTER_NAME)[0]
+check("qualité vidéo : préréglage 2160p (UHD Blu-ray + WEB)", put["resolutions"] == ["2160p"] and "UHD.BluRay" in put["sources"])
+check("préréglage reconnu après la pose (rien à refaire tant qu'il ne change pas)", ctl.autobrr_state().get("preset") == "2160p")
+calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}], detail={"id": 9, "resolutions": ["720p"]},
+                 state={"preset": "1080p"})
+check("préréglage inchangé : la résolution réglée par l'utilisateur est gardée",
+      sent(calls, "PUT", ctl.FILTER_NAME)[0]["resolutions"] == ["720p"])
+calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}], detail={"id": 9, "resolutions": ["720p"]},
+                 state={"preset": "1080p"}, preset="2160p")
+check("préréglage changé dans la console : la qualité du filtre suit (2160p)",
+      sent(calls, "PUT", ctl.FILTER_NAME)[0]["resolutions"] == ["2160p"] and ctl.autobrr_state()["preset"] == "2160p")
+calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}], detail={"id": 9, "resolutions": [], "match_categories": ""})
+put = sent(calls, "PUT", ctl.FILTER_NAME)[0]
+check("filtre créé par la version précédente (sans qualité ni catégories) : complété à la première mise à jour",
+      put["resolutions"] == ["1080p"] and put["match_categories"] == "Movies*,20??,TV*,50??")
+calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}],
+                 detail={"id": 9, "match_categories": "Movies/HD"}, state={"preset": "1080p"})
+check("catégories réglées par l'utilisateur : gardées", sent(calls, "PUT", ctl.FILTER_NAME)[0]["match_categories"] == "Movies/HD")
+try:
+    scenario([], [{"id": 1}], refuse=ctl.FILTER_MUSIC)
+    raised = False
+except ctl.SeedboxError as error:
+    raised = ctl.FILTER_MUSIC in str(error) and "HTTP 500" in str(error)
+check("un filtre refusé n'empêche pas les autres, l'erreur remonte, le préréglage n'est pas noté (nouvel essai)",
+      raised and "preset" not in ctl.autobrr_state())
 
 # autobrr écrit NULL pour une liste absente du JSON et SQLite la refuse (HTTP 500, NOT NULL constraint failed: filter.resolutions) :
 # chaque liste doit être envoyée, vide au besoin, à la création comme à la mise à jour
 calls = scenario([], [{"id": 1, "enabled": True}])
-bodies = [b for m, p, b in calls if m in ("POST", "PUT") and p.startswith("/filters")]
+bodies = sent(calls, "POST") + sent(calls, "PUT")
 check("création : toutes les listes d'autobrr sont envoyées, vides (sinon NOT NULL constraint failed: filter.resolutions)",
-      len(bodies) == 2 and all(isinstance(b.get(name), list) and (not b[name] or name == "announce_types")
-                               for b in bodies for name in ctl.AUTOBRR_FILTER_LISTS),
+      len(bodies) == 6 and all(isinstance(b.get(name), list) for b in bodies for name in ctl.AUTOBRR_FILTER_LISTS)
+      and all(not b[name] for b in bodies for name in ctl.AUTOBRR_FILTER_LISTS
+              if name != "announce_types" and not (b["name"] == ctl.FILTER_NAME and name in ("resolutions", "sources"))),
       str([name for name in ctl.AUTOBRR_FILTER_LISTS if not all(isinstance(b.get(name), list) for b in bodies)]))
 check("liste des champs : celle que l'interface web d'autobrr envoie toujours",
       {"resolutions", "codecs", "sources", "containers", "match_hdr", "except_hdr", "match_other", "except_other",
@@ -79,28 +136,47 @@ check("liste des champs : celle que l'interface web d'autobrr envoie toujours",
        "match_language", "except_language"} == set(ctl.AUTOBRR_FILTER_LISTS))
 check("types d'annonce : « nouveautés » (NEW) à la création, comme le fait autobrr, jamais vide qui prendrait promotions et re-publications",
       all(b["announce_types"] == ["NEW"] for b in bodies))
-calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}], detail={"id": 9, "announce_types": [], "resolutions": ["1080p"], "codecs": None})
-put = next(b for m, p, b in calls if m == "PUT")
+calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}],
+                 detail={"id": 9, "announce_types": [], "resolutions": ["1080p"], "codecs": None}, state={"preset": "1080p"})
+put = sent(calls, "PUT", ctl.FILTER_NAME)[0]
 check("mise à jour : les listes réglées par l'utilisateur sont gardées, les autres envoyées vides (jamais null)",
       put["resolutions"] == ["1080p"] and put["codecs"] == [] and all(isinstance(put[name], list) for name in ctl.AUTOBRR_FILTER_LISTS))
 check("mise à jour : un filtre resté sans type d'annonce (version précédente) retrouve NEW ; un type réglé par l'utilisateur est gardé",
       put["announce_types"] == ["NEW"]
-      and next(b for m, p, b in scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}],
-                                         detail={"id": 9, "announce_types": ["NEW", "PROMO"]}) if m == "PUT")["announce_types"] == ["NEW", "PROMO"])
+      and sent(scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}],
+                        detail={"id": 9, "announce_types": ["NEW", "PROMO"]}), "PUT", ctl.FILTER_NAME)[0]["announce_types"] == ["NEW", "PROMO"])
 
 # actions : sans identifiant autobrr en ajoute une de plus à chaque mise à jour (chaque nouveauté partirait plusieurs fois vers qBittorrent)
 action = "qBittorrent : agrégateur"
 calls = scenario([{"id": 9, "name": ctl.FILTER_NAME, "enabled": True}], [{"id": 1}],
                  detail={"id": 9, "actions": [{"id": 31, "name": action}, {"id": 32, "name": action}, {"id": 33, "name": "Mon action"}]})
-put = next(b for m, p, b in calls if m == "PUT")
+put = sent(calls, "PUT", ctl.FILTER_NAME)[0]
 check("mise à jour : l'action existante est reprise par son identifiant, pas ajoutée une fois de plus",
       [a.get("id") for a in put["actions"]] == [31] and len(put["actions"]) == 1, str(put["actions"])[:120])
 check("mise à jour : les doublons déjà créés sont supprimés, l'action de l'utilisateur est laissée",
       [p for m, p, b in calls if m == "DELETE"] == ["/actions/32"])
-calls = scenario([], [{"id": 1}], detail={"id": 42, "actions": [{"id": 7, "name": action}]})
-put = next(b for m, p, b in calls if m == "PUT")
+calls = scenario([], [{"id": 1}], created={"id": 42, "actions": [{"id": 7, "name": action}]})
 check("création : l'action posée avec le filtre est reprise par la mise à jour qui suit (pas de doublon dès le premier passage)",
-      [a.get("id") for a in put["actions"]] == [7])
+      all([a.get("id") for a in b["actions"]] == [7] for b in sent(calls, "PUT")))
+
+# contrôle horaire : les filtres suivent les nouveaux indexeurs et le préréglage Recyclarr
+ran = []
+real = (ctl.autobrr_session, ctl.autobrr_sync_indexers, ctl.provision_autobrr_filter, ctl.container_running, ctl.env_read)
+ctl.autobrr_session, ctl.container_running = lambda: "c", lambda name: True
+ctl.provision_autobrr_filter = lambda cookie: ran.append("filtres")
+try:
+    ctl.autobrr_sync_indexers, ctl.env_read = lambda cookie: 0, lambda: {"RECYCLARR_PRESET": "1080p"}
+    ctl.AUTOBRR_FEEDS_STATE.write_text(json.dumps({"preset": "1080p"}))
+    ctl.autobrr_follow_prowlarr()
+    check("contrôle horaire : rien de changé, les filtres ne sont pas réécrits (réglages de l'utilisateur épargnés)", ran == [])
+    ctl.env_read = lambda: {"RECYCLARR_PRESET": "2160p"}
+    ctl.autobrr_follow_prowlarr()
+    check("contrôle horaire : préréglage Recyclarr changé -> filtres mis à jour", ran == ["filtres"])
+    ctl.autobrr_sync_indexers, ctl.env_read = lambda cookie: 2, lambda: {"RECYCLARR_PRESET": "1080p"}
+    ctl.autobrr_follow_prowlarr()
+    check("contrôle horaire : nouveaux indexeurs -> filtres mis à jour pour les couvrir", ran == ["filtres", "filtres"])
+finally:
+    ctl.autobrr_session, ctl.autobrr_sync_indexers, ctl.provision_autobrr_filter, ctl.container_running, ctl.env_read = real
 
 # indexeurs de Prowlarr -> autobrr : un flux Torznab par indexeur torrent actif, sans doublon ni écrasement
 class Feeds:

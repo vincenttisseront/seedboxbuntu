@@ -1803,7 +1803,9 @@ def provision_autobrr():
         say(f"autobrr : filtre de nouveautés non posé ({error})")
 
 
-FILTER_NAME = "Nouveautés freeleech (SeedBoxBuntu)"
+FILTER_NAME = "Nouveautés freeleech (SeedBoxBuntu)"            # films et séries : nom d'origine, gardé pour retrouver le filtre déjà créé
+FILTER_MUSIC = "Nouveautés freeleech : musique (SeedBoxBuntu)"
+FILTER_BOOKS = "Nouveautés freeleech : livres (SeedBoxBuntu)"
 # Listes que autobrr range dans des colonnes NOT NULL : absentes du JSON, il les écrit NULL et SQLite refuse la requête
 # (HTTP 500 « NOT NULL constraint failed: filter.resolutions »). L'interface web les envoie toujours, vides ou remplies.
 AUTOBRR_FILTER_LISTS = ("announce_types", "origins", "except_origins", "bonus", "resolutions", "codecs", "sources",
@@ -1811,20 +1813,49 @@ AUTOBRR_FILTER_LISTS = ("announce_types", "origins", "except_origins", "bonus", 
                         "formats", "quality", "media", "match_language", "except_language")
 
 
-def autobrr_filter_payload(indexers, client_id, current=None):
+# Trois filtres : autobrr écarte tout torrent sans résolution dès qu'une résolution est fixée, la qualité vidéo ne peut donc pas
+# partager un filtre avec la musique et les livres. Catégories : autobrr ramène toute catégorie Newznab standard à son parent
+# (2040 devient Movies, 2000 ; 3030 devient Audio, 3000) : les livres audio arrivent donc avec la musique. Jeux, logiciels et adulte
+# ne sont jamais repris. Musique et livres : 1 par heure, la vidéo 3.
+AUTOBRR_FILTERS = (
+    {"kind": "video", "name": FILTER_NAME, "tag": "films-series", "per_hour": 3,
+     "match_categories": "Movies*,20??,TV*,50??", "except_categories": ""},
+    {"kind": "music", "name": FILTER_MUSIC, "tag": "musique", "per_hour": 1,
+     "match_categories": "Audio*,30??", "except_categories": ""},
+    {"kind": "books", "name": FILTER_BOOKS, "tag": "livres", "per_hour": 1,
+     "match_categories": "Books*,70??", "except_categories": ""},
+)
+# Qualité vidéo : le préréglage Recyclarr de la console (1080p = Blu-ray + WEB, 2160p = UHD Blu-ray + WEB)
+AUTOBRR_VIDEO_QUALITY = {
+    "1080p": {"resolutions": ["1080p"], "sources": ["BluRay", "WEB", "WEB-DL", "WEBRip"]},
+    "2160p": {"resolutions": ["2160p"], "sources": ["UHD.BluRay", "BluRay", "WEB", "WEB-DL", "WEBRip"]},
+}
+
+
+def autobrr_quality_preset():
+    preset = env_read().get("RECYCLARR_PRESET") or "1080p"
+    return preset if preset in AUTOBRR_VIDEO_QUALITY else "1080p"
+
+
+def autobrr_filter_payload(indexers, client_id, current=None, kind="video", preset="1080p", apply_quality=True):
     """Nouveautés freeleech, tous trackers : un téléchargement freeleech ne coûte aucun ratio, et un torrent tout juste publié est celui
-    qui trouve des téléchargeurs. Plafonds : 25 Go par torrent, 3 par heure (le disque et le VPN ne se remplissent pas d'un coup).
-    `current` : le filtre déjà présent dans autobrr, dont on garde les listes (résolutions, sources...) que l'utilisateur a pu remplir."""
+    qui trouve des téléchargeurs. Plafonds : 25 Go par torrent, 3 par heure pour la vidéo (le disque et le VPN ne se remplissent pas d'un coup).
+    `current` : le filtre déjà présent dans autobrr, dont on garde les listes (résolutions, sources...) que l'utilisateur a pu remplir.
+    La qualité vidéo (`apply_quality`) n'est reposée qu'à la création et quand le préréglage Recyclarr change."""
+    spec = next(f for f in AUTOBRR_FILTERS if f["kind"] == kind)
     lists = {name: list((current or {}).get(name) or []) for name in AUTOBRR_FILTER_LISTS}
     # Comme autobrr à la création d'un filtre : sans type d'annonce, « nouveautés » (NEW). Vide, le filtre prendrait aussi les
     # re-publications et les promotions de torrents anciens.
     lists["announce_types"] = lists["announce_types"] or ["NEW"]
+    if kind == "video" and (apply_quality or current is None):
+        lists.update({name: list(values) for name, values in AUTOBRR_VIDEO_QUALITY[preset].items()})
+    categories = {name: (current or {}).get(name) or spec[name] for name in ("match_categories", "except_categories")}
     return {
-        **lists,
-        "name": FILTER_NAME, "enabled": True, "priority": 10, "freeleech": True, "max_size": "25GB",
-        "max_downloads": 3, "max_downloads_unit": "HOUR", "indexers": [{"id": i["id"]} for i in indexers],
+        **lists, **categories,
+        "name": spec["name"], "enabled": True, "priority": 10, "freeleech": True, "max_size": "25GB",
+        "max_downloads": spec["per_hour"], "max_downloads_unit": "HOUR", "indexers": [{"id": i["id"]} for i in indexers],
         "actions": [{"name": "qBittorrent : agrégateur", "type": "QBITTORRENT", "enabled": True, "client_id": client_id,
-                     "category": "agregateur", "tags": "autobrr,nouveautes", "paused": False, "ignore_rules": False}],
+                     "category": "agregateur", "tags": "autobrr,nouveautes," + spec["tag"], "paused": False, "ignore_rules": False}],
     }
 
 
@@ -1848,23 +1879,54 @@ def autobrr_reuse_actions(payload, detail, cookie):
             action["id"] = present[action["name"]]
 
 
+def autobrr_state():
+    try:
+        data = json.loads(AUTOBRR_FEEDS_STATE.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def autobrr_state_write(**fields):
+    STATE.mkdir(parents=True, exist_ok=True)
+    AUTOBRR_FEEDS_STATE.write_text(json.dumps({**autobrr_state(), **fields}) + "\n")
+
+
 def provision_autobrr_filter(cookie):
-    """Crée (ou met à jour, sans jamais le réactiver s'il a été coupé) le filtre de nouveautés freeleech sur tous les indexeurs d'autobrr."""
+    """Crée (ou met à jour, sans jamais le réactiver s'il a été coupé) les filtres de nouveautés freeleech sur tous les indexeurs d'autobrr :
+    films et séries (qualité du préréglage Recyclarr), musique, livres."""
     clients = [c for c in (autobrr_api("GET", "/downloaders", cookie=cookie).json() or []) if c["name"] == "qBittorrent"]
     if not clients:
         return
     indexers = [i for i in (autobrr_api("GET", "/indexer", cookie=cookie).json() or []) if i.get("enabled", True)]
-    payload = autobrr_filter_payload(indexers, clients[0]["id"])
-    existing = [f for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == FILTER_NAME]
+    preset = autobrr_quality_preset()
+    apply_quality = autobrr_state().get("preset") != preset
+    failed = []
+    for spec in AUTOBRR_FILTERS:
+        try:
+            provision_autobrr_one(cookie, spec, clients[0]["id"], indexers, preset, apply_quality)
+        except SeedboxError as error:
+            failed.append(f"{spec['name']} : {error}")
+    if failed:
+        raise SeedboxError(" ; ".join(failed[:3]))
+    autobrr_state_write(preset=preset)
+    if not indexers:
+        say("autobrr : aucun indexeur actif, les filtres ne s'appliqueront qu'après l'ajout d'un indexeur dans autobrr")
+
+
+def provision_autobrr_one(cookie, spec, client_id, indexers, preset, apply_quality):
+    kind = spec["kind"]
+    payload = autobrr_filter_payload(indexers, client_id, None, kind, preset)
+    existing = [f for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == spec["name"]]
     if existing:
         # Le détail porte les listes que l'utilisateur a pu régler et les actions déjà posées
         detail = autobrr_filter_detail(existing[0]["id"], cookie)
-        payload = autobrr_filter_payload(indexers, clients[0]["id"], detail)
+        payload = autobrr_filter_payload(indexers, client_id, detail, kind, preset, apply_quality)
         autobrr_reuse_actions(payload, detail, cookie)
         payload["enabled"] = existing[0].get("enabled", True)
         result = autobrr_api("PUT", f"/filters/{existing[0]['id']}", {**payload, "id": existing[0]["id"]}, cookie)
     else:
-        say("autobrr : filtre « nouveautés freeleech »")
+        say(f"autobrr : filtre « {spec['name']} »")
         # autobrr refuse (HTTP 500) un filtre réduit à son nom : on envoie le filtre complet, puis en secours sans les actions
         # (complétées ensuite par une mise à jour), en gardant la réponse de la dernière tentative pour le message d'erreur
         created = None
@@ -1876,7 +1938,7 @@ def provision_autobrr_filter(cookie):
             raise SeedboxError(f"filtre refusé (HTTP {created.status}) {created.text[:200]}")
         ident = (created.json() or {}).get("id")
         if ident is None:
-            ident = next((f["id"] for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == FILTER_NAME), None)
+            ident = next((f["id"] for f in (autobrr_api("GET", "/filters", cookie=cookie).json() or []) if f["name"] == spec["name"]), None)
         if ident is None:
             raise SeedboxError("filtre créé mais introuvable")
         # L'action envoyée à la création existe déjà : la mise à jour qui suit la reprend au lieu d'en ajouter une seconde
@@ -1884,8 +1946,6 @@ def provision_autobrr_filter(cookie):
         result = autobrr_api("PUT", f"/filters/{ident}", {**payload, "id": ident}, cookie)
     if not result.ok:
         raise SeedboxError(f"filtre refusé (HTTP {result.status}) {result.text[:150]}")
-    if not indexers:
-        say("autobrr : aucun indexeur actif, le filtre ne s'appliquera qu'après l'ajout d'un indexeur dans autobrr")
 
 
 AUTOBRR_FEEDS_STATE = STATE / "autobrr-flux.json"
@@ -1907,10 +1967,7 @@ def autobrr_sync_indexers(cookie):
         return 0
     api_key = env_read()["PROWLARR_API_KEY"]
     digest = hashlib.sha256(api_key.encode()).hexdigest()
-    try:
-        known_digest = json.loads(AUTOBRR_FEEDS_STATE.read_text()).get("key")
-    except (OSError, ValueError, AttributeError):
-        known_digest = None
+    known_digest = autobrr_state().get("key")
     feeds = autobrr_api("GET", "/feeds", cookie=cookie)
     if not feeds.ok:
         raise SeedboxError(f"autobrr : liste des flux refusée (HTTP {feeds.status}) {feeds.text[:200]}")
@@ -1952,11 +2009,9 @@ def autobrr_sync_indexers(cookie):
             continue
         changed += 1
         say(f"autobrr : indexeur {name}")
-    if not failed:
-        STATE.mkdir(parents=True, exist_ok=True)
-        AUTOBRR_FEEDS_STATE.write_text(json.dumps({"key": digest}) + "\n")
-    else:
+    if failed:
         raise SeedboxError(" ; ".join(failed[:3]))
+    autobrr_state_write(key=digest)
     return changed
 
 
@@ -1965,8 +2020,8 @@ def autobrr_follow_prowlarr():
     if not container_running("autobrr"):
         return
     cookie = autobrr_session()
-    if autobrr_sync_indexers(cookie):
-        provision_autobrr_filter(cookie)
+    if autobrr_sync_indexers(cookie) or autobrr_state().get("preset") != autobrr_quality_preset():
+        provision_autobrr_filter(cookie)            # nouveaux indexeurs à couvrir, ou préréglage Recyclarr changé depuis
 
 
 PROVISION_STATUS = STATE / "provision-status.json"
