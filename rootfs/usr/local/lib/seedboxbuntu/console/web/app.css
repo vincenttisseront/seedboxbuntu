@@ -439,4 +439,4 @@ td.num{text-align:right;white-space:nowrap}
 .appbar a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .appbar a[aria-current]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--c)}
 body.kiosk .appbar{display:none!important}
-@media (max-width:900px){.appbar{position:static;margin:0 calc(-1*var(--sp-4)) var(--sp-3);padding:6px var(--sp-4)}}
+@media (max-width:900px){.appbar{position:static;margin:calc(-1*var(--sp-4)) calc(-1*var(--sp-3)) var(--sp-3);padding:6px var(--sp-3)}}
