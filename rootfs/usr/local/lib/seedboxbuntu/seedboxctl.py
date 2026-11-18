@@ -3009,7 +3009,7 @@ def main():
     lm_set = lm.add_parser("set")
     lm_set.add_argument("key")
     lm_set.add_argument("value")
-    lm.add_parser("explain").add_argument("topic", choices=("seeds", "library"))
+    lm.add_parser("explain").add_argument("topic", choices=("seeds", "diag", "library"))
     for name, actions in CARE_COMMANDS.items():
         care = commands.add_parser(name, help=CARE_HELP[name]).add_subparsers(dest="action", required=True)
         for action, arguments in actions.items():
