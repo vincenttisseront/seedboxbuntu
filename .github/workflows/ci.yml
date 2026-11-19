@@ -21,8 +21,9 @@ jobs:
           npm install --no-save axe-core@4.10.2
           playwright install --with-deps chromium
       # Contrôles statiques, puis tests unitaires, dont la mise à jour N-1 -> N (sans Docker)
+      # En root : les tests écrivent dans des arborescences de serveur (chown, /etc), ce qu'un compte ordinaire refuse (PermissionError)
       - name: Tests
-        run: tests/run.sh
+        run: sudo -E env "HOME=$HOME" "PATH=$PATH" tests/run.sh
         env:
           # Les captures de référence viennent d'un autre poste : en CI, seuls les contrôles de comportement,
           # de contraste et de classes s'appliquent (voir tests/visual_test.py)

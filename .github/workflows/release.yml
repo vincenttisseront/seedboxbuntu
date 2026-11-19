@@ -24,7 +24,8 @@ jobs:
           node-version: "20"
       - run: pip install pyyaml
       - name: Tests
-        run: tests/run.sh
+        # en root : les tests écrivent dans des arborescences de serveur (chown, /etc), ce qu'un compte ordinaire refuse
+        run: sudo -E env "HOME=$HOME" "PATH=$PATH" tests/run.sh
       - name: Manifeste
         run: python3 tools/manifest.py build --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" > manifest.json
       - name: Signature
