@@ -44,4 +44,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           files=(manifest.json); [ -f manifest.json.sig ] && files+=(manifest.json.sig)
-          gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes --title "$GITHUB_REF_NAME"
+          # release déjà créée (par l'API GitHub, qui crée aussi l'étiquette) : on y joint les fichiers
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes --title "$GITHUB_REF_NAME"
+          fi
