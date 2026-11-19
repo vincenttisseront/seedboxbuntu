@@ -1362,23 +1362,40 @@ def autobrr_session():
         if not result.ok:
             raise SeedboxError(f"autobrr : création du compte refusée (HTTP {result.status})")
     result = request("POST", f"{base}/login", body=credentials_body, timeout=15)
+    if result.status == 429:        # trop d'échecs de suite depuis cette adresse : autobrr rend un essai toutes les 20 secondes
+        time.sleep(AUTOBRR_LOGIN_WAIT)
+        result = request("POST", f"{base}/login", body=credentials_body, timeout=15)
     if not result.ok and result.status == 403 and autobrr_recover_password(env["AUTOBRR_ADMIN_PASSWORD"]):
         result = request("POST", f"{base}/login", body=credentials_body, timeout=15)
+    if result.status == 429:
+        raise SeedboxError("autobrr : trop de connexions ratées de suite, autobrr bloque l'adresse quelques instants : réessayez dans une minute")
     if not result.ok:
         raise SeedboxError(f"autobrr : connexion refusée (HTTP {result.status}) : le mot de passe d'autobrr ne correspond plus à celui de la console ; "
                            "sudo docker exec -it autobrr autobrrctl --config /config change-password admin, puis saisissez le mot de passe affiché dans Secrets")
     return result.cookies()
 
 
-def autobrr_recover_password(password):
-    """Mot de passe d'autobrr différent de celui de la console (renouvellement interrompu, base restaurée...) : on remet celui de la
-    console avec l'outil d'autobrr. Le résultat est vérifié par l'appelant, qui retente la connexion ; sans effet si l'outil refuse."""
+AUTOBRR_LOGIN_WAIT = 21
+
+
+def autobrr_force_password(password):
+    """Remplace le mot de passe du compte admin avec l'outil d'autobrr, sans connaître l'ancien : aucune connexion, donc aucun échec
+    que le verrouillage d'autobrr (5 essais ratés par adresse) compterait. Selon la version, l'outil lit la saisie seule ou avec sa
+    confirmation : les deux formes sont essayées. Le résultat est vérifié par l'appelant ; faux si l'outil est inutilisable."""
     for stdin in (f"{password}\n", f"{password}\n{password}\n"):
         result = run("docker", "exec", "-i", "autobrr", "autobrrctl", "--config", "/config", "change-password", "admin",
                      check=False, capture=True, stdin=stdin)
         if result.returncode == 0:
-            say("autobrr : mot de passe remis à celui de la console")
             return True
+    return False
+
+
+def autobrr_recover_password(password):
+    """Mot de passe d'autobrr différent de celui de la console (renouvellement interrompu, base restaurée...) : on remet celui de la
+    console avec l'outil d'autobrr. Le résultat est vérifié par l'appelant, qui retente la connexion ; sans effet si l'outil refuse."""
+    if autobrr_force_password(password):
+        say("autobrr : mot de passe remis à celui de la console")
+        return True
     return False
 
 

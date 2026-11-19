@@ -137,8 +137,24 @@ ctl.rotate("qbittorrent")
 check("renouvellement de qBittorrent : mêmes fonctions", len(ctl.env_read()["QBIT_PASSWORD"]) == 32 and ("provision",) in calls)
 
 # ------------------------------------------------------------------ autobrr
-autobrr = {"password": "ancien", "patched": None}
-ctl.autobrr_session = lambda: "cookie"
+autobrr = {"password": "ancien", "tool": True, "ran": []}
+real_run = ctl.run
+
+
+def autobrr_tool(*command, check=True, capture=False, stdin=None, **kw):
+    """Simule « docker exec -i autobrr autobrrctl change-password admin » : lit le nouveau mot de passe sur l'entrée standard."""
+    autobrr["ran"].append(command[-2:])
+    if not autobrr["tool"]:
+        return type("R", (), {"returncode": 1})()
+    autobrr["password"] = stdin.split("\n")[0]
+    return type("R", (), {"returncode": 0})()
+
+
+def autobrr_session():
+    """Vraie connexion : n'ouvre que si la console a noté le mot de passe qu'autobrr connaît."""
+    if ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"] != autobrr["password"]:
+        raise ctl.SeedboxError("autobrr : connexion refusée (HTTP 403)")
+    return "cookie"
 
 
 def autobrr_api(method, path, body=None, cookie=None):
@@ -148,12 +164,33 @@ def autobrr_api(method, path, body=None, cookie=None):
     return Answer({})
 
 
-ctl.autobrr_api = autobrr_api
+ctl.run, ctl.autobrr_session, ctl.autobrr_api = autobrr_tool, autobrr_session, autobrr_api
 apppass.reset("autobrr", "", "")
-check("autobrr : mot de passe généré et conservé", ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"] == autobrr["password"] and len(autobrr["password"]) == 32)
+check("autobrr : mot de passe généré et conservé, changé par l'outil d'autobrr",
+      ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"] == autobrr["password"] and len(autobrr["password"]) == 32 and autobrr["ran"] == [("change-password", "admin")])
 ctl.env_set(AUTOBRR_ADMIN_PASSWORD="perdu")
+autobrr["password"] = "changé-dans-l-interface"
+apppass.reset("autobrr", "", "mon-nouveau-pass")
+check("autobrr : mot de passe perdu (ni la console ni vous ne le connaissez) : réinitialisé sans l'ancien, noté par la console",
+      autobrr["password"] == "mon-nouveau-pass" and ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"] == "mon-nouveau-pass")
+autobrr["tool"] = False
+autobrr["password"] = ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"]
+apppass.reset("autobrr", "", "")
+check("autobrr : outil inutilisable mais mot de passe de la console valable : changé par l'API",
+      autobrr["password"] == ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"] and len(autobrr["password"]) == 32)
+ctl.env_set(AUTOBRR_ADMIN_PASSWORD="perdu")
+before = ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"]
 message = fails(apppass.reset, "autobrr", "", "")
-check("autobrr : mot de passe changé hors console → message clair", message is not None and "inconnu de la console" in message, message)
+check("autobrr : outil inutilisable et mot de passe de la console périmé : message clair, rien de noté",
+      message is not None and "non changé" in message and "outil d'autobrr est inutilisable" in message
+      and ctl.env_read()["AUTOBRR_ADMIN_PASSWORD"] == before, message)
+autobrr["tool"] = True
+autobrr_ok_session = ctl.autobrr_session
+ctl.autobrr_session = lambda: (_ for _ in ()).throw(ctl.SeedboxError("autobrr : connexion refusée (HTTP 403)"))
+check("autobrr : la vraie connexion finale échoue → l'erreur remonte, pas de faux succès",
+      "403" in (fails(apppass.reset, "autobrr", "", "nouveau-mdp-123") or ""))
+ctl.autobrr_session = autobrr_ok_session
+ctl.run = real_run
 
 # ------------------------------------------------------------------ Audiobookshelf
 abs_state = {"password": "ancien"}

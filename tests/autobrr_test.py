@@ -287,6 +287,45 @@ check("contrôle suivant : indexeur et flux reconnus, rien n'est recréé",
       len(nostart.feeds) == 1 and len(nostart.indexers) == 1 and not [1 for m, p, b in nostart.calls if m == "POST"])
 (root / "var/sb/autobrr-flux.json").unlink(missing_ok=True)
 
+# verrouillage d'autobrr : après 5 connexions ratées de suite il répond 429 (un essai toutes les 20 s)
+class Rep:
+    def __init__(self, status):
+        self.status = status
+
+    ok = property(lambda self: 200 <= self.status < 300)
+
+    def cookies(self):
+        return "sid=1"
+
+
+def session_with(logins, recover=lambda password: False):
+    answers = iter(logins)
+    seen = []
+
+    def request(method, url, **kw):
+        if url.endswith("/onboard"):
+            return Rep(404)
+        seen.append(url)
+        return Rep(next(answers))
+    real = (ctl.request, ctl.env_read, ctl.autobrr_recover_password, ctl.AUTOBRR_LOGIN_WAIT, ctl.svc)
+    ctl.request, ctl.env_read, ctl.autobrr_recover_password, ctl.AUTOBRR_LOGIN_WAIT = request, (lambda: {"AUTOBRR_ADMIN_PASSWORD": "pw"}), recover, 0
+    ctl.svc = lambda name, port: f"http://{name}:{port}"
+    try:
+        return ctl.autobrr_session(), len(seen)
+    finally:
+        ctl.request, ctl.env_read, ctl.autobrr_recover_password, ctl.AUTOBRR_LOGIN_WAIT, ctl.svc = real
+
+
+check("connexion à autobrr bloquée (429) : attente puis nouvel essai, sans toucher au mot de passe", session_with([429, 204]) == ("sid=1", 2))
+try:
+    session_with([429, 429])
+    message = ""
+except ctl.SeedboxError as error:
+    message = str(error)
+check("autobrr toujours bloqué après l'attente : message clair (réessayer dans une minute), pas « mot de passe changé »",
+      "trop de connexions ratées" in message and "dans une minute" in message and "ne correspond plus" not in message, message)
+check("mot de passe refusé (403) : repris par l'outil d'autobrr puis nouvelle connexion", session_with([403, 204], recover=lambda password: True) == ("sid=1", 2))
+
 # reprise du mot de passe : la 2e variante de saisie est tentée si la 1re échoue
 tried = []
 real_run = ctl.run

@@ -6,8 +6,11 @@ applications qui ont leur propre mot de passe, y compris quand celui-ci a été 
     jamais conservé.
   - qBittorrent : par son API ; si le mot de passe connu de la console est périmé, par le fichier de configuration (conteneur
     arrêté puis relancé). Vide = généré ; conservé pour relier Radarr, Sonarr, autobrr..., affiché dans Identifiants.
-  - autobrr, Audiobookshelf : par l'API de l'application avec le mot de passe que connaît la console (si l'application refuse
-    celui-ci, il a été changé dans son interface : réinitialisation impossible d'ici, le message le dit).
+  - autobrr : par son outil en ligne de commande, qui remplace le mot de passe sans connaître l'ancien (perdu, ou changé dans son
+    interface) et sans connexion ratée, qu'autobrr compterait avant de bloquer l'adresse ; sans cet outil, par l'API avec le mot de
+    passe que connaît la console.
+  - Audiobookshelf : par l'API de l'application avec le mot de passe que connaît la console (si l'application refuse celui-ci, il a
+    été changé dans son interface : réinitialisation impossible d'ici, le message le dit).
 Chaque réinitialisation est vérifiée par une vraie connexion avec le nouveau mot de passe.
     seedboxctl apppass show | reset APP [--login COMPTE]   (nouveau mot de passe sur l'entrée standard, vide = généré)
 """
@@ -96,10 +99,14 @@ def reset_qbittorrent(password):
 
 
 def reset_autobrr(password):
-    try:
-        ctl.autobrr_set_password(password)
-    except (ctl.SeedboxError, OSError, ValueError) as error:
-        raise ctl.SeedboxError(f"autobrr : mot de passe actuel inconnu de la console (changé dans l'interface ?) : {error}")
+    if ctl.autobrr_force_password(password):
+        ctl.env_set(AUTOBRR_ADMIN_PASSWORD=password)
+    else:
+        try:
+            ctl.autobrr_set_password(password)
+        except (ctl.SeedboxError, OSError, ValueError) as error:
+            raise ctl.SeedboxError(f"autobrr : mot de passe non changé, l'outil d'autobrr est inutilisable (conteneur arrêté ?) "
+                                   f"et le mot de passe connu de la console est refusé : {error}")
     ctl.autobrr_session()
     say("autobrr : mot de passe changé et vérifié")
     return []
