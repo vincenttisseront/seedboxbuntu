@@ -37,7 +37,8 @@
 #
 #  PARTAGES RÉSEAU ET DISQUES EXTERNES
 #    /mnt/shares/<nom> (SMB, NFS, disque) est monté sur l'hôte par la console, puis vu
-#    sous /shares par les mêmes applications et par Jellyfin. Propagation « rslave » : un
+#    sous /shares par les mêmes applications et par Jellyfin (et par toute application du
+#    catalogue qui voit /data : même chemin partout, aucune correspondance de chemins). Propagation « rslave » : un
 #    partage monté après le démarrage d'un conteneur y apparaît sans redémarrage. Jellyfin
 #    fait exception : en lecture seule, il est redémarré à chaque montage.
 #

@@ -99,7 +99,7 @@
       "id": "unpackerr",
       "name": "Unpackerr",
       "category": "Qualité et sous-titres",
-      "description": "Décompresse les téléchargements en archives (rar, zip...) pour que Radarr et Sonarr puissent les importer. Téléchargements attendus sous /data/downloads. Service sans interface web.",
+      "description": "Décompresse les téléchargements en archives (rar, zip...) pour que Radarr et Sonarr puissent les importer. Suit le dossier des téléchargements terminés choisi dans Partages (disque local ou NAS). Service sans interface web.",
       "image": "ghcr.io/unpackerr/unpackerr:latest",
       "user": true,
       "env": {

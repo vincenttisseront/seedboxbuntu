@@ -60,7 +60,19 @@ check("Navidrome : dossier musique = partage choisi", navidrome["environment"]["
 check("Navidrome : /shares en lecture seule avec propagation", "${SHARES_DIR:-/mnt/shares}:/shares:ro,rslave" in navidrome["volumes"], navidrome["volumes"])
 check("Lidarr : /shares en lecture-écriture avec propagation", "${SHARES_DIR:-/mnt/shares}:/shares:rslave" in apps.service_definition(built["lidarr"])["volumes"])
 check("Audiobookshelf : /shares monté", any(v.endswith(":/shares:rslave") for v in apps.service_definition(built["audiobookshelf"])["volumes"]))
-check("application sans accès : aucun montage /shares", not any(":/shares" in v for v in apps.service_definition(built["bazarr"])["volumes"]))
+check("Bazarr (données en /data) : voit aussi les partages, sans réglage", "${SHARES_DIR:-/mnt/shares}:/shares:rslave" in apps.service_definition(built["bazarr"])["volumes"])
+check("application sans données (Recyclarr) : aucun montage /shares", not any(":/shares" in v for v in apps.service_definition(built["recyclarr"])["volumes"]))
+generic = apps.from_linuxserver({"data": {"repositories": {"linuxserver": [{"name": "readarr", "category": "Livres", "config": {"ports": [{"internal": "8787"}]}}]}}})
+check("application du catalogue web avec /data : partages montés aussi", generic and any(v.endswith(":/shares:rslave") for v in apps.service_definition(generic[0])["volumes"]))
+check("données en lecture seule : partages en lecture seule", apps.shares_mode({"volumes": ["${DATA_DIR}/media:/media:ro"]}) == "ro")
+choose("complete", "nas", "Telechargements")
+unpack = apps.service_definition(built["unpackerr"])["environment"]
+check("Unpackerr : suit le dossier des téléchargements (partage) et garde l'ancien dossier local, partages montés",
+      unpack.get("UN_RADARR_0_PATHS_0") == "/shares/nas/Telechargements" and unpack.get("UN_SONARR_0_PATHS_1") == "/data/downloads"
+      and any(v.endswith(":/shares:rslave") for v in apps.service_definition(built["unpackerr"])["volumes"]), unpack)
+_data = shares.load()
+_data["roles"].pop("complete", None)
+shares.save(_data)
 data = shares.load(); data["roles"].pop("music"); shares.save(data)
 check("Navidrome : retour au dossier local /music", apps.service_definition(built["navidrome"])["environment"]["ND_MUSICFOLDER"] == "/music")
 

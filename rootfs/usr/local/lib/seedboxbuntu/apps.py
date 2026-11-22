@@ -340,10 +340,30 @@ def listing():
 #  Fichier compose des applications
 # ----------------------------------------------------------------------------
 def role_env(ident):
-    """Variables qui dépendent des Emplacements choisis (le dossier Musique de Navidrome)."""
+    """Variables qui dépendent des Emplacements choisis (dossier Musique de Navidrome, téléchargements d'Unpackerr)."""
     if ident == "navidrome":
         return {"ND_MUSICFOLDER": ctl.shares().app_folder("music", "/music")}
+    if ident == "unpackerr":
+        # Le dossier des téléchargements terminés, où qu'il soit (local ou partage), plus l'ancien dossier local
+        paths = list(dict.fromkeys([ctl.shares().location("complete").rstrip("/"), "/data/downloads"]))
+        env = {}
+        for app in ("RADARR", "SONARR"):
+            for i, path in enumerate(paths):
+                env[f"UN_{app}_0_PATHS_{i}"] = path
+        return env
     return {}
+
+
+def shares_mode(entry):
+    """Accès aux partages (Emplacements) d'une application : toute application qui voit les données (/data) voit aussi
+    les partages, au même chemin /shares/<nom> que Radarr, Sonarr, qBittorrent et Jellyfin, sans réglage particulier.
+    Lecture seule quand ses données sont toutes en lecture seule. Une entrée intégrée peut le fixer (« rw » ou « ro »)."""
+    if entry.get("shares") in ("rw", "ro"):
+        return entry["shares"]
+    data = [v for v in entry.get("volumes") or [] if v.startswith("${DATA_DIR}")]
+    if not data:
+        return None
+    return "ro" if all(v.endswith(":ro") for v in data) else "rw"
 
 
 def service_definition(entry):
@@ -357,8 +377,9 @@ def service_definition(entry):
     env.update(entry["env"])
     env.update(role_env(ident))
     volumes = list(entry["volumes"])
-    if entry.get("shares"):     # les partages réseau (Emplacements) vus sous /shares, montés plus tard compris
-        volumes.append("${SHARES_DIR:-/mnt/shares}:/shares:" + ("ro,rslave" if entry["shares"] == "ro" else "rslave"))
+    mode = shares_mode(entry)
+    if mode:     # les partages réseau (Emplacements) vus sous /shares, montés plus tard compris
+        volumes.append("${SHARES_DIR:-/mnt/shares}:/shares:" + ("ro,rslave" if mode == "ro" else "rslave"))
     if entry.get("headless"):
         return {
             "image": entry["image"], "container_name": ident, "restart": "unless-stopped",

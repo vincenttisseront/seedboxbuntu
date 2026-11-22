@@ -21,7 +21,13 @@ Rôles
     surveillé de .torrent, copie des .torrent, bibliothèques Films, Séries, Musique, Livres audio
     et Livres. Les applications sont reconfigurées par « seedboxctl provision », qui lit
     l'emplacement de chaque rôle (qBittorrent, Radarr, Sonarr, Lidarr, Jellyfin, Navidrome,
-    Audiobookshelf).
+    Audiobookshelf, qbit_manage, cross-seed, Unpackerr).
+
+Une seule vue pour toutes les applications
+    Toute application qui voit les données (/data) voit aussi les partages, au même chemin
+    /shares/<nom> : celles de la stack comme celles du catalogue (Bazarr, Unpackerr, applications
+    linuxserver.io...), sans réglage particulier. Un fichier a donc le même chemin partout, et
+    aucune correspondance de chemins (« remote path mapping ») n'est nécessaire.
 """
 import json
 import os

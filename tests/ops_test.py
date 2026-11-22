@@ -285,7 +285,8 @@ check("vacances : reprise en échec -> le mode reste actif pour un nouvel essai"
 vacation.stop(FakeQbit())
 check("vacances : « reprendre » manuel", not vacation.state())
 guests = ctl.guests()
-vacation.start("2026-11-20", "vincent", FakeQbit(), time.time())
+# date de reprise relative à maintenant : une date figée finit par passer et casser le test
+vacation.start(time.strftime("%Y-%m-%d", time.localtime(time.time() + 10 * 86400)), "vincent", FakeQbit(), time.time())
 check("vacances : les liens d'invitation sont refusés pendant le mode", guests.lookup("a" * 32) is None)
 vacation.stop(FakeQbit())
 
