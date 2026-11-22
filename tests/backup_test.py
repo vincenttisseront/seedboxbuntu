@@ -68,4 +68,16 @@ check("restauration : pile arrêtée puis sauvegarde « avant » faite", calls a
 check("réglages : jours et heure validés", bk.validate({"days": "mon,wed", "time": "04:15"})["time"] == "04:15")
 try: bk.validate({"keep": "x"}); check("keep invalide refusé", False)
 except ctl.SeedboxError: check("keep invalide refusé", True)
+# --- plafond des sauvegardes locales ---------------------------------------------------------------
+_d = Path(tempfile.mkdtemp())
+for _i, _name in enumerate(["seedbox-20261101-023000.tar.gz.enc", "seedbox-20261102-023000-avant.tar.gz.enc",
+                            "seedbox-20261103-023000.tar.gz.enc", "seedbox-20261104-023000.tar.gz.enc"]):
+    _p = _d / _name
+    _p.write_bytes(b"x" * 1000)
+    os.utime(_p, (1_000_000 + _i, 1_000_000 + _i))
+bk.cap(_d, 2500)
+_left = sorted(p.name for p in _d.iterdir())
+check("plafond local : les plus anciennes partent, la plus récente et l'« avant » restent",
+      _left == ["seedbox-20261102-023000-avant.tar.gz.enc", "seedbox-20261104-023000.tar.gz.enc"], str(_left))
+check("métadonnées Jellyfin (image linuxserver) exclues des sauvegardes", "config/jellyfin/data/metadata" in bk.EXCLUDE)
 print("ECHECS:", bad); sys.exit(1 if bad else 0)

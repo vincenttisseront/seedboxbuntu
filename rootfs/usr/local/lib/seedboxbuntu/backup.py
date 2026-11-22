@@ -30,6 +30,9 @@ DEFAULTS = {"enabled": True, "days": "daily", "time": "02:30", "keep": 7, "desti
 NAME = re.compile(r"^seedbox-[0-9]{8}-[0-9]{6}(-[a-z]+)?\.tar\.gz\.enc$")
 EXCLUDE = ("config/jellyfin/cache", "config/jellyfin/transcodes", "config/jellyfin/log", "config/jellyfin/metadata",
            "config/jellyfin/data/trickplay", "config/jellyfin/data/attachments",       # régénérés par Jellyfin : plusieurs Go inutiles dans chaque archive
+           # Image linuxserver : les images et fiches de Jellyfin sont sous /config/data/metadata (pas /config/metadata) ;
+           # c'est l'essentiel des ~13 Go de chaque archive. Jellyfin les retélécharge après une restauration.
+           "config/jellyfin/data/metadata", "config/jellyfin/data/subtitles", "config/jellyfin/data/transcodes",
            "config/*/logs", "config/*/Logs", "config/*/log", "config/*/cache", "config/*/Cache",
            "config/*/MediaCover", "config/*/Backups", "config/*/backups")
 
@@ -148,6 +151,27 @@ def room_needed(folder):
     return max(1 << 30, int(1.5 * max(sizes, default=0)))
 
 
+LOCAL_SHARE = 0.10      # part du disque du serveur que les sauvegardes locales peuvent occuper
+
+
+def cap(folder, budget):
+    """Plafond de taille : supprime les plus anciennes (hors « avant-restauration ») tant que le total dépasse le budget,
+    en gardant toujours la plus récente."""
+    files = sorted((p for p in Path(folder).glob("seedbox-*.tar.gz.enc") if NAME.match(p.name)),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    total = sum(p.stat().st_size for p in files)
+    for old in [p for p in files[1:] if "-avant" not in p.name][::-1]:
+        if total <= budget:
+            break
+        total -= old.stat().st_size
+        old.unlink(missing_ok=True)
+        say(f"sauvegarde locale supprimée (plafond de {budget >> 30} Go) : {old.name}")
+
+
+def local_budget(folder):
+    return max(2 << 30, int(shutil.disk_usage(folder).total * LOCAL_SHARE))
+
+
 def make_room(folder, keep):
     """Évite de remplir le disque : si la place manque, supprime d'abord les plus anciennes sauvegardes (jusqu'à une seule), sinon refuse."""
     need = room_needed(folder)
@@ -191,6 +215,9 @@ def create(label=""):
         raise ctl.SeedboxError("sauvegarde échouée : " + (enc_err or tar_err).decode(errors="replace")[:200])
     partial.replace(target)
     prune(folder, cfg["keep"])
+    if Path(folder).resolve() == LOCAL_DIR.resolve():
+        # Sur le disque du serveur, la rétention seule (7 archives) peut occuper des dizaines de Go
+        cap(folder, local_budget(folder))
     say(f"sauvegarde terminée : {target.name} ({target.stat().st_size // 1024} Ko)")
     if not label:
         try:
