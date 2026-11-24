@@ -35,6 +35,9 @@ const fmtDateTime = (value) => { const d = asDate(value); return d ? DATE_TIME.f
 /** Jour : « 15 nov. 2026 ». */
 const fmtDay = (value) => { const d = asDate(value); return d ? DATE_ONLY.format(d) : '-'; };
 const fmtTime = (value) => { const d = asDate(value); return d ? TIME_ONLY.format(d) : '-'; };
+const HOUR_MINUTE = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' });
+/** Heure sans les secondes : « 22:20 » (axes des graphiques). */
+const fmtHM = (value) => { const d = asDate(value); return d ? HOUR_MINUTE.format(d) : '-'; };
 /** Date complète pour une échéance : « dimanche 15 novembre 2026 à 14:45 ». */
 const fmtFull = (value) => { const d = asDate(value); return d ? DATE_FULL.format(d) : '-'; };
 /** Taille : « 512 o », « 12 Ko », « 3,4 Mo », « 1,2 Go », « 2,50 To » (base 1024, un seul jeu d'unités). */

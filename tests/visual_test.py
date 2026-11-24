@@ -108,7 +108,7 @@ def check_extra(page, tag, errors):
     if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"):
         fail(f"{tag} : débordement horizontal")
     back = page.evaluate("getComputedStyle(document.body).backgroundColor")
-    if back not in ("rgb(2, 6, 23)", "rgb(241, 245, 249)"):
+    if back not in ("rgb(7, 9, 15)", "rgb(245, 246, 250)"):
         fail(f"{tag} : fond {back} différent de celui de la console")
     if errors:
         fail(f"{tag} : erreurs JavaScript : {errors[:3]}")

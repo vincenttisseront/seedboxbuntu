@@ -73,6 +73,98 @@ async function overviewGuests() {
     `${accounts} compte(s) invité(s)${next ? ` · prochaine échéance ${fmtDay(next)}` : ''}`, active.length ? 'Information' : 'OK');
 }
 
+// Trafic des dernières 24 heures : l'envoi au-dessus de l'axe, la réception en dessous, à la même échelle
+function seriesTotal(points) {
+  let total = 0;
+  for (let i = 1; i < points.length; i += 1) total += points[i][1] * (points[i][0] - points[i - 1][0]);
+  return total;
+}
+
+function pulsePath(points, t0, t1, max, sign) {
+  const x = (t) => ((t - t0) / (t1 - t0)) * 1000;
+  const y = (v) => 60 - sign * (Math.min(v, max) / max) * 56;
+  const r = (n) => Math.round(n * 10) / 10;
+  const line = points.map(([t, v], i) => `${i ? 'L' : 'M'}${r(x(t))},${r(y(v))}`).join('');
+  return { line, area: `${line}L${r(x(points[points.length - 1][0]))},60L${r(x(points[0][0]))},60Z` };
+}
+
+function renderPulse(up, down, now) {
+  const plot = $('pulse-plot');
+  const t1 = now;
+  const t0 = now - 86400;
+  const max = Math.max(1, ...up.map((p) => p[1]), ...down.map((p) => p[1]));
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 1000 120');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+  const add = (tag, attrs) => { const node = document.createElementNS(ns, tag); Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v)); svg.append(node); return node; };
+  for (const [points, sign, cls] of [[down, -1, 'down'], [up, 1, 'up']]) {
+    if (points.length < 2) continue;
+    const path = pulsePath(points, t0, t1, max, sign);
+    add('path', { d: path.area, class: `pulse-area ${cls}` });
+    add('path', { d: path.line, class: `pulse-line ${cls}`, 'vector-effect': 'non-scaling-stroke' });
+  }
+  add('line', { x1: 0, x2: 1000, y1: 60, y2: 60, class: 'pulse-zero', 'vector-effect': 'non-scaling-stroke' });
+  const cursor = add('line', { x1: 0, x2: 0, y1: 0, y2: 120, class: 'pulse-cursor hidden', 'vector-effect': 'non-scaling-stroke' });
+  const readout = el('div', { class: 'pulse-readout hidden', 'aria-hidden': 'true' });
+  plot.replaceChildren(svg, readout);
+  // Lecture au survol : l'heure et les deux débits, sans rien masquer du tracé
+  const nearest = (points, t) => points.reduce((best, p) => (Math.abs(p[0] - t) < Math.abs(best[0] - t) ? p : best), points[0]);
+  plot.onpointermove = (event) => {
+    const box = plot.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+    const t = t0 + ratio * 86400;
+    const u = up.length ? nearest(up, t) : [t, 0];
+    const d = down.length ? nearest(down, t) : [t, 0];
+    cursor.setAttribute('x1', ratio * 1000); cursor.setAttribute('x2', ratio * 1000);
+    cursor.classList.remove('hidden');
+    readout.replaceChildren(el('b', {}, fmtHM(u[0])), el('span', { class: 'up' }, `Envoyé ${fmtRate(u[1])}`), el('span', { class: 'down' }, `Reçu ${fmtRate(d[1])}`));
+    readout.classList.remove('hidden');
+    readout.classList.toggle('flip', ratio > .6);
+    readout.style.left = `${ratio * 100}%`;
+  };
+  plot.onpointerleave = () => { cursor.classList.add('hidden'); readout.classList.add('hidden'); };
+  $('pulse-axis').replaceChildren(...[0, 6, 12, 18].map((h) => el('span', {}, fmtHM(t0 + h * 3600))), el('span', {}, 'maintenant'));
+}
+
+async function overviewPulse() {
+  const box = $('pulse');
+  box.setAttribute('aria-busy', 'true');
+  try {
+    const data = await api('/api/metrics?range=24h');
+    const up = (data.series && data.series.net_tx) || [];
+    const down = (data.series && data.series.net_rx) || [];
+    if (up.length < 2 && down.length < 2) {
+      $('pulse-up').textContent = '—'; $('pulse-down').textContent = '—';
+      $('pulse-plot').replaceChildren(stateBlock('empty', 'Pas encore de mesures : le serveur en relève une toutes les quelques minutes.'));
+      $('pulse-axis').replaceChildren();
+      return;
+    }
+    const sent = seriesTotal(up);
+    const received = seriesTotal(down);
+    $('pulse-up').textContent = fmtSize(sent);
+    $('pulse-down').textContent = fmtSize(received);
+    renderPulse(up, down, data.now || Math.floor(Date.now() / 1000));
+  } catch (error) {
+    $('pulse-up').textContent = '—'; $('pulse-down').textContent = '—';
+    $('pulse-plot').replaceChildren(stateBlock('error', `Mesures indisponibles : ${error.message}`));
+    $('pulse-axis').replaceChildren();
+  } finally {
+    box.removeAttribute('aria-busy');
+  }
+  // Débits de qBittorrent en ce moment (réservé aux administrateurs : un observateur ne voit que le tracé)
+  if (readonlyMode()) return;
+  try {
+    const live = await api('/api/remote-control');
+    const d = live.downloads;
+    $('pulse-live').textContent = d && d.available ? `qBittorrent en ce moment : ${fmtRate(d.up)} envoyés, ${fmtRate(d.down)} reçus.` : '';
+    $('pulse-live').classList.toggle('hidden', !(d && d.available));
+  } catch (error) {
+    $('pulse-live').classList.add('hidden');
+  }
+}
+
 // Toujours chargés : ils alimentent aussi les cartes « Disques » et « Problèmes en cours » sous les tuiles
 const OVERVIEW_ALWAYS = new Set(['space', 'alerts']);
 function overviewJobs() {
@@ -84,6 +176,7 @@ function overviewJobs() {
 let overviewFailures = 0;
 async function refreshOverview() {
   applyTileLayout();
+  overviewPulse();
   const results = await Promise.all(overviewJobs().map(([id, run]) => run().then(() => true, (error) => { tileFailed(id, error); return false; })));
   overviewFailures = results.every((ok) => !ok) ? overviewFailures + 1 : 0;
   if (kioskActive()) {

@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SeedBoxBuntu - Console</title>
-<meta name="theme-color" content="#020617">
+<meta name="theme-color" content="#07090f">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SeedBox">
-<link rel="preload" href="fonts/fira-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/geist-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="app.css">
 <script src="display.js"></script>
@@ -51,6 +51,22 @@
     <header class="page-head"><div><h1>Vue d’ensemble</h1><p class="sub">L’état de la seedbox en un coup d’œil : santé des services, espace, mises à jour, alertes et invitations.</p></div>
       <div class="actions"><button id="overview-customize" class="btn" type="button" data-icon="sliders" aria-pressed="false">Personnaliser</button><button id="overview-kiosk" class="btn" type="button" data-icon="monitor">Mode kiosque</button><button id="overview-refresh" class="btn" type="button">Actualiser</button></div></header>
     <div id="tiles-hidden" class="notice info hidden"></div>
+    <section class="card pulse" id="pulse" aria-labelledby="pulse-title" aria-busy="true">
+      <div class="pulse-figures">
+        <h2 id="pulse-title">Trafic des dernières 24 heures</h2>
+        <dl>
+          <div class="pulse-fig up"><dt><span class="pulse-key" aria-hidden="true"></span>Envoyé</dt><dd id="pulse-up">—</dd></div>
+          <div class="pulse-fig down"><dt><span class="pulse-key" aria-hidden="true"></span>Reçu</dt><dd id="pulse-down">—</dd></div>
+        </dl>
+        <p id="pulse-live" class="pulse-live hidden"></p>
+      </div>
+      <figure class="pulse-chart" id="pulse-chart">
+        <div class="pulse-plot" id="pulse-plot"></div>
+        <div class="pulse-axis" id="pulse-axis" aria-hidden="true"></div>
+        <figcaption id="pulse-caption" class="small muted">Réseau du serveur : torrents, partages du NAS et lecture compris.</figcaption>
+      </figure>
+    </section>
+    <div class="ov-grid">
     <div class="tiles" id="tiles">
       <article id="tile-health" class="card tile"><div class="tile-head"><h2>Santé</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#apps">Voir les applications</a></article>
       <article id="tile-space" class="card tile"><div class="tile-head"><h2>Espace</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#system">Voir le système</a></article>
@@ -60,8 +76,11 @@
       <article id="tile-guests" class="card tile"><div class="tile-head"><h2>Invitations</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#guests">Voir les invités</a></article>
       <article id="tile-setup" class="card tile"><div class="tile-head"><h2>Configuration</h2><span class="tile-pill"></span></div><div class="tile-value"></div><p class="tile-detail"></p><a class="more-link" href="#setup">Ouvrir l’assistant</a></article>
     </div>
-    <div class="card half"><h2>Disques</h2><div id="overview-disks"></div></div>
-    <div class="card half"><h2>Problèmes en cours</h2><ul id="overview-alerts" class="checks"></ul></div>
+    <div class="ov-side">
+      <div class="card"><h2>Problèmes en cours</h2><ul id="overview-alerts" class="checks"></ul></div>
+      <div class="card"><h2>Disques</h2><div id="overview-disks"></div></div>
+    </div>
+    </div>
   </section>
 
   <section id="view-apps" class="view hidden">

@@ -277,7 +277,7 @@ for path in ("/api/users", "/api/status", "/api/credentials", "/api/guests", "/a
     check(f"... même avec un faux en-tête d'administration {path}", code == 403, code)
 check("POST d'administration fermé à la route publique", call("/api/guests/invite", {"label": "x"}, public=True, admin=True)[0] == 403)
 check("fichiers publics : feuille de style", call("/invite/static/app.css", ip="10.0.0.4")[0] == 200)
-check("fichiers publics : police", call("/invite/static/fonts/fira-sans-latin-400-normal.woff2", ip="10.0.0.4")[0] == 200)
+check("fichiers publics : police", call("/invite/static/fonts/geist-sans-latin-400-normal.woff2", ip="10.0.0.4")[0] == 200)
 for hidden in ("server.py", "index.html", "app.js", "../server.py", "fonts/../server.py", "fonts/x.py"):
     code = call("/invite/static/" + hidden, ip="10.0.0.5")[0]
     check(f"fichier non public refusé : {hidden}", code in (403, 404), code)

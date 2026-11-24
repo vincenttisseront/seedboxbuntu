@@ -14,7 +14,7 @@
     text: ['normal', 'large', 'xlarge'],
     lang: ['fr', 'en'],
   };
-  const THEME_COLOR = { dark: '#020617', light: '#f1f5f9' };
+  const THEME_COLOR = { dark: '#07090f', light: '#f5f6fa' };
   const dark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
   function read() {

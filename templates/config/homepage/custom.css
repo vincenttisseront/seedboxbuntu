@@ -3,15 +3,15 @@
    tests/static_check.py vérifie qu'elles restent identiques. Seul le thème sombre est repris
    (settings.yaml : theme: dark). */
 :root{
-  --bg:#020617;--panel:#0b1220;--panel2:#111b2e;--line:#1e293b;--line2:#3b4a63;
-  --text:#f1f5f9;--muted:#9aa8bd;--brand:#2dd4bf;--glow:rgba(45,212,191,.16);
+  --bg:#07090f;--panel:#0c1019;--panel2:#121725;--line:#1b2131;--line2:#323b51;
+  --text:#edf0f7;--muted:#9aa3b6;--brand:#5b8cff;--glow:rgba(91,140,255,.13);
   --ok:#4ade80;--warn:#fbbf24;--err:#f87171;
-  --mono:"Fira Code",ui-monospace,Menlo,Consolas,monospace;
+  --font:"Geist",system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;
   --r:12px;
 }
 body,#page_wrapper,#inner_wrapper{
   background-color:var(--bg)!important;
-  background-image:radial-gradient(900px 380px at 12% -80px,var(--glow),transparent 70%)!important;
+  background-image:radial-gradient(1100px 420px at 70% -160px,var(--glow),transparent 70%)!important;
   background-repeat:no-repeat!important;
   color:var(--text)!important;
 }
@@ -22,12 +22,13 @@ body,#page_wrapper,#inner_wrapper{
   border-radius:var(--r)!important;
 }
 .service-card:hover{border-color:var(--brand)!important}
-/* titres de groupes : petites capitales à chasse fixe, comme les titres de cartes */
+/* titres de groupes : comme les titres de cartes de la console, en casse normale (Geist n'est pas servi par Homepage : police système) */
 .service-group-name,.services-group h2,.bookmark-group-name{
-  font-family:var(--mono)!important;
-  font-size:.75rem!important;
-  letter-spacing:.09em!important;
-  text-transform:uppercase!important;
+  font-family:var(--font)!important;
+  font-size:.875rem!important;
+  font-weight:600!important;
+  letter-spacing:-.01em!important;
+  text-transform:none!important;
   color:var(--muted)!important;
 }
 .service-name,.service-title{color:var(--text)!important}

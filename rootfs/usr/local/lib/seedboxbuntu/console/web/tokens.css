@@ -8,66 +8,66 @@
 :root{
   color-scheme:dark;
 
-  /* surfaces et textes */
-  --bg:#020617;--bar:rgba(2,6,23,.86);--panel:#0b1220;--panel2:#111b2e;--line:#1e293b;--line2:#3b4a63;
-  --text:#f1f5f9;--muted:#9aa8bd;--chip:#1e293b;--code:#060b16;--overlay:rgba(2,6,23,.66);
-  /* marque et actions */
-  --brand:#2dd4bf;--accent:#22c55e;--accent-hover:#4ade80;--on-accent:#03140a;--glow:rgba(45,212,191,.16);--focus:#5eead4;
+  /* surfaces et textes : noir bleuté, panneaux un cran plus clairs, bordures discrètes */
+  --bg:#07090f;--bar:rgba(7,9,15,.86);--panel:#0c1019;--panel2:#121725;--line:#1b2131;--line2:#323b51;
+  --text:#edf0f7;--muted:#9aa3b6;--chip:#161c2a;--code:#05070c;--overlay:rgba(3,5,10,.7);
+  /* un seul accent : actions, focus et données mises en avant */
+  --brand:#5b8cff;--accent:#5b8cff;--accent-hover:#7da3ff;--on-accent:#050a1a;--glow:rgba(91,140,255,.13);--focus:#93b2ff;
   /* échelle d'états : ok, attention, erreur, information, inconnu — partout la même */
-  --ok:#4ade80;--warn:#fbbf24;--err:#f87171;--info:#60a5fa;--unknown:#9aa8bd;
-  --ok-bg:rgba(74,222,128,.12);--warn-bg:rgba(251,191,36,.12);--err-bg:rgba(248,113,113,.13);--info-bg:rgba(96,165,250,.13);--unknown-bg:rgba(154,168,189,.12);
-  /* séries des graphiques (ordre fixe) */
-  --c0:#2dd4bf;--c1:#a78bfa;--c2:#f472b6;--c3:#38bdf8;
+  --ok:#4ade80;--warn:#fbbf24;--err:#f87171;--info:#67c6f2;--unknown:#9aa3b6;
+  --ok-bg:rgba(74,222,128,.11);--warn-bg:rgba(251,191,36,.11);--err-bg:rgba(248,113,113,.12);--info-bg:rgba(103,198,242,.11);--unknown-bg:rgba(154,163,182,.11);
+  /* séries des graphiques (ordre fixe) ; --flow-in : trafic entrant, en retrait derrière l'envoi */
+  --c0:#5b8cff;--c1:#b18cff;--c2:#f472b6;--c3:#46d4c8;--flow-in:#56627a;
   /* seuils partagés (pourcentage) : lus aussi par ui.js, voir THRESHOLDS */
   --th-warn:85;--th-crit:95;
 
-  /* typographie */
-  --font:"Fira Sans",system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;
-  --mono:"Fira Code",ui-monospace,Menlo,Consolas,monospace;
+  /* typographie : Geist pour tout, Geist Mono seulement pour les données (adresses, chemins, commandes) */
+  --font:"Geist",system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,sans-serif;
+  --mono:"Geist Mono",ui-monospace,Menlo,Consolas,monospace;
   --ts:1;
-  --fs-xs:calc(11.5px*var(--ts));--fs-sm:calc(13px*var(--ts));--fs-base:calc(14px*var(--ts));--fs-md:calc(15px*var(--ts));
-  --fs-lg:calc(18px*var(--ts));--fs-xl:calc(24px*var(--ts));--fs-brand:calc(19px*var(--ts));
-  --lh:1.55;
+  --fs-xs:calc(12px*var(--ts));--fs-sm:calc(13px*var(--ts));--fs-base:calc(14px*var(--ts));--fs-md:calc(15px*var(--ts));
+  --fs-lg:calc(18px*var(--ts));--fs-xl:calc(26px*var(--ts));--fs-brand:calc(17px*var(--ts));--fs-hero:calc(40px*var(--ts));
+  --lh:1.55;--track-tight:-.025em;
 
   /* espacements, rayons, ombres, profondeurs, durées */
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;
-  --r-sm:8px;--r:12px;--r-pill:99px;
-  --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.35);--shadow-lg:0 12px 48px rgba(0,0,0,.55);
+  --r-sm:7px;--r:12px;--r-pill:99px;
+  --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 8px 24px rgba(0,0,0,.28);--shadow-lg:0 16px 56px rgba(0,0,0,.6);
   --z-bar:20;--z-nav:30;--z-drawer:40;--z-dialog:50;--z-toast:60;
-  --t:180ms ease;
+  --t:160ms cubic-bezier(.2,.7,.2,1);
 
   /* densité (confortable par défaut) */
-  --pad-card:var(--sp-5);--pad-cell:11px 10px;--pad-btn:9px 15px;--pad-btn-sm:5px 11px;--pad-field:9px 11px;--gap:var(--sp-4);
+  --pad-card:var(--sp-5);--pad-cell:10px 10px;--pad-btn:8px 14px;--pad-btn-sm:5px 10px;--pad-field:9px 11px;--gap:var(--sp-4);
 
   /* gabarit */
-  --side-w:244px;--content-max:1180px;--bar-h:60px;
+  --side-w:236px;--content-max:1200px;--bar-h:60px;
 }
 
 html[data-scheme=light]{
   color-scheme:light;
-  --bg:#f1f5f9;--bar:rgba(255,255,255,.88);--panel:#ffffff;--panel2:#f8fafc;--line:#e2e8f0;--line2:#94a3b8;
-  --text:#0f172a;--muted:#475569;--chip:#e2e8f0;--code:#f1f5f9;--overlay:rgba(15,23,42,.45);
-  --brand:#0f766e;--accent:#0f766e;--accent-hover:#115e59;--on-accent:#ffffff;--glow:rgba(15,118,110,.12);--focus:#0f766e;
-  --ok:#146c36;--warn:#9a4607;--err:#b91c1c;--info:#1d4ed8;--unknown:#475569;
-  --ok-bg:rgba(21,128,61,.1);--warn-bg:rgba(180,83,9,.1);--err-bg:rgba(185,28,28,.09);--info-bg:rgba(29,78,216,.09);--unknown-bg:rgba(71,85,105,.1);
-  --c0:#0f766e;--c1:#6d28d9;--c2:#be185d;--c3:#0369a1;
-  --shadow:0 1px 2px rgba(15,23,42,.06),0 8px 24px rgba(15,23,42,.07);--shadow-lg:0 12px 48px rgba(15,23,42,.22);
+  --bg:#f5f6fa;--bar:rgba(255,255,255,.88);--panel:#ffffff;--panel2:#f8f9fc;--line:#e2e5ee;--line2:#9aa3b6;
+  --text:#0b1020;--muted:#4a5468;--chip:#eceff5;--code:#f1f3f8;--overlay:rgba(11,16,32,.42);
+  --brand:#2f5fe0;--accent:#2f5fe0;--accent-hover:#244bba;--on-accent:#ffffff;--glow:rgba(47,95,224,.10);--focus:#2f5fe0;
+  --ok:#137036;--warn:#9a4607;--err:#b91c1c;--info:#0b6596;--unknown:#4a5468;
+  --ok-bg:rgba(19,112,54,.09);--warn-bg:rgba(180,83,9,.1);--err-bg:rgba(185,28,28,.08);--info-bg:rgba(11,101,150,.09);--unknown-bg:rgba(74,84,104,.09);
+  --c0:#2f5fe0;--c1:#7c3aed;--c2:#be185d;--c3:#0f766e;--flow-in:#a3acbf;
+  --shadow:0 1px 2px rgba(11,16,32,.05),0 8px 24px rgba(11,16,32,.06);--shadow-lg:0 16px 56px rgba(11,16,32,.2);
 }
 
 /* contraste élevé : texte et bordures poussés au maximum, états plus saturés */
 html[data-contrast=high]{
   --bg:#000000;--bar:rgba(0,0,0,.94);--panel:#000000;--panel2:#0a0a0a;--line:#8a96a8;--line2:#c3cbd8;
   --text:#ffffff;--muted:#dbe2ec;--chip:#1f2937;--code:#000000;
-  --brand:#5eead4;--accent:#4ade80;--accent-hover:#86efac;--on-accent:#000000;--focus:#ffffff;
-  --ok:#86efac;--warn:#fde047;--err:#fca5a5;--info:#93c5fd;--unknown:#dbe2ec;
-  --c0:#5eead4;--c1:#c4b5fd;--c2:#f9a8d4;--c3:#7dd3fc;
+  --brand:#9db8ff;--accent:#9db8ff;--accent-hover:#c2d3ff;--on-accent:#000000;--focus:#ffffff;
+  --ok:#86efac;--warn:#fde047;--err:#fca5a5;--info:#a5e3ff;--unknown:#dbe2ec;
+  --c0:#9db8ff;--c1:#c4b5fd;--c2:#f9a8d4;--c3:#5eead4;--flow-in:#c3cbd8;
 }
 html[data-contrast=high][data-scheme=light]{
   --bg:#ffffff;--bar:rgba(255,255,255,.96);--panel:#ffffff;--panel2:#f1f5f9;--line:#475569;--line2:#1e293b;
   --text:#000000;--muted:#1e293b;--chip:#e2e8f0;--code:#f1f5f9;
-  --brand:#0b524c;--accent:#0b524c;--accent-hover:#083d39;--on-accent:#ffffff;--focus:#000000;
-  --ok:#0f5c2a;--warn:#7c3a06;--err:#8f1414;--info:#1e3a8a;--unknown:#1e293b;
-  --c0:#0b524c;--c1:#4c1d95;--c2:#9d174d;--c3:#075985;
+  --brand:#1a3fa8;--accent:#1a3fa8;--accent-hover:#122f80;--on-accent:#ffffff;--focus:#000000;
+  --ok:#0f5c2a;--warn:#7c3a06;--err:#8f1414;--info:#0a4a70;--unknown:#1e293b;
+  --c0:#1a3fa8;--c1:#4c1d95;--c2:#9d174d;--c3:#075985;--flow-in:#475569;
 }
 
 /* densité compacte */
