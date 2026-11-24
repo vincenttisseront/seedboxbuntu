@@ -386,6 +386,17 @@
         <div class="row"><button class="btn primary" type="submit">Activer</button><button id="dns-off" class="btn" type="button">Revenir au défi HTTP</button></div>
       </form>
     </div>
+    <div class="card form" id="seerrpub-card">
+      <h2>Seerr depuis Internet</h2>
+      <p class="muted small">Pour demander un film depuis votre téléphone, n’importe où. Seerr a son propre port (5055) sur lequel aucune autre application n’est servie : en redirigeant le port 443 de votre box vers ce port, seul Seerr est publié. La console, Radarr, qBittorrent… restent invisibles depuis Internet. Il faut un nom public : un nom DuckDNS gratuit (duckdns.org) suffit, son adresse suivra celle de votre box.</p>
+      <dl id="seerrpub-state" class="kv"></dl>
+      <form id="seerrpub-form">
+        <label>Nom public<input name="host" placeholder="maseedbox.duckdns.org" autocomplete="off" spellcheck="false" required></label>
+        <label>E-mail pour le certificat Let’s Encrypt<input name="email" type="email" autocomplete="email" required></label>
+        <label>Jeton DuckDNS (facultatif, recommandé)<input name="token" type="password" autocomplete="off" placeholder="laisser vide pour garder le jeton enregistré"></label>
+        <div class="row"><button class="btn primary" type="submit">Publier Seerr</button><button id="seerrpub-off" class="btn" type="button">Ne plus publier</button></div>
+      </form>
+    </div>
   </section>
 
   <section id="view-bans" class="view hidden">

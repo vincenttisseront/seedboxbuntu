@@ -637,6 +637,17 @@ async function loadRemote() {
   const d = data.dns;
   $('dns-provider').replaceChildren(...Object.entries(d.providers).map(([id, label]) => el('option', { value: id }, label)));
   if (d.provider) $('dns-provider').value = d.provider;
+  const sp = data.seerr;
+  const spRows = !sp.enabled ? [['État', 'non publié']] : [
+    ['Adresse', sp.url],
+    ['Certificat', sp.dns_challenge ? 'Let’s Encrypt par DuckDNS (aucun autre port à ouvrir)' : 'Let’s Encrypt par le port 80 (à rediriger aussi)'],
+    ['Nom résolu vers', sp.resolved.length ? sp.resolved.join(', ') : 'pas encore résolu'],
+  ];
+  if (sp.enabled && sp.ddns) spRows.push(['DuckDNS', sp.ddns.ok ? `adresse à jour (${fmtDateTime(sp.ddns.at * 1000)})` : `refusé : ${sp.ddns.answer}`]);
+  spRows.push(['À régler sur la box', `TCP 443 → ${sp.server}:5055` + (sp.enabled && !sp.dns_challenge ? ` et TCP 80 → ${sp.server}:80` : '')]);
+  $('seerrpub-state').replaceChildren(...spRows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: k === 'Adresse' ? 'no-i18n' : '' }, v)]));
+  if (sp.enabled) { $('seerrpub-form').elements.host.value = sp.host; $('seerrpub-form').elements.email.value = sp.email; }
+  $('seerrpub-off').disabled = !sp.enabled;
   $('dns-state').textContent = !d.custom_domain ? 'Nom de domaine et e-mail Let\u2019s Encrypt requis (formulaire ci-dessus).'
     : d.provider ? `Actif avec ${d.provider} : variables enregistrées (${d.variables.join(', ') || 'aucune'}).` : 'Défi HTTP (port 80) en service.';
 }
@@ -836,6 +847,12 @@ $('dns-form').addEventListener('submit', (event) => {
   event.preventDefault();
   runJob('/api/remote/dns', { mode: 'set', provider: $('dns-provider').value, variables: $('dns-vars').value }, () => { $('dns-vars').value = ''; loadRemote(); });
 });
+$('seerrpub-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const f = event.target.elements;
+  runJob('/api/remote/seerr', { host: f.host.value, email: f.email.value, token: f.token.value }, () => { f.token.value = ''; loadRemote(); });
+});
+$('seerrpub-off').addEventListener('click', (event) => confirmAction(event.currentTarget, 'Seerr n’est plus servi sous son nom public ; pensez à retirer la redirection de port de la box.', () => runJob('/api/remote/seerr', { mode: 'disable' }, loadRemote)));
 $('dns-off').addEventListener('click', () => runJob('/api/remote/dns', { mode: 'disable' }, loadRemote));
 $('backup-create').addEventListener('click', () => runJob('/api/backup/create', {}, loadBackup));
 $('backup-form').addEventListener('submit', (event) => {

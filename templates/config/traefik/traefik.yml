@@ -34,7 +34,7 @@ entryPoints:
   seerr:
     address: ":5055"
     http:
-      tls: @@TRAEFIK_TLS@@
+      tls: @@SEERR_TLS@@
       middlewares:
         - error-pages@file
   dockge:

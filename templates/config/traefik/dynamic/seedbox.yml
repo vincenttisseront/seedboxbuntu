@@ -133,8 +133,16 @@ http:
       priority: 100000
       entryPoints:
         - websecure
-        - seerr
         - dockge
+      service: noop@internal
+      middlewares:
+        - to-main-address
+    # Port de Seerr : même règle, plus le nom public de Seerr s'il est publié sur Internet (jamais redirigé)
+    other-hosts-seerr:
+      rule: "@@OTHER_HOSTS_RULE_SEERR@@"
+      priority: 100000
+      entryPoints:
+        - seerr
       service: noop@internal
       middlewares:
         - to-main-address

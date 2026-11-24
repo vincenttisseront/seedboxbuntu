@@ -920,11 +920,21 @@ def template_values(env):
     values["TRAEFIK_TLS"] = (f"\n        certResolver: le\n        domains:\n          - main: {env.get('DOMAIN', '')}"
                              + (f"\n            sans:{sans}" if sans else "")
                              if acme else "{}")
-    values["TRAEFIK_ACME"] = (
-        "\ncertificatesResolvers:\n  le:\n    acme:\n"
-        f"      email: {env.get('ACME_EMAIL', '')}\n      storage: /acme/acme.json\n"
-        + (f"      dnsChallenge:\n        provider: {env['ACME_DNS_PROVIDER']}\n        resolvers:\n          - 1.1.1.1:53\n          - 8.8.8.8:53\n"
-           if env.get("ACME_DNS_PROVIDER") else "      httpChallenge:\n        entryPoint: web\n") if acme else "")
+    resolvers = ""
+    if acme:
+        resolvers += ("  le:\n    acme:\n"
+                      f"      email: {env.get('ACME_EMAIL', '')}\n      storage: /acme/acme.json\n"
+                      + (f"      dnsChallenge:\n        provider: {env['ACME_DNS_PROVIDER']}\n        resolvers:\n          - 1.1.1.1:53\n          - 8.8.8.8:53\n"
+                         if env.get("ACME_DNS_PROVIDER") else "      httpChallenge:\n        entryPoint: web\n"))
+    # Seerr depuis Internet : un certificat propre au nom public, sur le seul point d'entrée de Seerr (port 5055)
+    public = env.get("SEERR_PUBLIC_HOST", "")
+    if public:
+        resolvers += ("  seerr:\n    acme:\n"
+                      f"      email: {env.get('SEERR_PUBLIC_EMAIL') or env.get('ACME_EMAIL', '')}\n      storage: /acme/acme.json\n"
+                      + ("      dnsChallenge:\n        provider: duckdns\n        resolvers:\n          - 1.1.1.1:53\n          - 8.8.8.8:53\n"
+                         if env.get("SEERR_PUBLIC_DNS") == "duckdns" else "      httpChallenge:\n        entryPoint: web\n"))
+    values["TRAEFIK_ACME"] = ("\ncertificatesResolvers:\n" + resolvers) if resolvers else ""
+    values["SEERR_TLS"] = (f"\n        certResolver: seerr\n        domains:\n          - main: {public}" if public else values["TRAEFIK_TLS"])
     values["TRAEFIK_DEFAULT_CERT"] = (
         "  stores:\n    default:\n      defaultCertificate:\n"
         "        certFile: /certs/server.crt\n        keyFile: /certs/server.key\n")
@@ -934,6 +944,7 @@ def template_values(env):
     app_hosts = sub.hosts(env)
     values["AUTH_DOMAINS"] = json.dumps(hosts + ([f"*.{app_domain}"] if app_domain else []))
     values["OTHER_HOSTS_RULE"] = " && ".join(f"!Host(`{h}`)" for h in [*hosts, *app_hosts])
+    values["OTHER_HOSTS_RULE_SEERR"] = " && ".join(f"!Host(`{h}`)" for h in [*hosts, *app_hosts, *([env["SEERR_PUBLIC_HOST"]] if env.get("SEERR_PUBLIC_HOST") else [])])
     cookie_hosts = [(h, h) for h in sub.cookies(hosts)]
     if app_domain:
         cookie_hosts.append((app_domain, sub.portal(env)))
@@ -1726,7 +1737,8 @@ def provision_seerr():
     if key and key != env.get("SEERR_API_KEY"):
         env_set(SEERR_API_KEY=key)
     headers_cookie = cookie
-    seerr_api("POST", "/settings/main", {"applicationUrl": f"https://{domain}:{SEERR_PORT}", "locale": "fr"},
+    public = env_read().get("SEERR_PUBLIC_HOST", "")
+    seerr_api("POST", "/settings/main", {"applicationUrl": f"https://{public}" if public else f"https://{domain}:{SEERR_PORT}", "locale": "fr"},
               cookie=headers_cookie)
     # Liens « Lire dans Jellyfin » : adresse publique, et non le nom Docker du serveur
     jellyfin = seerr_api("GET", "/settings/jellyfin", cookie=cookie).json() or {}
@@ -3045,6 +3057,13 @@ def main():
     dns = rm.add_parser("dns").add_subparsers(dest="mode", required=True)
     dns.add_parser("set").add_argument("--provider", required=True)
     dns.add_parser("disable")
+    se = rm.add_parser("seerr", help="Seerr depuis Internet").add_subparsers(dest="mode", required=True)
+    se_set = se.add_parser("set")
+    se_set.add_argument("--host", required=True)
+    se_set.add_argument("--email", required=True)
+    se_set.add_argument("--token-stdin", action="store_true", help="jeton DuckDNS lu sur l'entrée standard")
+    se.add_parser("disable")
+    se.add_parser("ddns")
     sy = commands.add_parser("system", help="ressources, disques et conteneurs").add_subparsers(dest="action", required=True)
     sy.add_parser("show")
     sy.add_parser("containers")
@@ -3580,6 +3599,13 @@ def main():
             if args.mode == "sync":
                 return report(locked(module.tailscale_sync)())
             return report(locked(module.tailscale_disable)())
+        elif args.action == "seerr":
+            if args.mode == "set":
+                locked(module.seerr_public_set)(args.host, args.email, sys.stdin.read().strip() if args.token_stdin else "")
+            elif args.mode == "disable":
+                locked(module.seerr_public_disable)()
+            else:
+                module.ddns_update()
         elif args.mode == "set":
             locked(module.dns_set)(args.provider, sys.stdin.read())
         else:

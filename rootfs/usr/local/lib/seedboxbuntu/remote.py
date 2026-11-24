@@ -1,9 +1,18 @@
-"""SeedBoxBuntu - accès distant : adresses supplémentaires, Tailscale, Let's Encrypt par DNS.
+"""SeedBoxBuntu - accès distant : adresses supplémentaires, Tailscale, Let's Encrypt par DNS, Seerr depuis Internet.
 
 Tailscale (mode « userspace », sans privilège) publie l'appliance sur votre réseau privé avec un vrai
 certificat HTTPS, sans ouvrir aucun port de la box : « tailscale serve » transmet à Traefik. Le nom du
 serveur sur le tailnet devient une adresse de l'appliance (cookie de session, certificat).
 Let's Encrypt par DNS (défi DNS-01) délivre le certificat d'un nom de domaine sans exposer le port 80.
+
+Seerr depuis Internet : Seerr a son propre point d'entrée Traefik (port 5055) sur lequel AUCUNE autre application n'est
+servie. Rediriger le port 443 de la box vers le port 5055 du serveur publie donc Seerr seul : la console, Authelia, Radarr,
+qBittorrent... restent injoignables depuis Internet. Il suffit d'un nom public (DuckDNS gratuit, ou votre domaine) :
+  - un certificat Let's Encrypt propre à ce nom (résolveur « seerr » : défi DNS avec le jeton DuckDNS, sinon défi HTTP par
+    le port 80 de la box, qui ne sert que la redirection vers HTTPS et la validation) ;
+  - l'adresse de Seerr (liens des e-mails et notifications) devient https://nom-public ;
+  - avec DuckDNS, l'adresse IP du nom suit celle de la box (minuteur toutes les 5 minutes).
+La connexion à Seerr reste celle de Seerr (comptes Jellyfin), avec la limite de débit de Traefik.
 """
 import json
 import re
@@ -17,6 +26,9 @@ PROVIDER = re.compile(r"^[a-z0-9]{2,30}$")
 VARNAME = re.compile(r"^[A-Z][A-Z0-9_]{1,60}$")
 DNS_ENV = ctl.CONFIG / "traefik" / "acme-dns.env"
 SERVE_DIR = ctl.CONFIG / "tailscale-serve"
+DUCKDNS = re.compile(r"^([a-z0-9-]{1,63})\.duckdns\.org$")
+TOKEN = re.compile(r"^[A-Za-z0-9-]{20,64}$")
+DDNS_STATE = ctl.STATE / "seerr-ddns.json"
 SERVE = {"TCP": {"443": {"HTTPS": True}},
          "Web": {"${TS_CERT_DOMAIN}:443": {"Handlers": {"/": {"Proxy": "https+insecure://172.30.0.2:443"}}}}}
 # Fournisseurs DNS courants de Traefik (lego) ; la liste complète : doc.traefik.io, « ACME DNS challenge »
@@ -165,9 +177,117 @@ def dns_disable():
     say("Let's Encrypt : retour au défi HTTP (port 80)")
 
 
+# --- Seerr depuis Internet --------------------------------------------------------------------
+def dns_lines():
+    try:
+        return [l for l in DNS_ENV.read_text().splitlines() if "=" in l]
+    except OSError:
+        return []
+
+
+def write_dns_lines(lines):
+    DNS_ENV.parent.mkdir(parents=True, exist_ok=True)
+    DNS_ENV.write_text("".join(f"{l}\n" for l in lines))
+    DNS_ENV.chmod(0o600)
+
+
+def duckdns_token():
+    return next((l.split("=", 1)[1] for l in dns_lines() if l.startswith("DUCKDNS_TOKEN=")), "")
+
+
+def seerr_public_set(host, email, token=""):
+    host = (host or "").strip().lower().rstrip(".")
+    email = (email or "").strip()
+    token = (token or "").strip()
+    if not ctl.valid_domain(host):
+        raise ctl.SeedboxError("nom public invalide (exemple : maseedbox.duckdns.org)")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise ctl.SeedboxError("adresse e-mail invalide (Let's Encrypt l'exige pour le certificat)")
+    if token and not TOKEN.match(token):
+        raise ctl.SeedboxError("jeton DuckDNS invalide")
+    if token and not DUCKDNS.match(host):
+        raise ctl.SeedboxError("le jeton DuckDNS ne sert qu'avec un nom en .duckdns.org")
+    if token:
+        write_dns_lines([l for l in dns_lines() if not l.startswith("DUCKDNS_TOKEN=")] + [f"DUCKDNS_TOKEN={token}"])
+    dns = bool(token or (DUCKDNS.match(host) and duckdns_token()))
+    ctl.env_set(SEERR_PUBLIC_HOST=host, SEERR_PUBLIC_EMAIL=email, SEERR_PUBLIC_DNS="duckdns" if dns else "")
+    ctl.render_templates()
+    ctl.compose("up", "-d", "traefik", capture=True)
+    ctl.run("docker", "restart", "traefik", check=False, capture=True)
+    if dns:
+        ddns_update(quiet=True)
+    try:
+        ctl.provision_seerr()        # liens des e-mails et notifications : la nouvelle adresse
+    except (ctl.SeedboxError, OSError) as error:
+        say(f"Seerr : adresse publique non enregistrée dans Seerr ({error})")
+    say(f"Seerr depuis Internet : https://{host} ; redirigez le port 443 de la box vers le port 5055 de ce serveur"
+        + ("" if dns else ", et le port 80 vers le port 80 (validation du certificat)"))
+
+
+def seerr_public_disable():
+    if ctl.env_read().get("SEERR_PUBLIC_DNS") == "duckdns" and not ctl.env_read().get("ACME_DNS_PROVIDER") == "duckdns":
+        write_dns_lines([l for l in dns_lines() if not l.startswith("DUCKDNS_TOKEN=")])
+    ctl.env_set(SEERR_PUBLIC_HOST="", SEERR_PUBLIC_EMAIL="", SEERR_PUBLIC_DNS="")
+    ctl.render_templates()
+    ctl.run("docker", "restart", "traefik", check=False, capture=True)
+    try:
+        ctl.provision_seerr()
+    except (ctl.SeedboxError, OSError) as error:
+        say(f"Seerr : adresse non remise à jour ({error})")
+    say("Seerr depuis Internet : désactivé ; retirez la redirection de port de la box")
+
+
+def ddns_get(url):
+    """Appel DuckDNS ; point d'entrée unique (les tests le remplacent)."""
+    import urllib.request
+    with urllib.request.urlopen(url, timeout=15) as response:
+        return response.read().decode(errors="replace").strip()
+
+
+def ddns_update(quiet=False):
+    """DuckDNS : l'adresse du nom suit l'adresse publique de la box (DuckDNS la lit sur la requête)."""
+    host = ctl.env_read().get("SEERR_PUBLIC_HOST", "")
+    match = DUCKDNS.match(host)
+    token = duckdns_token()
+    if not match or not token:
+        return {"skipped": True}
+    try:
+        answer = ddns_get(f"https://www.duckdns.org/update?domains={match.group(1)}&token={token}&ip=")
+    except OSError as error:
+        answer = f"injoignable ({error})"
+    state = {"ok": answer.startswith("OK"), "answer": answer[:60], "at": int(time.time())}
+    try:
+        DDNS_STATE.parent.mkdir(parents=True, exist_ok=True)
+        DDNS_STATE.write_text(json.dumps(state))
+    except OSError:
+        pass
+    if not quiet or not state["ok"]:
+        say(f"DuckDNS {host} : {'adresse à jour' if state['ok'] else 'refusé : ' + state['answer']}")
+    return state
+
+
+def seerr_public():
+    env = ctl.env_read()
+    host = env.get("SEERR_PUBLIC_HOST", "")
+    if not host:
+        return {"enabled": False, "server": ctl.auto_address()}
+    try:
+        ddns = json.loads(DDNS_STATE.read_text())
+    except (OSError, ValueError):
+        ddns = None
+    try:
+        resolved = ctl.subdomains().resolve(host)
+    except Exception:  # noqa: BLE001 - simple indication
+        resolved = []
+    return {"enabled": True, "host": host, "url": f"https://{host}", "email": env.get("SEERR_PUBLIC_EMAIL", ""),
+            "dns_challenge": env.get("SEERR_PUBLIC_DNS") == "duckdns", "duckdns": bool(DUCKDNS.match(host)),
+            "resolved": resolved, "ddns": ddns, "server": ctl.auto_address()}
+
+
 def overview():
     env = ctl.env_read()
     return {"extra_hosts": env.get("EXTRA_HOSTS", ""), "tailscale": tailscale_status(),
             "dns": {"provider": env.get("ACME_DNS_PROVIDER", ""), "variables": dns_variables(),
                     "custom_domain": env.get("DOMAIN_MODE") == "custom" and bool(env.get("ACME_EMAIL")),
-                    "providers": PROVIDERS}}
+                    "providers": PROVIDERS},
+            "seerr": seerr_public()}

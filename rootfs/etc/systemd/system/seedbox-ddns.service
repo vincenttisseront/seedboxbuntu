@@ -1,0 +1,10 @@
+[Unit]
+Description=SeedBoxBuntu - DuckDNS : le nom public de Seerr suit l'adresse de la box (sans effet si Seerr n'est pas publié)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/seedboxbuntu/deployed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/seedboxctl remote seerr ddns
+Nice=10

@@ -998,6 +998,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise ctl.SeedboxError("clé d'authentification invalide (tskey-...)")
             argv = ["remote", "tailscale", "set", "--hostname", data.get("hostname", "seedbox")] + (["--key-stdin"] if key else [])
             return self.send_json({"job": start_job("Activation de Tailscale", argv, key or None)})
+        if path == "/api/remote/seerr":
+            if data.get("mode") == "disable":
+                return self.send_json({"job": start_job("Seerr depuis Internet : arrêt", ["remote", "seerr", "disable"])})
+            host, email, token = str(data.get("host", "")).strip().lower(), str(data.get("email", "")).strip(), str(data.get("token", "")).strip()
+            if not ctl.valid_domain(host):
+                raise ctl.SeedboxError("nom public invalide (exemple : maseedbox.duckdns.org)")
+            argv = ["remote", "seerr", "set", "--host", host, "--email", email] + (["--token-stdin"] if token else [])
+            return self.send_json({"job": start_job("Seerr depuis Internet", argv, token)})
         if path == "/api/remote/dns":
             if data.get("mode") == "disable":
                 return self.send_json({"job": start_job("Let's Encrypt : défi HTTP", ["remote", "dns", "disable"])})
